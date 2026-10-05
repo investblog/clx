@@ -9,6 +9,8 @@ clx v1 was a private visit counter for one network of sites. v2 is an open produ
 site on Cloudflare can sign up. The spec was reviewed in three rounds (Codex, 04–05.10.2026); the
 management API (§15), the low-footprint snippet (§5) and the upgrade advice (§8) were added on
 05.10.2026 and reviewed in three more rounds; the fixes from the last one have not been re-reviewed.
+What Cloudflare was found to do on a live account — and what this spec relies on — is collected in
+[`cloudflare-facts.md`](./cloudflare-facts.md).
 
 ## 1. Product and scope
 

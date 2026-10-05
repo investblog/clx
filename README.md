@@ -13,8 +13,11 @@ when you open a report.
 
 ## Status
 
-v2 is being built — the design is in [`docs/spec.md`](docs/spec.md), the stages in its §14. Today the
-repository holds sign-in and the page shell; the counter, links and reports come with stages 2–5.
+v2 is being built — the design is in [`docs/spec.md`](docs/spec.md), the stages in its §14, the API
+contract in [`docs/openapi.yaml`](docs/openapi.yaml), and what Cloudflare was found to do on a live
+account in [`docs/cloudflare-facts.md`](docs/cloudflare-facts.md). Done: sign-in, the management API
+(API keys, connecting a Cloudflare account) and installing, updating and removing the `clx-edge`
+worker (`edge/`) in a connected account. The counter, links and reports come with stages 4–6.
 
 ## Development
 
