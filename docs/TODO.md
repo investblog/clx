@@ -19,3 +19,7 @@ v2 stages — [`docs/spec.md`](./spec.md) §14.
 - [ ] Sign-out: the page shows the sign-in form even when `/auth/logout` failed, so the refresh
       cookie may stay valid — show the error or retry (stage 6, with sign-up).
 - [ ] Proxy mode for the counter (a site not on Cloudflare) — after v2, if needed.
+- [ ] The `no_connection` account state (§15) and the 26-hour silence e-mail — with the heartbeat
+      in pushes, stage 4.
+- [ ] Watch how late a new script's first cron fires (4.5 min on 05.10.2026; the self-check
+      allows 15) — if it grows, the timeout moves to `src/cf/deploy.ts` config.

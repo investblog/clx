@@ -369,7 +369,11 @@ export async function confirmSetup(env: Env, edge: EdgeAccount, report: { deploy
   const db = env.DB;
   if (!edge.deployment_id || report.deployment_id !== edge.deployment_id || !edge.operation_id) return 'mismatch';
   const op = await db.prepare('SELECT * FROM operations WHERE id = ?').bind(edge.operation_id).first<OpRow>();
-  if (!op || op.state !== 'running' || op.step !== 'selfcheck') return 'mismatch';
+  if (!op || op.state !== 'running') return 'mismatch';
+  // The cron can fire the moment it is set, before the run has recorded its step: too early, not
+  // wrong — the worker asks again in a few seconds.
+  if (op.step === 'uploaded') return 'busy';
+  if (op.step !== 'selfcheck') return 'mismatch';
   const data = JSON.parse(op.data) as DeployData;
   if (report.deployment_id !== data.deployment_id || report.bundle !== data.bundle || report.schema !== data.schema) return 'mismatch';
   const owner = newId();

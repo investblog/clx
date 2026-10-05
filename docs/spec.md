@@ -169,7 +169,10 @@ Why:
      binding of this deployment, so an old or delayed `setup_ok` cannot count for another
      deployment. When all three fields match, clx.cx sets the working cron `5 * * * *`. No
      `setup_ok` within 15 minutes — the install failed (measured 05.10.2026: the cron of a new
-     script first fired ~4.5 minutes after it was set, of an updated one after ~40 s).
+     script first fired ~4.5 minutes after it was set in one run; in another it fired at once and
+     then not for 14 minutes; an updated script's after ~40 s). So one cron run must be enough:
+     while clx.cx answers `503` (the run has not recorded its step yet, or holds the lease) or
+     fails, the worker asks again every 5 s for up to 50 s; `401` or `409` ends the run.
   A failure deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
   own script is the same install: it keeps the database, and on failure returns to the script's
   previous version as an update does.

@@ -104,6 +104,15 @@ describe('install', () => {
     expect(await setupOk()).toMatchObject({ status: 409 });
   });
 
+  it('a setup_ok that arrives before the run recorded its step is "not yet" (503), not refused', async () => {
+    const { body } = await connect();
+    await env.DB.prepare("UPDATE operations SET step = 'uploaded' WHERE kind = 'install'").run();
+    expect(await setupOk()).toMatchObject({ status: 503 });
+    await env.DB.prepare("UPDATE operations SET step = 'selfcheck' WHERE kind = 'install'").run();
+    expect(await setupOk()).toMatchObject({ status: 200 });
+    expect((await account(body.account.id)).state).toBe('ready');
+  });
+
   it('no setup_ok in time: the worker and database it created are deleted', async () => {
     const { body } = await connect();
     // Still within its deadline, it is not even picked up by the cron.

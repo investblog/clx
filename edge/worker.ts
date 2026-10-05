@@ -28,12 +28,22 @@ export default {
     const schema = await env.DB.prepare("SELECT value FROM meta WHERE key = 'schema'")
       .first<number>('value')
       .catch(() => null);
-    const res = await fetch(`${env.HOOK_URL}/setup`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${env.EDGE_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ deployment_id: env.DEPLOYMENT_ID, bundle: env.BUNDLE, schema }),
-    });
-    // Not accepted yet: the next minute tries again, until clx.cx sets the working cron.
-    if (!res.ok) console.log(`setup_ok: ${res.status}`);
+    // A new script's cron fires rarely at first (minutes apart, measured 05.10.2026), so one run
+    // keeps asking while clx.cx says "not yet" (503) or fails, every 5 s for up to 50 s. A refusal
+    // (401, 409: another deployment) ends the run; the next one tries again.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 5000));
+      const status = await fetch(`${env.HOOK_URL}/setup`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${env.EDGE_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ deployment_id: env.DEPLOYMENT_ID, bundle: env.BUNDLE, schema }),
+      }).then(
+        (res) => res.status,
+        () => 0,
+      );
+      if (status === 200) return;
+      console.log(`setup_ok: ${status}`);
+      if (status !== 0 && status !== 503 && status < 500) return;
+    }
   },
 } satisfies ExportedHandler<Env>;
