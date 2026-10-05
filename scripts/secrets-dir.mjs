@@ -16,6 +16,12 @@ const icacls = (args) => {
   if (r.status !== 0) throw new Error(`icacls ${args.join(' ')}: ${r.stdout}${r.stderr}`);
 };
 
+// Windows PowerShell started from PowerShell 7 inherits its PSModulePath and then cannot load its
+// own Get-Acl; without the variable it builds its default one.
+const psEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toLowerCase() !== 'psmodulepath'));
+const powershell = (command) =>
+  spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', command], { encoding: 'utf8', env: psEnv });
+
 /** The current user's SID and, for the folder and each file under it, the SIDs its ACL names. */
 function aclSids() {
   const script = `
@@ -24,7 +30,7 @@ $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $items = @(Get-Item -LiteralPath '${SECRETS}' -Force) + @(Get-ChildItem -LiteralPath '${SECRETS}' -Force -Recurse)
 $acl = foreach ($i in $items) { [pscustomobject]@{ path = $i.Name; sids = @((Get-Acl -LiteralPath $i.FullName).Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }) } }
 [pscustomobject]@{ me = $me; acl = @($acl) } | ConvertTo-Json -Depth 4 -Compress`;
-  const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' });
+  const r = powershell(script);
   if (r.status !== 0) throw new Error(`could not read the ACL of ${SECRETS}: ${r.stderr}`);
   return JSON.parse(r.stdout);
 }
@@ -63,7 +69,7 @@ export function lockFile(file) {
   icacls([file, '/inheritance:r', '/grant:r', `*${me}:F`, `*${SYSTEM}:F`, `*${ADMINS}:F`, '/Q']);
   const sidsOf = () => {
     const lit = file.replace(/'/gu, "''");
-    const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Acl -LiteralPath '${lit}').Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }`], { encoding: 'utf8' });
+    const r = powershell(`(Get-Acl -LiteralPath '${lit}').Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }`);
     if (r.status !== 0) throw new Error(`could not read the ACL of ${file}: ${r.stderr}`);
     return r.stdout.split(/\r?\n/u).filter(Boolean);
   };
