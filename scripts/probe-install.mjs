@@ -118,8 +118,13 @@ try {
   const t0 = Date.now();
   const started = await clx('POST', `/v1/accounts/${accountId}/install`, key, undefined, `probe-install-${run}`);
   step('POST /v1/accounts/{id}/install', started.status === 202, started.body.account?.state ?? JSON.stringify(started.body.error));
-  const done = await poll(accountId, key, (a) => a.state !== 'installing');
-  step('ready', done.state === 'ready', `${done.state} in ${Math.round((Date.now() - t0) / 1000)} s ${done.error ? JSON.stringify(done.error) : ''}`);
+  const inService = await poll(accountId, key, (a) => a.state !== 'installing');
+  step('ready (in service)', inService.state === 'ready', `${inService.state} in ${Math.round((Date.now() - t0) / 1000)} s`);
+  // The worker's own confirmation comes with its first cron, which for a new script can be late
+  // or never (docs/cloudflare-facts.md): either way the working cron must end up set.
+  const done = await poll(accountId, key, (a) => a.operation?.kind === 'install' && a.operation.state !== 'running');
+  const confirmed = !done.error?.warnings?.includes('not_confirmed');
+  step(confirmed ? 'confirmed by the worker' : 'not confirmed in 15 min — working cron set anyway', done.state === 'ready' && done.operation?.state === 'done', `after ${Math.round((Date.now() - t0) / 1000)} s`);
   step('the worker is the committed bundle', (await digest()) === BUNDLE && done.edge?.bundle === BUNDLE, BUNDLE.slice(0, 12));
   step('working cron only', JSON.stringify(await crons()) === JSON.stringify(['5 * * * *']), (await crons()).join(', '));
   const [db] = await databases();
