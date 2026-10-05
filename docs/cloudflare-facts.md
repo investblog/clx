@@ -32,6 +32,10 @@ to the token clx actually holds.
 | `GET …/d1/database?name=` filters by name (treat it as a filter, compare the exact name). | 05.10.2026 | `databaseNamed()` |
 | A new database already holds an internal table `_cf_KV`. | 05.10.2026 | — |
 | Deleting a database twice: the second answers `7404` "could not be found" — treat as done. | 05.10.2026 | `undo()`, `disconnect()` |
+| `/query` takes a `CREATE TRIGGER … BEGIN …; …; END` among other statements in one call; an `UPSERT` inside a trigger body works. | 05.10.2026 | migration 3 (`rows_hourly`) |
+| `meta.rows_written` counts index entries too: a new row in a table with a `TEXT PRIMARY KEY` or a composite key = 2, in a `WITHOUT ROWID` table = 1; an update of an existing row = 1 either way; an `UPDATE` matching nothing = 0. | 05.10.2026 | the collector's tables are `WITHOUT ROWID` (§8) |
+| An ignored `INSERT OR IGNORE` (or `ON CONFLICT DO NOTHING`) writes 0 rows; a trigger on it does not fire. | 05.10.2026 | repeat visitors (§8), the cap counters (§5) |
+| `INSERT … SELECT … WHERE … ON CONFLICT DO NOTHING / DO UPDATE` works as SQLite documents (the `WHERE` must be there). Every answer carries `meta.size_after`, the database size in bytes. | 05.10.2026 | the collector batch, backpressure (§5, §8) |
 
 ## Workers scripts (stage 3)
 

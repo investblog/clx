@@ -3,6 +3,7 @@
 // (§6). It answers only its own paths — a site's script and collector — and passes every other
 // request through to the origin, so a probe under the path gets the site's own answer. While
 // clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
+import { bodyHead, collect } from './collect';
 import { SELF_CHECK_CRON, siteKey, type SiteConfig } from './contract';
 
 interface Env {
@@ -39,7 +40,7 @@ async function siteFor(env: Env, host: string): Promise<SiteConfig | null> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     // Only the user's own routes lead here; the workers.dev address (off by default) would loop.
     if (url.hostname.endsWith('.workers.dev')) return new Response(null, { status: 404 });
@@ -51,9 +52,13 @@ export default {
       if (url.pathname === `${p.path}/${p.s}.js` && (request.method === 'GET' || request.method === 'HEAD'))
         // The cache headers of an ordinary static file, nothing of clx (§5).
         return new Response(request.method === 'HEAD' ? null : p.script, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
-      if (url.pathname === `${p.path}/${p.c}` && request.method === 'POST')
-        // Counting arrives at stage 4b; the answer is the same whether a view is counted or not.
+      if (url.pathname === `${p.path}/${p.c}` && request.method === 'POST') {
+        // The body is read before answering; counting goes on after. The answer is the same
+        // whether the beacon was counted, dropped or failed.
+        const body = await bodyHead(request).catch(() => '');
+        ctx.waitUntil(collect(env.DB, request, body, url.hostname, site!, now).catch(() => undefined));
         return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+      }
     }
     return fetch(request);
   },

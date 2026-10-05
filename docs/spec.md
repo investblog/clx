@@ -250,7 +250,8 @@ Why:
 - **Collector** `POST /<path>/<c>`. The counter is **not fraud-resistant**: the path is visible in
   the HTML, and `Origin`, `Referer`, UA and body can be forged by any client. The checks below drop
   browser noise and cap quota use, but do not prove authenticity.
-  - body — `text/plain`, up to 2 KB (no more is read), UA — up to 512 characters;
+  - body — `text/plain`, up to 2 KB (the stream is cancelled once 2 KB are in; nothing beyond is
+    kept or parsed), UA — up to 512 characters;
   - site — by `Host` and `<path>` from the active config (+ matched against `Origin` when
     present);
   - page — the path from a same-host `Referer`, up to 200 characters, **without query and
@@ -480,11 +481,15 @@ there, and by the user's other workers. D1 writes spent:
 | Event | Writes |
 |---|---|
 | a view or click, the totals and hour rows exist | 2 (the `totals` row, `views_hourly`) |
-| a visitor new for the day | +2: `visitors_daily` at once, the hash deletion when the day closes (a repeat visitor is `INSERT OR IGNORE`; whether an ignored insert counts as a write is checked at stage 4, the estimate counts it: +1) |
+| a visitor new for the day | +2: `visitors_daily` at once, the hash deletion when the day closes (a repeat visitor is an ignored `INSERT OR IGNORE` — 0 rows written, checked 05.10.2026) |
 | a new hour row (a new combination) | +5: two `rows_hourly` counters, the day row at rollup, the hour deletion after 31 days, the day deletion after 400 days |
 | a bot | 2 (the `totals` row, `bots_hourly`) + 2 for a new row (deletions) |
 | overhead per **active target** per day | 3: its `totals` row created, marked when clx.cx accepts the final day, deleted |
 | overhead per account per day | `outbox` ≈ 50 (24 parts inserted and deleted); config sync ≈ 2 per changed site or link plus one commit (§6) |
+
+D1 counts every index entry as a row written, so a new row of a keyed table costs 2; the counting
+tables are `WITHOUT ROWID` (one entry per row), which is what the figures above assume
+([`cloudflare-facts.md`](./cloudflare-facts.md)).
 
 The steady-state worst case — every event comes from a new visitor and makes a new hour row:
 2 + 2 + 5 = **9 writes**. The guaranteed ceiling per Cloudflare account is

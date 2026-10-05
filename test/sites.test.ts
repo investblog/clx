@@ -7,6 +7,7 @@ import { runSites } from '../src/cf/sites';
 import { app } from '../src/index';
 import { namesFor, scriptFor } from '../src/snippet';
 import type { Env } from '../src/types';
+import { d1 } from './d1';
 import { fakeCtx, testEnv } from './env';
 import { ACC, BOOT, fakeCf, useFakeCloudflare } from './fake-cf';
 
@@ -59,25 +60,8 @@ const userDb = (): DatabaseSync => {
   return fakeCf.dbs.get(id)!.db;
 };
 
-/** The worker's D1 binding over the fake account's database. */
-function d1(db: DatabaseSync) {
-  return {
-    prepare: (sql: string) => ({
-      bind: (...args: (string | number)[]) => ({
-        first: async <T>(col?: string) => {
-          const row = db.prepare(sql).get(...args) as Record<string, unknown> | undefined;
-          return (col ? (row?.[col] ?? null) : (row ?? null)) as T;
-        },
-      }),
-      first: async <T>(col?: string) => {
-        const row = db.prepare(sql).get() as Record<string, unknown> | undefined;
-        return (col ? (row?.[col] ?? null) : (row ?? null)) as T;
-      },
-    }),
-  };
-}
-
-/** A request through the worker, with a fresh isolate (no cached config) and a fake origin. */
+/** A request through the worker, with a fresh isolate (no cached config) and a fake origin; its
+ *  counting has finished when this returns. */
 async function viaWorker(url: string, init: RequestInit = {}): Promise<{ status: number; body: string; headers: Headers; origin: boolean }> {
   vi.resetModules();
   const worker = (await import('../edge/worker')).default;
@@ -85,7 +69,9 @@ async function viaWorker(url: string, init: RequestInit = {}): Promise<{ status:
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async () => ((origin = true), new Response('the site itself', { status: 404 })));
   try {
-    const res = await worker.fetch(new Request(url, init), { DB: d1(userDb()) } as never);
+    const { ctx, settle } = fakeCtx();
+    const res = await worker.fetch(new Request(url, init), { DB: d1(userDb()) } as never, ctx);
+    await settle();
     return { status: res.status, body: await res.text(), headers: res.headers, origin };
   } finally {
     vi.stubGlobal('fetch', realFetch);
@@ -107,9 +93,16 @@ describe('adding a site', () => {
     expect(js).toMatchObject({ status: 200, body: scriptFor(row.seed, names), origin: false });
     expect(js.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
     expect([...js.headers.keys()].sort()).toEqual(['cache-control', 'content-type']);
-    const beacon = await viaWorker(`https://example.com${names.path}/${names.c}`, { method: 'POST', body: 'https://ref.example/' });
+    const beacon = await viaWorker(`https://example.com${names.path}/${names.c}`, {
+      method: 'POST',
+      body: 'https://ref.example/',
+      headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36' },
+    });
     expect(beacon).toMatchObject({ status: 204, origin: false });
     expect(beacon.headers.get('cache-control')).toBe('no-store');
+    // Counted into the account's own database, under the site's target.
+    expect(userDb().prepare('SELECT target, views FROM totals').all()).toEqual([{ target: expect.stringMatching(/^s/u), views: 1 }]);
+    expect(userDb().prepare('SELECT source FROM views_hourly').all()).toEqual([{ source: 'ref.example' }]);
     // Everything else under the path, or another method, is the site's own answer.
     expect(await viaWorker(`https://example.com${names.path}/nope`)).toMatchObject({ status: 404, body: 'the site itself', origin: true });
     expect(await viaWorker(`https://example.com${names.path}/${names.c}`)).toMatchObject({ origin: true });

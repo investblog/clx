@@ -7,8 +7,9 @@
 // .secrets/test-cloudflare.env, as .secrets/user-probe@clx.cx.txt (plan api):
 //   1. connect and install clx-edge (up to ~16 minutes: a new script's first cron is late);
 //   2. POST /v1/sites for the Pages host → the route, the config synced;
-//   3. on the site itself: the script is the snippet's code, the collector answers 204, anything
-//      else under the path — and the page — is the Pages project's own answer;
+//   3. on the site itself: the script is the snippet's code, the collector answers 204 and counts
+//      into the account's own D1 (read back through REST), anything else under the path — and the
+//      page — is the Pages project's own answer;
 //   4. rotate: the new path answers, the old one still does; delete: neither does;
 //   5. disconnect removes routes, worker and database.
 // Nothing secret is printed.
@@ -116,6 +117,20 @@ try {
   // Isolates that looked before the sync may still hold "no such site" for a few seconds.
   const beacon = await until(() => visit(collector, { method: 'POST', body: 'https://ref.example/', headers: { 'content-type': 'text/plain' } }), (r) => r.status === 204, 2);
   step('the collector answers 204 no-store', beacon.status === 204 && beacon.headers.get('cache-control') === 'no-store', String(beacon.status));
+  // Counting (stage 4b): two views of one visitor, then a look into the account's own database.
+  const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+  const view = { method: 'POST', body: 'https://www.google.com/', headers: { 'content-type': 'text/plain', 'user-agent': CHROME, referer: `https://${host}/some/page`, origin: `https://${host}` } };
+  const views = [await visit(collector, view), await visit(collector, view)];
+  step('two views answered 204', views.every((r) => r.status === 204));
+  const db = (await cfAdmin('GET', `/accounts/${account}/d1/database?name=clx-edge`)).find((d) => d.name === 'clx-edge');
+  const sql = async (q) => (await cfAdmin('POST', `/accounts/${account}/d1/database/${db.uuid}/query`, { sql: q }))[0].results;
+  const counted = await until(() => sql('SELECT views, bots FROM totals'), (r) => r[0]?.views >= 2, 1);
+  const detail = await sql('SELECT page, source, device, browser, views FROM views_hourly');
+  const visitors = await sql('SELECT count(*) AS n FROM visitors_daily');
+  step('counted in the account\'s own D1', counted[0]?.views === 2 && JSON.stringify(detail) === JSON.stringify([{ page: '/some/page', source: 'google.com', device: 'desktop', browser: 'chrome', views: 2 }]) && visitors[0].n === 1,
+    `totals ${JSON.stringify(counted)}, detail ${JSON.stringify(detail)}, visitors ${visitors[0].n}`);
+  // The 204 probe above sent node's own User-Agent: a bot.
+  step('… the scripted beacon above counted as a bot', counted[0]?.bots >= 1, `bots ${counted[0]?.bots}`);
   const probe = await visit(`${site.path}/anything-else`);
   step("a probe under the path gets the site's own 404", probe.status === pages404.status && probe.body === pages404.body, String(probe.status));
   const getCollector = await visit(collector);

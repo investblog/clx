@@ -14,3 +14,19 @@ export interface SiteConfig {
 }
 
 export const siteKey = (host: string) => `site:${host}`;
+
+// The worker's counting tables (§5), as the day close and the reports (stages 4c, 4d) read them.
+/** Time is a UTC hour or day number since the epoch. */
+export const hourOf = (ms: number) => Math.floor(ms / 3_600_000);
+export const dayOf = (ms: number) => Math.floor(ms / 86_400_000);
+/** The page of a detail row holding the views beyond the caps; its other dimensions are empty. */
+export const OTHER = '(other)';
+/** The target of the account-wide `(other)` row, and the account's scope in `rows_hourly`. */
+export const ACCOUNT = '*';
+/** `totals` keeps a target's views per UTC hour of the day in v00…v23. Bots per hour are summed
+ *  from `bots_hourly`, which is exact: at most one row per bot category. */
+export const HOUR_COLUMNS = Array.from({ length: 24 }, (_, h) => `v${String(h).padStart(2, '0')}`);
+/** Detail caps per hour (§5) and the database size at which no new detail row is made (§8). */
+export const TARGET_ROWS = 299;
+export const ACCOUNT_ROWS = 1500;
+export const FULL_BYTES = 400 * 1024 * 1024;

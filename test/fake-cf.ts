@@ -94,7 +94,8 @@ function statements(sql: string): string[] {
   let quoted = false;
   for (const ch of sql) {
     if (ch === "'") quoted = !quoted;
-    if (ch === ';' && !quoted) {
+    // A trigger's body has its own semicolons; the statement ends after its END.
+    if (ch === ';' && !quoted && !(/^\s*CREATE\s+TRIGGER\b/iu.test(cur) && !/\bEND\s*$/iu.test(cur))) {
       out.push(cur);
       cur = '';
     } else cur += ch;
