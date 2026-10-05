@@ -56,10 +56,12 @@ to the token clx actually holds.
 | The cron of a **new** script fires late and unevenly: first run after ~4.5 min in one install and ~5.5 min in another; in a third it fired at once and then not for 14 minutes. The cron of an **existing** script that is updated fired after ~40 s. | 05.10.2026, three live installs | self-check timeout 15 min; the worker retries `setup_ok` within one run |
 | So a self-check must succeed from **one** cron run: clx.cx answers `503` while it is not ready, the worker asks again every 5 s for up to 50 s. | 05.10.2026 | `confirmSetup()`, `edge/worker.ts` |
 
-## Routes and Pages (stage 2)
+## Routes and Pages (stages 2, 4)
 
 | Fact | Checked | Used in |
 |---|---|---|
+| `GET /zones?account.id=&name=` matches the zone name exactly: `sub.example.com` finds nothing — try the host's suffixes. | 05.10.2026 | `zoneFor()` |
+| `POST /zones/{zone}/workers/routes {pattern, script}` with the working token creates a route; the same pattern again → `409` code `10020`, the message names the worker that holds it; a route to a script that does not exist → `400` code `10019`; deleting a route twice → `404` code `10009`. | 05.10.2026 | `src/cf/sites.ts` |
 | A worker route `<host>/<path>/*` runs on a host served by a Pages custom domain; `fetch(request)` from the worker reaches the Pages project (its own 404 / 405, same headers). No Pages right needed. | 05.10.2026 (`scripts/probe-pages.mjs`) | §5, §13 item 9 |
 | Through the worker on HTTP/1.1 header names change case and order (`CF-Cache-Status` → `cf-cache-status`); on HTTP/2 all are lower case anyway. | 05.10.2026 | §5 footprint notes |
 

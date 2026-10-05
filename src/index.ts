@@ -3,6 +3,7 @@ import { admin } from './admin';
 import { auth } from './auth/routes';
 import { checkTokens } from './cf/connect';
 import { runOperations } from './cf/deploy';
+import { runSites } from './cf/sites';
 import { hook } from './hook';
 import type { Env } from './types';
 import { IDEM_TTL } from './v1/idempotency';
@@ -43,6 +44,8 @@ export default {
         const now = Date.now();
         const ops = await runOperations(env, now);
         if (ops) console.log(`operations run ${ops}`);
+        const sites = await runSites(env, now);
+        if (sites.synced + sites.routes + sites.retired) console.log(`sites: synced ${sites.synced}, routes ${sites.routes}, retired ${sites.retired}`);
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         await env.DB.batch([
           env.DB.prepare('DELETE FROM idempotency WHERE created_at < ?').bind(now - IDEM_TTL),

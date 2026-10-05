@@ -4,6 +4,7 @@ import { Hono, type Context } from 'hono';
 import { CfError } from '../cf/api';
 import { accountView, connect, type EdgeAccount } from '../cf/connect';
 import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
+import { addSite, deleteSite, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { sha256 } from '../lib/crypto';
 import { LIMITS, planOf, SCOPES } from '../limits';
 import type { Env, Principal } from '../types';
@@ -228,4 +229,93 @@ v1.post(
 v1.delete(
   '/accounts/:id',
   handle({ scope: 'accounts' }, async (c, p) => ({ status: 200, body: { ok: true, ...(await disconnect(c.env, p.id, await accountOf(c, p))) } })),
+);
+
+// ---- Sites (§5) ----
+
+/** Excluded path prefixes: up to 50, each `/…` of at most 200 characters. */
+function excludedOf(v: unknown): string[] {
+  if (v === undefined) return [];
+  if (!Array.isArray(v) || v.length > 50 || !v.every((x) => typeof x === 'string' && /^\/[^\s?#]{0,199}$/u.test(x)))
+    fail(400, 'invalid_request', '"excluded_paths" must be a list of at most 50 path prefixes starting with "/".', { field: 'excluded_paths' });
+  return [...new Set(v as string[])];
+}
+
+/** A site of the caller, with its account; one outside the key's allow list is not found. */
+async function siteOf(c: C, p: Principal): Promise<{ site: SiteRow; edge: EdgeAccount }> {
+  const site = await c.env.DB.prepare('SELECT * FROM sites WHERE id = ? AND user_id = ?').bind(c.req.param('id'), p.userId).first<SiteRow>();
+  const edge = site ? await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(site.account_id).first<EdgeAccount>() : null;
+  if (!site || !edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such site.');
+  return { site, edge };
+}
+
+/** Sync the account's config after the answer (§6); the per-minute cron catches up if this fails. */
+const sync = (c: C, p: Principal, accountId: string) => background(c, syncAccount(c.env, accountId, p.id));
+
+v1.post(
+  '/sites',
+  handle({ scope: 'sites' }, async (c, p, body) => {
+    const accountId = typeof body.account_id === 'string' ? body.account_id : '';
+    const host = typeof body.host === 'string' ? body.host.trim().toLowerCase().replace(/\.$/u, '') : '';
+    if (!validHost(host)) fail(400, 'invalid_request', '"host" must be a host name such as example.com.', { field: 'host' });
+    const excluded = excludedOf(body.excluded_paths);
+    const edge = await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ? AND user_id = ?').bind(accountId, p.userId).first<EdgeAccount>();
+    if (!edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such account.', { field: 'account_id' });
+    const site = await addSite(c.env, p, edge, host, excluded);
+    sync(c, p, edge.id);
+    return { status: 202, body: { site: siteView(site, edge.synced_revision) } };
+  }),
+);
+
+v1.get(
+  '/sites',
+  handle({ scope: 'sites' }, async (c, p) => {
+    const accountId = c.req.query('account_id') ?? null;
+    const rows = (
+      await c.env.DB.prepare(
+        "SELECT s.*, e.cf_account_id, e.synced_revision FROM sites s JOIN edge_accounts e ON e.id = s.account_id WHERE s.user_id = ?1 AND s.state != 'deleted' AND (?2 IS NULL OR s.account_id = ?2) ORDER BY s.created_at",
+      )
+        .bind(p.userId, accountId)
+        .all<SiteRow & { cf_account_id: string; synced_revision: number }>()
+    ).results;
+    return { status: 200, body: { sites: rows.filter((r) => mayTouch(p, r.cf_account_id)).map((r) => siteView(r, r.synced_revision)) } };
+  }),
+);
+
+v1.get(
+  '/sites/:id',
+  handle({ scope: 'sites' }, async (c, p) => {
+    const { site, edge } = await siteOf(c, p);
+    return { status: 200, body: { site: siteView(site, edge.synced_revision) } };
+  }),
+);
+
+v1.patch(
+  '/sites/:id',
+  handle({ scope: 'sites' }, async (c, p, body) => {
+    const { site, edge } = await siteOf(c, p);
+    const updated = await patchSite(c.env, site, excludedOf(body.excluded_paths));
+    sync(c, p, edge.id);
+    return { status: 200, body: { site: siteView(updated, edge.synced_revision) } };
+  }),
+);
+
+v1.post(
+  '/sites/:id/rotate',
+  handle({ scope: 'sites' }, async (c, p) => {
+    const { site, edge } = await siteOf(c, p);
+    const rotated = await rotateSite(c.env, p.id, edge, site);
+    sync(c, p, edge.id);
+    return { status: 200, body: { site: siteView(rotated, edge.synced_revision) } };
+  }),
+);
+
+v1.delete(
+  '/sites/:id',
+  handle({ scope: 'sites' }, async (c, p) => {
+    const { site, edge } = await siteOf(c, p);
+    const deleted = await deleteSite(c.env, p.id, edge, site);
+    sync(c, p, edge.id);
+    return { status: 200, body: { site: siteView(deleted, edge.synced_revision) } };
+  }),
 );

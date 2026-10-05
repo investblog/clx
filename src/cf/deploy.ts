@@ -17,6 +17,7 @@ import type { Env } from '../types';
 import { ApiError, fail, newId } from '../v1/http';
 import { cf, CfError, scriptDigest, type CallLog } from './api';
 import { edgeById, lease, owned, release, step, workingToken, type EdgeAccount } from './connect';
+import { dropRoute, recordedRoutes } from './sites';
 
 const SCRIPT = 'clx-edge';
 const DATABASE = 'clx-edge';
@@ -173,7 +174,8 @@ async function advance(r: Run, at: string): Promise<string> {
     case 'd1_creating': {
       const db = (await databaseNamed(r)) ?? (await cf<Database>(r.token, 'POST', `${acc(r)}/d1/database`, { name: DATABASE }, r.log));
       data.d1_created = true;
-      await ownedUpdate(r, 'd1_id = ?', db.uuid);
+      // A new database holds no config yet: the sync starts over from revision 0.
+      await ownedUpdate(r, 'd1_id = ?, synced_revision = 0', db.uuid);
       r.edge.d1_id = db.uuid;
       await record(r, 'd1');
       return 'd1';
@@ -438,8 +440,16 @@ export async function disconnect(env: Env, principal: string, edge: EdgeAccount)
     const log: CallLog = { db, edgeAccountId: current.id, principal };
     let script = !!current.script_owned;
     let database = current.d1_id;
-    if (token && (script || database)) {
+    // The sites' routes first: a route left without its worker would only fail.
+    let routes = await recordedRoutes(db, current.id);
+    if (token && (script || database || routes.length)) {
       try {
+        while (routes.length) {
+          const r = routes[0]!;
+          // A route the user pointed elsewhere is theirs now: named, not deleted.
+          if ((await dropRoute(token, log, r.zone_id, r.route_id, r.pattern)) === 'not_ours') left.push(`route ${r.pattern} (changed outside clx)`);
+          routes = routes.slice(1);
+        }
         if (script) {
           const digest = await scriptDigest(token, current.cf_account_id, SCRIPT);
           if (digest !== null && !isClxBundle(digest)) left.push('worker clx-edge (changed outside clx)');
@@ -456,6 +466,7 @@ export async function disconnect(env: Env, principal: string, edge: EdgeAccount)
         if (!(e instanceof CfError && (e.status === 401 || e.status === 403))) throw e;
       }
     }
+    for (const r of routes) left.push(`route ${r.pattern}`);
     if (script) left.push('worker clx-edge');
     if (database) left.push(`database clx-edge (${database})`);
     await db.batch([

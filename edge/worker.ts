@@ -1,8 +1,9 @@
 // clx-edge — the worker clx installs into a user's Cloudflare account (docs/spec.md §4, §5). One
-// bundle for everyone; a deployment's own settings come in bindings. Stage 3: every request passes
-// through to the origin, and while clx.cx checks a fresh deployment (the every-minute cron) the
-// worker reports `setup_ok` to it. The counter, links and pushes arrive at stages 4–5.
-import { SELF_CHECK_CRON } from './contract';
+// bundle for everyone; a deployment's own settings come in bindings, the sites in the synced config
+// (§6). It answers only its own paths — a site's script and collector — and passes every other
+// request through to the origin, so a probe under the path gets the site's own answer. While
+// clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
+import { SELF_CHECK_CRON, siteKey, type SiteConfig } from './contract';
 
 interface Env {
   DB: D1Database;
@@ -16,10 +17,41 @@ interface Env {
   EDGE_KEY: string;
 }
 
+/** Sites by host, for speed only: 60 s in isolate memory (§6). */
+const cache = new Map<string, { at: number; site: SiteConfig | null }>();
+const CACHE_MS = 60_000;
+
+/** The committed version of a site's config, or null — one query, one consistent answer (§6). */
+async function siteFor(env: Env, host: string): Promise<SiteConfig | null> {
+  const hit = cache.get(host);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.site;
+  const row = await env.DB.prepare(
+    'SELECT c.deleted, c.data FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = ? ORDER BY c.revision DESC LIMIT 1',
+  )
+    .bind(siteKey(host))
+    .first<{ deleted: number; data: string | null }>();
+  const site = row && !row.deleted && row.data ? (JSON.parse(row.data) as SiteConfig) : null;
+  cache.set(host, { at: Date.now(), site });
+  return site;
+}
+
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
     // Only the user's own routes lead here; the workers.dev address (off by default) would loop.
-    if (new URL(request.url).hostname.endsWith('.workers.dev')) return new Response(null, { status: 404 });
+    if (url.hostname.endsWith('.workers.dev')) return new Response(null, { status: 404 });
+    // Unreadable config: behave as if the path were not ours.
+    const site = await siteFor(env, url.hostname).catch(() => null);
+    const now = Date.now();
+    for (const p of site?.paths ?? []) {
+      if (p.until && now > p.until) continue;
+      if (url.pathname === `${p.path}/${p.s}.js` && (request.method === 'GET' || request.method === 'HEAD'))
+        // The cache headers of an ordinary static file, nothing of clx (§5).
+        return new Response(request.method === 'HEAD' ? null : p.script, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
+      if (url.pathname === `${p.path}/${p.c}` && request.method === 'POST')
+        // Counting arrives at stage 4b; the answer is the same whether a view is counted or not.
+        return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+    }
     return fetch(request);
   },
 

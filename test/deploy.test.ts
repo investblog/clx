@@ -44,8 +44,8 @@ const binding = (name: string) => edge()!.bindings.find((b) => b.name === name)?
 
 /** What the worker's self-check cron sends (edge/worker.ts). */
 async function setupOk(over: Record<string, unknown> = {}, key = edge()!.secrets.get('EDGE_KEY')!) {
-  const db = [...fakeCf.dbs.values()][0];
-  const body = { deployment_id: binding('DEPLOYMENT_ID'), bundle: binding('BUNDLE'), schema: db?.schema ?? null, ...over };
+  const db = edge()!.bindings.find((b) => b.name === 'DB')?.id;
+  const body = { deployment_id: binding('DEPLOYMENT_ID'), bundle: binding('BUNDLE'), schema: db ? fakeCf.schemaOf(db) : null, ...over };
   const res = await app.request('https://clx.cx/hook/setup', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body) }, env);
   return { status: res.status, body: await res.json() };
 }
@@ -79,7 +79,8 @@ describe('install', () => {
     expect(status).toBe(202);
     expect(body.account.state).toBe('installing');
     const [db] = [...fakeCf.dbs.entries()];
-    expect(db![1]).toMatchObject({ name: 'clx-edge', schema: SCHEMA });
+    expect(db![1].name).toBe('clx-edge');
+    expect(fakeCf.schemaOf(db![0])).toBe(SCHEMA);
     expect(edge()!.code).toBe(EDGE_CODE);
     expect(edge()!.bindings.find((b) => b.name === 'DB')?.id).toBe(db![0]);
     expect(binding('BUNDLE')).toBe(EDGE_SHA256);
@@ -136,7 +137,7 @@ describe('install', () => {
   });
 
   it('a clx-edge database clx did not create is left alone too', async () => {
-    fakeCf.dbs.set('theirs', { name: 'clx-edge', schema: 0, sql: [] });
+    fakeCf.foreignDb('theirs', 'clx-edge');
     const { body } = await connect();
     expect(fakeCf.dbs.get('theirs')!.sql).toEqual([]);
     expect(fakeCf.scripts.size).toBe(0);

@@ -20,6 +20,14 @@ v2 stages — [`docs/spec.md`](./spec.md) §14.
       cookie may stay valid — show the error or retry (stage 6, with sign-up).
 - [ ] Proxy mode for the counter (a site not on Cloudflare) — after v2, if needed.
 - [ ] The `no_connection` account state (§15) and the 26-hour silence e-mail — with the heartbeat
-      in pushes, stage 4.
+      in pushes, stage 4c.
+- [ ] The worker-side sync check (§6: `GET /hook/sync`, `sync_stale` in the heartbeat) — stage 4c;
+      until then a worker database changed by hand with no change pending on clx.cx is found only
+      at the account's next config change.
+- [ ] Flaky tests: on 05.10.2026, 2 of 8 full runs failed — different tests each time (old connect
+      tests too, an auth test once), while the machine was short of memory; the failure text was
+      not captured. Find the cause before adding more timing-sensitive tests.
+- [ ] A site added while its account is being disconnected: the route made in that moment is
+      dropped by `placeRoute` when the row is gone, but only if the token still works.
 - [ ] Watch how late a new script's first cron fires (4.5 min on 05.10.2026; the self-check
       allows 15) — if it grows, the timeout moves to `src/cf/deploy.ts` config.

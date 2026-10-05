@@ -82,6 +82,9 @@ export interface EdgeAccount {
   edge_key_prev_until: number | null;
   deployment_id: string | null;
   installed_at: number | null;
+  // the config sync (§6, src/cf/sites.ts)
+  config_revision: number;
+  synced_revision: number;
 }
 
 /** AAD: the ciphertext belongs to this record and this Cloudflare account only (§3 item 5). */
@@ -119,7 +122,7 @@ export async function lease(db: D1Database, edgeId: string, owner: string): Prom
 export const release = (db: D1Database, edgeId: string, owner: string) => db.prepare('UPDATE edge_accounts SET lease_until = NULL, lease_owner = NULL WHERE id = ? AND lease_owner = ?').bind(edgeId, owner).run();
 
 /** Renew the lease before an outside change; a lost lease (a takeover) stops this request first. */
-async function held(db: D1Database, edgeId: string, owner: string): Promise<void> {
+export async function held(db: D1Database, edgeId: string, owner: string): Promise<void> {
   const r = await db.prepare('UPDATE edge_accounts SET lease_until = ? WHERE id = ? AND lease_owner = ?').bind(Date.now() + LEASE, edgeId, owner).run();
   if (!r.meta.changes) fail(409, 'operation_in_progress', 'This operation was taken over by a newer request.');
 }

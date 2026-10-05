@@ -1,6 +1,8 @@
-// A small Cloudflare for the tests: one account's tokens and catalog, its D1 databases, Workers
-// scripts with versions, deployments and schedules, and zones. `fetch` is stubbed for
+// A small Cloudflare for the tests: one account's tokens and catalog, its D1 databases (real SQLite
+// in memory, so what clx writes there can be read back the way the worker reads it), Workers
+// scripts with versions, deployments and schedules, zones and their routes. `fetch` is stubbed for
 // api.cloudflare.com only.
+import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, vi } from 'vitest';
 
 export const ACC = 'a'.repeat(32);
@@ -29,8 +31,19 @@ export const fakeCf = {
   stuck: new Set<string>(),
   /** method + path fragments that answer 400 every time ("PUT /schedules") */
   refuse: new Set<string>(),
+  /** hosts whose route patterns another worker holds */
+  takenHosts: new Set<string>(),
+  /** D1 queries whose SQL matches answer 503 */
+  failSql: null as RegExp | null,
+  /** called when a route is made, before the answer: a concurrent change lands here */
+  onRoutePost: null as null | (() => Promise<void>),
   scripts: new Map<string, Script>(),
-  dbs: new Map<string, { name: string; schema: number; sql: string[] }>(),
+  dbs: new Map<string, { name: string; sql: string[]; db: DatabaseSync }>(),
+  zones: [
+    { id: 'zone1', name: 'example.com' },
+    { id: 'zone2', name: 'shop.example.org' },
+  ],
+  routes: new Map<string, { id: string; pattern: string; script: string }[]>(),
 
   reset() {
     this.tokens.clear();
@@ -39,8 +52,13 @@ export const fakeCf = {
     this.rejectWorking.clear();
     this.stuck.clear();
     this.refuse.clear();
+    this.takenHosts.clear();
+    this.failSql = null;
+    this.onRoutePost = null;
     this.scripts.clear();
+    for (const d of this.dbs.values()) d.db.close();
     this.dbs.clear();
+    this.routes.clear();
     this.seq = 0;
     this.tokens.set('boot', { id: 'boot', name: 'bootstrap', value: BOOT, status: 'active', rights: [] });
   },
@@ -48,7 +66,42 @@ export const fakeCf = {
   foreignScript(name: string, code = 'export default {}', handlers = ['fetch'], crons: string[] = []) {
     this.scripts.set(name, { code, bindings: [], secrets: new Map(), versions: ['vx'], live: 'vx', crons, handlers });
   },
+  /** A database put there by someone else. */
+  foreignDb(uuid: string, name: string) {
+    this.dbs.set(uuid, { name, sql: [], db: new DatabaseSync(':memory:') });
+  },
+  /** The schema number clx wrote into a database (edge/migrations.ts), or null. */
+  schemaOf(uuid: string): number | null {
+    const d = this.dbs.get(uuid);
+    try {
+      return (d?.db.prepare("SELECT value FROM meta WHERE key = 'schema'").get() as { value: number } | undefined)?.value ?? null;
+    } catch {
+      return null;
+    }
+  },
+  /** A route someone else made. */
+  foreignRoute(zone: string, pattern: string, script: string) {
+    const list = this.routes.get(zone) ?? [];
+    list.push({ id: `r${++this.seq}`, pattern, script });
+    this.routes.set(zone, list);
+  },
 };
+
+/** Split SQL into statements at `;` outside single-quoted strings. */
+function statements(sql: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let quoted = false;
+  for (const ch of sql) {
+    if (ch === "'") quoted = !quoted;
+    if (ch === ';' && !quoted) {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((x) => x.trim()).filter(Boolean);
+}
 
 const CATALOG = [
   ...['Account Settings Read', 'Account Analytics Read', 'D1 Read', 'D1 Write', 'Workers Scripts Read', 'Workers Scripts Write', 'Account API Tokens Write'].map((name, i) => ({ id: `g${i}`, name, scopes: ['com.cloudflare.api.account'] })),
@@ -111,25 +164,74 @@ function d1(path: string, method: string, init: RequestInit, url: URL): Response
     const { name } = JSON.parse(String(init.body)) as { name: string };
     if ([...fakeCf.dbs.values()].some((d) => d.name === name)) return no(400, 7502);
     const uuid = `db-${++fakeCf.seq}`;
-    fakeCf.dbs.set(uuid, { name, schema: 0, sql: [] });
+    fakeCf.dbs.set(uuid, { name, sql: [], db: new DatabaseSync(':memory:') });
     return ok({ uuid, name });
   }
   const m = path.match(new RegExp(`^${base}/([^/]+)(/query)?$`, 'u'));
   if (!m) return null;
-  const db = fakeCf.dbs.get(m[1]!);
-  if (!db) return no(404, 7404);
+  const d = fakeCf.dbs.get(m[1]!);
+  if (!d) return no(404, 7404);
   if (!m[2] && method === 'DELETE') {
+    d.db.close();
     fakeCf.dbs.delete(m[1]!);
     return ok(null);
   }
-  if (!m[2] && method === 'GET') return ok({ uuid: m[1], name: db.name });
+  if (!m[2] && method === 'GET') return ok({ uuid: m[1], name: d.name });
   if (m[2] && method === 'POST') {
     const { sql } = JSON.parse(String(init.body)) as { sql: string };
-    db.sql.push(sql);
-    const set = sql.match(/VALUES \('schema', (\d+)\)/u);
-    if (set) db.schema = Number(set[1]);
-    const statements = sql.split(';').filter((s) => s.trim());
-    return ok(statements.map((s) => ({ results: /SELECT value FROM meta/u.test(s) && db.schema ? [{ value: db.schema }] : [] })));
+    if (fakeCf.failSql && fakeCf.failSql.test(sql)) return no(503);
+    d.sql.push(sql);
+    const out: { results: unknown[]; meta: { changes: number } }[] = [];
+    // All or nothing, as observed on D1 (docs/cloudflare-facts.md).
+    d.db.exec('BEGIN');
+    try {
+      for (const st of statements(sql)) {
+        const prepared = d.db.prepare(st);
+        if (/^\s*(SELECT|WITH)/iu.test(st)) out.push({ results: prepared.all() as unknown[], meta: { changes: 0 } });
+        else out.push({ results: [], meta: { changes: Number(prepared.run().changes) } });
+      }
+      d.db.exec('COMMIT');
+    } catch (e) {
+      d.db.exec('ROLLBACK');
+      return no(400, 7500);
+    }
+    return ok(out);
+  }
+  return no(404);
+}
+
+async function zones(path: string, method: string, init: RequestInit, url: URL): Promise<Response | null> {
+  if (path === '/zones' && method === 'GET') {
+    const name = url.searchParams.get('name');
+    return ok(fakeCf.zones.filter((z) => !name || z.name === name));
+  }
+  const m = path.match(/^\/zones\/([^/]+)\/workers\/routes(?:\/([^/]+))?$/u);
+  if (!m) return null;
+  const zone = m[1]!;
+  if (!fakeCf.zones.some((z) => z.id === zone)) return no(404, 1001);
+  const list = fakeCf.routes.get(zone) ?? [];
+  fakeCf.routes.set(zone, list);
+  if (!m[2] && method === 'GET') return ok(list);
+  if (!m[2] && method === 'POST') {
+    const body = JSON.parse(String(init.body)) as { pattern: string; script: string };
+    if (!fakeCf.scripts.has(body.script)) return no(400, 10019);
+    // A host someone else's worker already serves: their route appears under the same pattern.
+    if ([...fakeCf.takenHosts].some((h) => body.pattern.startsWith(`${h}/`)) && !list.some((r) => r.pattern === body.pattern)) list.push({ id: `r${++fakeCf.seq}`, pattern: body.pattern, script: "their-worker" });
+    if (list.some((r) => r.pattern === body.pattern)) return no(409, 10020);
+    const route = { id: `r${++fakeCf.seq}`, pattern: body.pattern, script: body.script };
+    await fakeCf.onRoutePost?.();
+    list.push(route);
+    return ok(route);
+  }
+  if (m[2] && method === 'GET') {
+    const route = list.find((r) => r.id === m[2]);
+    return route ? ok(route) : no(404, 10009);
+  }
+  if (m[2] && method === 'DELETE') {
+    const i = list.findIndex((r) => r.id === m[2]);
+    if (i < 0) return no(404, 10009);
+    list.splice(i, 1);
+    return ok({ id: m[2] });
   }
   return no(404);
 }
@@ -172,11 +274,8 @@ async function cloudflare(url: URL, init: RequestInit): Promise<Response> {
     if (fakeCf.stuck.has(del[1]!)) return no(500);
     return fakeCf.tokens.delete(del[1]!) ? ok({ id: del[1] }) : no(404);
   }
-  const answer = (await workers(path, method, init, url)) ?? d1(path, method, init, url);
-  if (answer) return answer;
-  if (path.endsWith('/workers/routes')) return ok([]);
-  if (path === '/zones') return ok([{ id: 'zone1' }]);
-  return no(404);
+  const answer = (await workers(path, method, init, url)) ?? d1(path, method, init, url) ?? (await zones(path, method, init, url));
+  return answer ?? no(404);
 }
 
 /** Stub fetch for api.cloudflare.com for the suite that calls this. */

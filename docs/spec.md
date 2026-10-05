@@ -355,6 +355,12 @@ Why:
   - cleanup after a commit: rows whose `sync_id` is in no commit and that are older than an hour,
     and versions superseded by a newer committed version. Commits are never deleted; a rollback is
     a new forward revision whose rows restore the earlier values;
+  - every sync starts by reading the worker's latest commit: a new database (reinstall) starts
+    from 0 and gets every site; a database whose head is *ahead* of clx.cx's revision (restored
+    from elsewhere, changed by hand) is not trusted — clx.cx moves its revision above that head and
+    writes every site again (found on clx.cx's next sync of that account, or, with no change
+    pending, by the worker-side check below); a site that is deleted or in `route_conflict` is
+    written as deleted;
   - a check from the worker side — the cron compares its latest commit with `GET clx.cx/hook/sync`
     (`Bearer EDGE_KEY`, the account resolved from the key alone, answer `{revision}`); a mismatch
     older than 10 minutes is reported in the heartbeat as `sync_stale`, and clx.cx runs the sync
@@ -651,9 +657,14 @@ moving into `clx-edge`).
    HTTP/1.1 header names come back in another case and order through the worker
    (`CF-Cache-Status` / `cf-cache-status`); on HTTP/2 every header name is lower case anyway. The
    check needed no Pages right in the token.
-10. **Footprint scan of our own output.** A test builds snippets for 1,000 seeds and checks that no
-    substring of 8+ characters other than browser API names is shared by more than 1% of them, and
-    that no `<path>` or name hits the forbidden word list (§5).
+10. **Footprint scan of our own output** (`test/snippet.test.ts`). A test builds snippets for 1,000
+    seeds and checks that: no identifier or string literal of 4+ characters other than browser API
+    names and values is shared by more than 1% of them; the shape of the code (identifiers and
+    literals masked) is shared by at most 1% of them; no `<path>` or name hits the forbidden word list
+    (§5). The first draft asked for "no shared substring of 8+ characters" — unworkable as written:
+    runs of JavaScript syntax such as `)=>{let ` are in every snippet and in every site's own code,
+    so they are no signature; the names, literals and shape are (stage 4, 05.10.2026: 975 shapes in
+    1,000 seeds, none more than twice).
 11. **API keys reach the working tokens behind them**: a leaked key with the `accounts` or `sites`
     scope can change workers or routes in the Cloudflare accounts it may touch. Measures (§15):
     least-privilege scopes (a build pipeline holds no `accounts`), per-key allow lists of Cloudflare
@@ -745,7 +756,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `plan_required`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.

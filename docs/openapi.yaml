@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: clx management API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
     Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
@@ -50,7 +50,8 @@ components:
                 not_configured, internal. In an account's or operation's `error` (the install, §4):
                 name_taken, resource_drift, cron_limit, permission_error, revoked, self_check_timeout,
                 credentials_missing, credentials_unreadable (clx cannot open the stored token),
-                cloudflare_error.
+                cloudflare_error. Sites: zone_not_found, site_exists, route_conflict, site_not_active,
+                route_not_ours (a route clx made was changed outside clx and left in place).
             message: { type: string }
             details: { type: object }
     Key:
@@ -96,6 +97,28 @@ components:
             step: { type: string }
             error: { type: [object, 'null'] }
             updated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    Site:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        host: { type: string }
+        state:
+          type: string
+          enum: [route_pending, active, route_conflict, deleted]
+          description: 'route_pending — the route is still to be made (the cron retries); route_conflict — another worker holds the pattern, see error'
+        path: { type: string, description: 'the per-site path the counter answers under, e.g. /lumora or /kavi/tesomu' }
+        snippet:
+          type: [object, 'null']
+          description: Embed one of the two at build time; stable until rotate
+          properties:
+            inline: { type: string, description: '<script>…</script>, under 600 bytes' }
+            script_tag: { type: string, description: '<script defer src="/<path>/<s>.js"></script>' }
+        excluded_paths: { type: array, items: { type: string } }
+        config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the site yet' }
+        retiring: { type: array, items: { type: object, properties: { path: { type: string }, until: { type: string, format: date-time } } }, description: 'old paths still counted after a rotation' }
+        error: { type: [object, 'null'] }
         created_at: { type: string, format: date-time }
   responses:
     Error:
@@ -217,4 +240,63 @@ paths:
                 bootstrap_token: { type: string }
       responses:
         '200': { description: Renewed }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/sites:
+    get:
+      summary: Sites (scope sites); `account_id` narrows to one account
+      parameters: [{ name: account_id, in: query, required: false, schema: { type: string } }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { sites: { type: array, items: { $ref: '#/components/schemas/Site' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Add a site (scope sites) — the zone is found in the account, the route made, the config synced
+      description: |
+        The account must be `ready`. The answer carries the snippet at once; `config` turns
+        `synced` once the worker has the site (seconds), and the counter answers from then on.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, host]
+              properties:
+                account_id: { type: string }
+                host: { type: string, description: 'example.com or a subdomain of a zone in that account' }
+                excluded_paths: { type: array, maxItems: 50, items: { type: string, pattern: '^/' } }
+      responses:
+        '202': { description: Added, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/sites/{id}:
+    get:
+      summary: One site (scope sites)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Change the excluded paths (scope sites)
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                excluded_paths: { type: array, maxItems: 50, items: { type: string, pattern: '^/' } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Remove the site's routes (scope sites); the site stays as `deleted`, its totals with it
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/sites/{id}/rotate:
+    post:
+      summary: A new path, names and snippet (scope sites); the old path is counted for 30 more days
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Rotated, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
         default: { $ref: '#/components/responses/Error' }

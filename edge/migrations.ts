@@ -6,6 +6,10 @@
 export const MIGRATIONS: string[] = [
   // 1. The worker's own small state: the schema number, later its cursors and counters (§5, §7).
   'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value)',
+  // 2. Config as immutable versions plus a commit log (§6): rows are only ever inserted; a sync
+  //    becomes visible when its (revision, sync_id) is committed, in one statement.
+  'CREATE TABLE IF NOT EXISTS cfg (key TEXT NOT NULL, revision INTEGER NOT NULL, sync_id TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, data TEXT, at INTEGER NOT NULL, PRIMARY KEY (key, revision, sync_id)); ' +
+    'CREATE TABLE IF NOT EXISTS commits (revision INTEGER PRIMARY KEY, sync_id TEXT NOT NULL, at INTEGER NOT NULL)',
 ];
 
 export const SCHEMA = MIGRATIONS.length;
