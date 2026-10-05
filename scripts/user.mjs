@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // node scripts/user.mjs add <email>                — a new user
 // node scripts/user.mjs password <email>           — a new password for an existing user
+// node scripts/user.mjs plan <email> free|api      — switch the plan (§15: `api` is switched on by an admin)
 // node scripts/user.mjs list
 //
 // Until sign-up lands (docs/spec.md §9), users are made here, in the remote D1 (--local for the
-// local one). The password is generated, never typed or printed: it is written to .secrets/user-<email>.txt for the
-// owner to move to a password manager and delete. The hash is the Worker's format
+// local one). The password is generated, never typed or printed: it is written to
+// .secrets/user-<email>.txt for the owner to move to a password manager and delete. The hash is the Worker's format
 // (src/auth/password.ts): PBKDF2-SHA256, 100 000 rounds, "<salt b64>:<hash b64>".
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -14,7 +15,7 @@ import { lockSecrets } from './secrets-dir.mjs';
 
 const args = process.argv.slice(2).filter((a) => a !== '--local');
 const where = process.argv.includes('--local') ? '--local' : '--remote';
-const [cmd, rawEmail] = args;
+const [cmd, rawEmail, planArg] = args;
 const sq = (s) => `'${String(s).replace(/'/gu, "''")}'`;
 
 const wrangler = (extra) => {
@@ -52,14 +53,21 @@ function newPassword(email) {
 }
 
 if (cmd === 'list') {
-  const rows = query('SELECT email, last_login_at FROM users ORDER BY email');
-  for (const r of rows) console.log(`${r.email}\t${r.last_login_at ? new Date(r.last_login_at).toISOString() : 'never'}`);
+  const rows = query('SELECT email, plan, last_login_at FROM users ORDER BY email');
+  for (const r of rows) console.log(`${r.email}\t${r.plan}\t${r.last_login_at ? new Date(r.last_login_at).toISOString() : 'never'}`);
   process.exit(0);
 }
 const email = (rawEmail ?? '').trim().toLowerCase();
-if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) || !['add', 'password'].includes(cmd)) {
-  console.error('usage: node scripts/user.mjs add <email> | password <email> | list  [--local]');
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) || !['add', 'password', 'plan'].includes(cmd) || (cmd === 'plan' && !['free', 'api'].includes(planArg))) {
+  console.error('usage: node scripts/user.mjs add <email> | password <email> | plan <email> free|api | list  [--local]');
   process.exit(2);
+}
+if (cmd === 'plan') {
+  wrangler([`--command=UPDATE users SET plan = ${sq(planArg)} WHERE email = ${sq(email)}`, '--yes']);
+  const [row] = query(`SELECT plan FROM users WHERE email = ${sq(email)}`);
+  if (row?.plan !== planArg) throw new Error(`no user ${email}, or the plan did not change`);
+  console.log(`${email}: plan ${planArg}`);
+  process.exit(0);
 }
 const known = query(`SELECT id FROM users WHERE email = ${sq(email)}`).length > 0;
 if (known !== (cmd === 'password')) {

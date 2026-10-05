@@ -98,13 +98,14 @@ Why:
 5. Storage: AES-GCM-256, random IV, AAD = record ID + Cloudflare account ID (a ciphertext cannot be
    moved to another account). The key comes from the `MASTER_KEYS` keyring (`key_id → secret`):
    encrypt with the current key, decrypt by the record's `key_id`; rotation — add a new key, re-encrypt
-   in the background, then remove the old key. D1 `clx` holds metadata (token ID, expiry, account ID,
-   `key_id`); the ciphertext is in KV `CREDENTIALS`.
+   in the background, then remove the old key. The ciphertext sits in the account's own row of D1
+   `clx`, next to its metadata (token ID, expiry, account ID, `key_id`): a renewal swaps secret and
+   metadata in one statement, and D1 reads are consistent where KV's are not (stage 2 review).
 6. Token state:
    - `401` or `verify` ≠ active → `revoked`, calls stop, the user gets an e-mail;
    - `403` → `permission_error` with the endpoint and Cloudflare's error code; the token is left
      alone — this may be a missing right or plan on one resource;
-   - a daily cron runs `verify` on idle tokens; 30 days before expiry — a "renew the connection"
+   - an hourly cron runs `verify` on the tokens checked longest ago (200 a run, so each about daily for up to ~4,800 accounts); 30 days before expiry — a "renew the connection"
      e-mail (a new bootstrap).
 7. Limit: one Cloudflare account per clx user on the `free` plan, up to 50 on the `api` plan (§15);
    one Cloudflare account belongs to one clx user. Through the API the bootstrap token arrives in
@@ -481,8 +482,11 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
 - **sources:**
   - Cloudflare's GraphQL Analytics API with the working token (right **Account Analytics Read**,
     §3): worker invocations of the whole account (all scripts — the quota is shared), D1 rows
-    written and read for the whole account. Whether these datasets are available on Free, and how
-    many days they keep, is checked at stage 2;
+    written and read for the whole account. **Checked on a Free account 05.10.2026:**
+    `workersInvocationsAdaptive`, `d1AnalyticsAdaptiveGroups` and `d1StorageAdaptiveGroups` answer;
+    D1 rows appeared about 15 minutes after the writes; invocations of a script made minutes earlier
+    were still counted under `__unknown__` after 20 minutes — so the advice uses account-wide sums,
+    never per-script ones. How many days the datasets keep is still to be seen;
   - the D1 REST API (`GET /accounts/{id}/d1/database/{db}`, D1 Read): the size of `clx-edge`;
   - without the Analytics datasets the request, write and read metrics are **unavailable**, not
     guessed: the advice then shows only size and the backpressure state, and says why;
@@ -575,7 +579,7 @@ moving into `clx-edge`).
 
 ## 13. Risks and open questions
 
-1. **Users' tokens are the main target.** Whoever gets `MASTER_KEYS` and the KV can write workers
+1. **Users' tokens are the main target.** Whoever gets `MASTER_KEYS` and the D1 `clx` rows can write workers
    into every connected account. Measures: minimal rights (§3), the secret only in the Worker,
    decryption in one function, a log of every Cloudflare API call made on a user's behalf (account,
    method, path, status, time) in D1 `clx`, visible to the user, 90 days.
@@ -600,12 +604,14 @@ moving into `clx-edge`).
    §5). Roles: the site owner is the controller, the worker runs in their account; clx.cx is the
    processor of totals. Retention — the table in §2. The `/privacy` text and a template for the
    user's own site policy — stage 6; legal review is out of the spec's scope.
-9. **Pages on the same host — the main integrator case, not verified.** Static sites from a
-   generator are typically Cloudflare Pages projects on apex domains with no worker in front. Two
-   things must hold: a worker route `example.com/<path>/*` runs on a Pages custom domain, and a
-   pass-through `fetch(request)` from that worker (§5, no footprint) reaches the Pages project and
-   returns its own 404. **Checked first at stage 2**, on a test Pages custom domain, before any other
-   counter work; if either fails, the counter design for Pages is revisited before stage 3.
+9. **Pages on the same host — the main integrator case, verified 05.10.2026** on a Free account
+   (`scripts/probe-pages.mjs`): a worker route `<host>/<path>/*` runs on a Pages custom domain; the
+   worker answers its own paths (`POST` → 204, the script → 200); a pass-through `fetch(request)`
+   reaches the Pages project — a probe under the path gets the project's own 404, another method its
+   own 405, with the same headers as the same request outside the route. One difference remains: on
+   HTTP/1.1 header names come back in another case and order through the worker
+   (`CF-Cache-Status` / `cf-cache-status`); on HTTP/2 every header name is lower case anyway. The
+   check needed no Pages right in the token.
 10. **Footprint scan of our own output.** A test builds snippets for 1,000 seeds and checks that no
     substring of 8+ characters other than browser API names is shared by more than 1% of them, and
     that no `<path>` or name hits the forbidden word list (§5).
@@ -707,14 +713,15 @@ that adds a site and embeds its counter at build time.
 - **Endpoints** (everything is scoped to the clx account of the key; another account's object is
   `404`, never `403`; a key outside its allow list or scope gets `404` or `403 scope_required` — paths
   under `/v1/accounts` need `accounts`, `/v1/sites` and the link host `sites`, `/v1/links` `links`
-  (each also reads its own objects), the reports `reports`):
+  (each also reads its own objects; reading accounts is open to `sites` too — a build pipeline
+  needs the account ids), the reports `reports`):
 
 | Method and path | What it does |
 |---|---|
 | `GET /v1/me` | plan, limits, current use |
 | `POST /v1/keys`, `GET /v1/keys`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
-| `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), last push, versions, **upgrade advice** (§8) |
+| `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `bootstrap_lost`, `connected` — token ready, not yet installed, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), last push, versions, **upgrade advice** (§8) |
 | `POST /v1/accounts/{id}/token` `{bootstrap_token}` | renew the working token |
 | `DELETE /v1/accounts/{id}` | disconnect (§4) |
 | `POST /v1/sites` `{account_id, host, excluded_paths?}` | add a site: the zone is found in the account, the route is created → the site with its snippet |

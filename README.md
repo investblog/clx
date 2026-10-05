@@ -35,7 +35,8 @@ node scripts/wrangler.mjs d1 create clx
 node scripts/wrangler.mjs kv namespace create SESSIONS
 cp wrangler.example.jsonc wrangler.jsonc     # then fill in your route, the D1 and KV ids
 node scripts/wrangler.mjs d1 migrations apply clx --remote
-node scripts/secrets.mjs                     # sets JWT_SECRET
+node scripts/secrets.mjs JWT_SECRET
+node scripts/secrets.mjs MASTER_KEYS         # seals users' Cloudflare tokens; set once
 pnpm run deploy
 node scripts/user.mjs add you@example.com    # the password goes to .secrets/
 ```

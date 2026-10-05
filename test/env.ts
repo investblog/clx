@@ -7,7 +7,7 @@ import type { Env } from '../src/types';
 
 export async function testEnv(): Promise<{ env: Env; dispose: () => Promise<void> }> {
   const proxy = await getPlatformProxy<Env>({ configPath: 'wrangler.example.jsonc', persist: false });
-  const env: Env = { ...proxy.env, JWT_SECRET: 'test-jwt-secret' };
+  const env: Env = { ...proxy.env, JWT_SECRET: 'test-jwt-secret', MASTER_KEYS: `t1:${btoa('k'.repeat(32))}` };
   for (const file of fs.readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort()) {
     const sql = fs.readFileSync(path.join('migrations', file), 'utf8').replace(/--.*$/gmu, '');
     for (const stmt of sql.split(';').map((s) => s.trim()).filter(Boolean)) await env.DB.prepare(stmt).run();

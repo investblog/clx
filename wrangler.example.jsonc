@@ -8,9 +8,9 @@
   "preview_urls": false,
   "routes": [{ "pattern": "clx.example.com/*", "zone_name": "example.com" }],
   // The page and its files (public/, app.js built by scripts/build-ui.mjs). Sign-in goes to the
-  // Worker first; everything else is a file or 404.
-  "assets": { "directory": "public", "run_worker_first": ["/auth/*"] },
-  // Secret (scripts/secrets.mjs): JWT_SECRET. Tests set their own (test/env.ts).
+  // Worker first, and so does the API; everything else is a file or 404.
+  "assets": { "directory": "public", "run_worker_first": ["/auth/*", "/v1/*"] },
+  // Secrets (scripts/secrets.mjs): JWT_SECRET, MASTER_KEYS. Tests set their own (test/env.ts).
   "d1_databases": [
     {
       "binding": "DB",
@@ -20,6 +20,12 @@
     }
   ],
   // Sessions and sign-in limits.
-  "kv_namespaces": [{ "binding": "SESSIONS", "id": "00000000000000000000000000000000" }],
+  "kv_namespaces": [
+    { "binding": "SESSIONS", "id": "00000000000000000000000000000000" }
+  ],
+  // Requests per API key (§15).
+  "ratelimits": [{ "name": "API_LIMIT", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+  // Hourly: a slice of the token check (docs/spec.md §3), expired idempotency and call-log rows.
+  "triggers": { "crons": ["20 * * * *"] },
   "observability": { "enabled": true }
 }

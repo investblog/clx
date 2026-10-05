@@ -1,0 +1,172 @@
+openapi: 3.1.0
+info:
+  title: clx management API
+  version: 0.2.0
+  description: |
+    The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
+    Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
+    (the `api` plan). Every POST, PUT, PATCH and DELETE takes an `Idempotency-Key` header, required
+    with an API key; a repeat with the same body replays the first answer for 24 hours.
+    Errors: `{ "error": { "code", "message", "details"? } }`. This file grows with each stage; a
+    test checks that every route in the code is here and back.
+servers:
+  - url: https://clx.cx
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                Stable codes: unauthorized, invalid_request, not_found, payload_too_large,
+                limit_reached, service_full, idempotency_conflict, operation_in_progress,
+                plan_required, scope_required, session_required, key_already_issued,
+                account_taken, already_connected, account_not_ready, invalid_bootstrap,
+                bootstrap_permission_error, permission_catalog, orphan_not_deleted,
+                token_rights_mismatch, token_check_failed, renew_lost, rate_limited, cloudflare_unavailable,
+                not_configured, internal.
+            message: { type: string }
+            details: { type: object }
+    Key:
+      type: object
+      properties:
+        id: { type: string }
+        prefix: { type: string }
+        scopes: { type: array, items: { type: string, enum: [accounts, sites, links, reports] } }
+        allow_accounts: { type: [array, 'null'], items: { type: string } }
+        allow_ips: { type: [array, 'null'], items: { type: string } }
+        created_at: { type: string, format: date-time }
+        last_used: { type: [string, 'null'], format: date }
+    Account:
+      type: object
+      properties:
+        id: { type: string }
+        cf_account_id: { type: string }
+        name: { type: string }
+        state: { type: string, enum: [pending, bootstrap_lost, connected, permission_error, revoked] }
+        token:
+          type: [object, 'null']
+          properties:
+            name: { type: string, description: 'clx-<operation id>' }
+            expires_at: { type: string, format: date-time }
+        error: { type: [object, 'null'], description: 'code and details, or warnings such as bootstrap_not_deleted' }
+        created_at: { type: string, format: date-time }
+  responses:
+    Error:
+      description: An error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+paths:
+  /v1/me:
+    get:
+      summary: The caller — user, plan, limits, current use
+      responses:
+        '200': { description: OK }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/keys:
+    get:
+      summary: API keys (page session only)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { keys: { type: array, items: { $ref: '#/components/schemas/Key' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Issue an API key (page session only; the `api` plan); the key is in this answer only
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scopes]
+              properties:
+                scopes: { type: array, items: { type: string, enum: [accounts, sites, links, reports] } }
+                allow_accounts: { type: array, items: { type: string, pattern: '^[0-9a-f]{32}$' } }
+                allow_ips: { type: array, items: { type: string } }
+      responses:
+        '201': { description: Issued — `key` is shown once }
+        '409': { description: 'key_already_issued — a replay of the same Idempotency-Key' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/keys/{id}:
+    delete:
+      summary: Revoke an API key (page session only)
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Revoked }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/accounts:
+    get:
+      summary: Connected Cloudflare accounts (scope accounts or sites)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { accounts: { type: array, items: { $ref: '#/components/schemas/Account' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Connect a Cloudflare account with a bootstrap token (scope accounts)
+      description: |
+        The bootstrap token (Account Settings Read + Account API Tokens Write, one day) is used
+        within this request and deleted; it is never stored. The account then goes on to the
+        install (stage 3) — poll GET for its state.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cf_account_id, bootstrap_token]
+              properties:
+                cf_account_id: { type: string, pattern: '^[0-9a-f]{32}$' }
+                bootstrap_token: { type: string }
+      responses:
+        '202': { description: Connected, content: { application/json: { schema: { type: object, properties: { account: { $ref: '#/components/schemas/Account' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/accounts/{id}:
+    get:
+      summary: One connected account (scope accounts or sites)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Disconnect (scope accounts); the answer names the working token to revoke in Cloudflare
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Disconnected }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/accounts/{id}/token:
+    post:
+      summary: Renew the working token with a new bootstrap token (scope accounts)
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bootstrap_token]
+              properties:
+                bootstrap_token: { type: string }
+      responses:
+        '200': { description: Renewed }
+        default: { $ref: '#/components/responses/Error' }
