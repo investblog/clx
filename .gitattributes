@@ -1,0 +1,11 @@
+# Normalize line endings to LF in the repository; UTF-8 everywhere.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

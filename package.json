@@ -1,0 +1,31 @@
+{
+  "name": "clx",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "lint": "tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p ui",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p ui",
+    "test": "vitest run",
+    "build": "node scripts/build-ui.mjs && wrangler deploy --dry-run --outdir dist --config wrangler.example.jsonc",
+    "db:local": "node scripts/wrangler.mjs d1 migrations apply clx --local",
+    "deploy": "node scripts/build-ui.mjs && node scripts/wrangler.mjs deploy"
+  },
+  "dependencies": {
+    "hono": "^4.13.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260926.1",
+    "@types/node": "^24.13.6",
+    "esbuild": "0.28.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.141.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  }
+}

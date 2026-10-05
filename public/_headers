@@ -1,0 +1,7 @@
+# Pages and files of the reports. The API sets its own headers (src/index.ts).
+# No inline script or style anywhere: geometry is set through the CSSOM (ui/).
+/*
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin
+  X-Robots-Tag: noindex, nofollow

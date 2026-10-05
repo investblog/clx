@@ -1,0 +1,60 @@
+# Baseline .gitignore — bootstrap copies this to ./.gitignore at git init.
+# Extend per project for its stack (see the env-setup rule). Lock file in
+# .agents/generated/ IS committed (provenance) — do not ignore it — in a private
+# repository. This one is public: see the agent block at the end.
+
+# secrets — never commit (templates like .env.example are kept)
+.env
+.env.*
+!.env.example
+.dev.vars
+.secrets
+*.pem
+id_rsa
+id_ed25519
+
+# dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# build / generated artifacts
+dist/
+build/
+.astro/
+.wrangler/
+*.log
+
+# local indexes — regenerable caches (code-search / content-vault); never commit
+.codegraph/
+.docindex/
+
+# heavy consumed inputs — context/ is committed, but bulky media is not
+context/attachments/
+
+# OS junk
+.DS_Store
+
+# local scratch (dev log, generated seed)
+temp/
+
+# the reports client bundle (scripts/build-ui.mjs)
+public/app.js
+
+# agent infrastructure — this is a public repository: it holds the product only. The agent's rules,
+# plans, hooks, settings and memory stay on the maintainer's machine (canon BOOTSTRAP step 5).
+.agents/
+.claude/
+.codex/
+.opencode/
+AGENTS.md
+CLAUDE.md
+opencode.json
+.mcp.json
+
+# the real deploy config (account resources); the public copy is wrangler.example.jsonc
+wrangler.jsonc

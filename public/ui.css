@@ -1,0 +1,1597 @@
+/* Design tokens and components from the 301.st UI (theme, sign-in card, tables). The notes below are
+   from that project; file names and pages in them are its own. */
+
+/* =========================
+   301.st – THEME TOKENS
+   - Цвета
+   - Типографика
+   - Базовые переменные
+   ========================= */
+
+/*!
+ * UI System 1.0 — Unified control recipe
+ * This file defines the single source of truth for control sizing.
+ * All interactive components MUST consume these tokens. Do not override
+ * padding/height in variants (primary/ghost/danger/social/chips).
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Blues (primary brand) */
+  --blue-900: #003682;
+  --blue-700: #0055DC;
+  --blue-500: #3475C0;
+  --blue-300: #408BC9;
+  --blue-neon: #4DA3FF;
+
+  /* Oranges (Cloudflare-ish family) */
+  --orange-500: #F48120;
+  --orange-700: #F38020;
+  --orange-900: #C65000;
+
+  /*
+    Cloudflare CTA accent.
+
+    Chosen to keep CF vibe but pass WCAG AA with WHITE text:
+    - #C24F00 on #FFFFFF ≈ 4.76:1
+    - #C24F00 on #000000 ≈ 4.41:1
+  */
+  --accent-cf: #C24F00;
+  --accent-cf-hover: #E05A00;
+  --accent-cf-soft: rgba(244, 129, 32, 0.16);
+
+  /* Neutrals */
+  --gray-950: #000000;
+  --gray-900: #111111;
+  --gray-800: #222222;
+  --gray-700: #333333;
+  --gray-600: #404242;
+  --gray-500: #424242;
+  --gray-400: #808080;
+
+  --gray-50:  #F8FBFB;
+  --gray-100: #F7F7F8;
+  --gray-200: #F4F8FC;
+  --gray-250: #EAEBEB;
+  --gray-300: #E5E5E4;
+  --gray-350: #CAC8C8;
+
+  /* Semantic */
+  --danger: #FF4F6E;
+  /* Solid red for FILLS under white text, in both themes: white on #D9264A is
+     4.86:1. --danger (#FF4F6E here) is for red text and icons on dark; white on
+     it is 3.18:1 — the dark-theme .btn--danger failed AA. */
+  --danger-solid: #D9264A;
+  --success: #18C27A;
+  --warning: #FFB347;
+  --info: #3B82F6;
+
+  /* Typography */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+  /* Was used by name with differing fallbacks and never defined. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  /* Base type scale */
+  --fs-body: 1rem;
+  --lh-body: 1.5;
+
+  /* Unified control system — font-driven sizing */
+  --fs-control: clamp(0.94rem, 0.92rem + 0.2vw, 0.98rem);
+  --lh-control: 1.25;
+
+  /* Control spacing (relative, no px) */
+  --control-pad-y: 0.35em;
+  --control-pad-x: 0.90em;
+  --border-1: 1px;
+  --indicator-thickness: 1px; /* For loading bar & global notice border */
+  --control-min-height: calc(
+    1em * var(--lh-control) +
+    2 * var(--control-pad-y) +
+    2 * var(--border-1)
+  );
+
+  /* Radius & layout spacing */
+  --r-pill: 999px;
+  --r-field: 0.75rem;
+  --control-radius: var(--r-pill);
+  --inline-gap: 0.5rem;
+  --stack-gap: 0.75rem;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Spacing & radii */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Control sizing */
+  --control-scale-sm: 0.9;
+  --control-scale-md: 1;
+  --control-scale-lg: 1.1;
+
+  --radius-xs: 0.25rem;
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --border-width-thin: 1px;
+  --border-width-strong: 1px;
+
+  --shadow-sm-light: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md-light: 0 6px 18px rgba(0, 0, 0, 0.12);
+  --shadow-lg-light: 0 18px 45px rgba(0, 0, 0, 0.25);
+
+  --shadow-sm-dark: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-md-dark: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lg-dark: 0 18px 45px rgba(0, 0, 0, 0.65);
+
+  --shadow-sm: var(--shadow-sm-light);
+  --shadow-md: var(--shadow-md-light);
+  --shadow-lg: var(--shadow-lg-light);
+
+  --shadow-soft:   0 1px 3px  color-mix(in srgb, var(--gray-900) 18%, transparent),
+                   0 1px 2px  color-mix(in srgb, var(--gray-900) 22%, transparent);
+  --shadow-subtle: 0 3px 6px  color-mix(in srgb, var(--gray-900) 16%, transparent),
+                   0 1px 4px  color-mix(in srgb, var(--gray-900) 20%, transparent);
+
+  --border-width: 1px;
+  --border-style: solid;
+
+  --transition-fast: 120ms ease-out;
+  --transition-md: 160ms ease-out;
+
+  /* Z-index scale - ascending order */
+  --z-base: 1;           /* Base elevated elements (utility-bar) */
+  --z-indicator: 2;      /* Visual indicators (loading-bar, logo overlay) */
+  --z-elevated: 10;      /* Elevated UI elements */
+  --z-dropdown: 20;      /* Dropdowns, popovers */
+  --z-sticky: 30;        /* Sticky headers */
+  --z-global-notice: 100; /* Global alerts (covers utility-bar content) */
+  --z-sidebar: 100;      /* Sidebar navigation */
+  --z-sidebar-overlay: 99; /* Sidebar backdrop */
+  --z-header: 200;       /* Main header (above sidebar) */
+  --z-drawer: 1000;      /* Drawers base (stacked: +10 per level via drawer-manager) */
+  --z-modal: 2000;       /* Modals, dialogs (above all drawers) */
+  --z-toast: 2100;       /* Toast notifications (above modals) */
+  --z-tooltip: 2200;     /* Tooltips (topmost) */
+
+  /* High-contrast text for buttons / chips on dark backgrounds */
+  --btn-text-on-dark: #FFFFFF;
+  --btn-text-on-bright: #111111;
+}
+
+/* DARK THEME – default */
+:root[data-theme="dark"] {
+  --bg: #111111;
+  --bg-elevated: #181A1F;
+  --bg-soft: #1F2229;
+
+  /* Decorative mesh (trigons-lite). Its own tokens rather than reusing the
+     surfaces, because the two themes need opposite treatment and the library's
+     fake lighting only ever darkens: on a near-black palette it has nothing to
+     work with, on a near-white one it overshoots into mid grey. So the contrast
+     lives here, in the palette, and `depth` stays near zero.
+     Measured luminance spread of the rendered mesh: 0.018 (--bg is 0.006). */
+  --mesh-1: #111111;
+  --mesh-2: #1C1F26;
+  --mesh-3: #282D38;
+
+  /* Seamless triangle tile for `.surface-mesh`. Baked, not computed: the tile
+     is a deterministic 219-byte SVG — a square with one diagonal — so asking
+     the browser to load a library and build it at runtime would buy nothing.
+     Regenerate with:
+       node -e "global.window={};require('trigons-lite/trigons-lite.min.js');
+                console.log(window.TrigonsLite.pattern({size:44,color:'#4DA3FF',opacity:0.07}))" */
+  --mesh-tile: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%20viewBox%3D%220%200%2044%2044%22%3E%3Cpath%20d%3D%22M0%200L44%200M0%2044L44%2044M0%200L0%2044M44%200L44%2044M44%200L0%2044%22%20fill%3D%22none%22%20stroke%3D%22%234DA3FF%22%20stroke-width%3D%221%22%20stroke-opacity%3D%220.07%22%2F%3E%3C%2Fsvg%3E");
+
+  /* Status panel fill strength — semantic corner glow over a neutral surface.
+     Kept low so the status colour signals state without dominating the fill. */
+  --panel-glow: 16%;
+  --panel-tint: 7%;
+
+  --panel: var(--bg-elevated);
+
+  --panel-border: color-mix(in srgb, var(--gray-100) 22%, transparent);
+
+  --text-main: #E7E9EE;
+  --text-muted: #A0A4AF;
+  --text-subtle: #8B8F98; /* Brightened for AA on bg-elev/bg-soft (was #7A7E87 → 3.9:1) */
+  --text-invert: #FFFFFF;
+
+  --text: var(--text-main);
+  --muted: var(--text-muted);
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --shadow-sm: var(--shadow-sm-dark);
+  --shadow-md: var(--shadow-md-dark);
+  --shadow-lg: var(--shadow-lg-dark);
+  --shadow-soft:   0 1px 3px  color-mix(in srgb, var(--gray-700) 14%, var(--blue-900) 8%),
+                   0 1px 2px  color-mix(in srgb, var(--gray-700) 18%, var(--blue-900) 6%);
+
+  --shadow-subtle: 0 3px 6px  color-mix(in srgb, var(--gray-700) 12%, var(--blue-900) 10%),
+                   0 1px 4px  color-mix(in srgb, var(--gray-700) 16%, var(--blue-900) 8%);
+  /*
+    Primary uses blue-500:
+    - #3475C0 with white text ≈ 4.72:1 (AA for normal text).
+  */
+  --primary: #3475C0;
+  --primary-soft: rgba(77, 163, 255, 0.1);
+  --primary-hover: #4DA3FF;
+
+  --ok: var(--success);
+
+  --brand: var(--primary);
+
+  /*
+    Cloudflare accent = shared accent-cf.
+    White text passes AA.
+  */
+  --accent-cf-bg: var(--accent-cf);
+  --accent-cf-bg-hover: var(--accent-cf-hover);
+
+  /* Status backgrounds (solid for predictable contrast) */
+  --bg-danger: #3D0915;
+  --bg-success: #042C1C;
+
+  --input-bg: rgba(15, 16, 22, 0.9);
+  --input-border: var(--border-strong);
+  --input-border-focus: rgba(77, 163, 255, 0.8);
+
+  /* Search-hit highlight (<mark>) — warm amber, distinct from blue hover/selection */
+  --mark-bg: rgba(240, 180, 70, 0.26);
+  --mark-fg: var(--text-main);
+
+  --nav-bg: rgba(11, 13, 18, 0.96);
+  --sidebar-bg: #101219;
+}
+
+/* LIGHT THEME */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #FFFFFF;
+  --bg-elevated: #F7F7F8;
+  --bg-soft: #F4F8FC;
+
+  /* See the dark block for why the mesh has its own tokens. Here the palette
+     steps down from white instead of up from black; rendered spread 0.186. */
+  --mesh-1: #FFFFFF;
+  --mesh-2: #F7F9FC;
+  --mesh-3: #EDF1F7;
+
+  /* Same tile, darker stroke: a light-blue line is invisible on white. See the
+     dark block for the regenerating command. */
+  --mesh-tile: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%20viewBox%3D%220%200%2044%2044%22%3E%3Cpath%20d%3D%22M0%200L44%200M0%2044L44%2044M0%200L0%2044M44%200L44%2044M44%200L0%2044%22%20fill%3D%22none%22%20stroke%3D%22%230055DC%22%20stroke-width%3D%221%22%20stroke-opacity%3D%220.05%22%2F%3E%3C%2Fsvg%3E");
+
+  /* Status panel fill — softer on light so the surface stays near-neutral
+     (not a saturated alert plate). */
+  --panel-glow: 10%;
+  --panel-tint: 4%;
+
+  --panel: var(--bg-elevated);
+
+  --panel-border: color-mix(in srgb, var(--gray-900) 18%, transparent);
+
+  --text-main: #111111;
+  --text-muted: #666A73;
+  --text-subtle: #6E7580; /* Darkened for AA on white (was #8A8F99 → 3.25:1) */
+  --text-invert: #FFFFFF;
+
+  --text: var(--text-main);
+  --muted: var(--text-muted);
+
+  --border-subtle: rgba(15, 23, 42, 0.06);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --shadow-sm: var(--shadow-sm-light);
+  --shadow-md: var(--shadow-md-light);
+  --shadow-lg: var(--shadow-lg-light);
+
+  /*
+    Primary uses blue-700:
+    - #0055DC with white text ≈ 6.30:1 (AA).
+  */
+  --primary: #0055DC;
+  --primary-soft: rgba(0, 85, 220, 0.08);
+  --primary-hover: #003682; /* even higher contrast */
+
+  --brand: var(--primary);
+
+  /*
+    Light-theme semantic overrides — darker for AA 4.5:1 on white.
+    Shared :root values (#FF4F6E, #18C27A, #FFB347, #3B82F6) are tuned for dark bg;
+    these replacements keep the hue but pass contrast on light backgrounds.
+  */
+  --danger:  #D9264A; /* 4.86:1 on #FFF (was #FF4F6E → 3.18:1) */
+  --success: #0E7B4C; /* 5.31:1 on #FFF (was #18C27A → 2.32:1) */
+  --warning: #9A6200; /* 5.09:1 on #FFF (was #FFB347 → 1.78:1) */
+  --info:    #2563EB; /* 5.14:1 on #FFF (was #3B82F6 → 3.68:1) */
+  --ok: var(--success);
+
+  /*
+    Cloudflare accent = same accent-cf to keep brand consistent.
+  */
+  --accent-cf-bg: var(--accent-cf);
+  --accent-cf-bg-hover: var(--accent-cf-hover);
+
+  --bg-danger: #FDE6EA;
+  --bg-success: #E0F7EE;
+
+  --input-bg: #FFFFFF;
+
+  /* Search-hit highlight (<mark>) — classic yellow, AA-legible on light surfaces */
+  --mark-bg: rgba(255, 209, 64, 0.55);
+  --mark-fg: var(--text-main);
+  --input-border: var(--border-strong);
+  --input-border-focus: rgba(0, 85, 220, 0.8);
+
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --sidebar-bg: #FFFFFF;
+}
+
+/* Глобальные мелочи */
+
+a {
+  color: inherit;
+}
+
+.border {
+  border: var(--border-width) var(--border-style) currentColor;
+  opacity: 0.28;
+}
+
+.border-interactive {
+  border: var(--border-width) var(--border-style) currentColor;
+  opacity: 0.55;
+}
+
+.border-strong {
+  border: var(--border-width) var(--border-style) currentColor;
+  opacity: 0.8;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+}
+
+/* Prevent horizontal scroll on mobile */
+@media (max-width: 1023px) {
+  body {
+    overflow-x: clip;
+  }
+}
+
+/* .page-shell lives in layout.css. The block that stood here called itself a
+   fallback "if layout.css is missing" — every one of the 32 pages loads it, and
+   site.css loads later, so the fallback was in fact always the winner. */
+
+[hidden] {
+  display: none !important;
+}
+
+.icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.text-sm {
+  font-size: var(--fs-sm);
+}
+
+.h1 {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.h2 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+
+.h3 {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+
+.h4 {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+
+.h5 {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+
+.text-subtle {
+  /* Muted color WITHOUT the legacy top-margin that .text-muted carries — safe
+     on icons / flex children (e.g. a nested badge status icon). */
+  color: var(--text-muted);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap, 0.75rem);
+}
+
+.stack > * + * {
+  margin-top: 0;
+}
+
+
+
+
+.stack--xs {
+  --stack-gap: var(--space-1);
+}
+
+.stack--sm {
+  --stack-gap: var(--space-2);
+}
+
+.stack--md {
+  --stack-gap: var(--space-4);
+}
+
+.stack--lg {
+  --stack-gap: var(--space-6);
+}
+
+.stack--xl {
+  --stack-gap: var(--space-5);
+}
+
+/* Inline stack (horizontal) */
+
+.stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Unified control recipe — SINGLE SOURCE OF TRUTH */
+.control,
+.select--control,
+.table-search,
+.btn,
+.btn-chip,
+.tabs__trigger {
+  font-size: var(--fs-control);
+  line-height: var(--lh-control);
+  padding-block: var(--control-pad-y);
+  padding-inline: var(--control-pad-x);
+  min-height: var(--control-min-height);
+  box-sizing: border-box;
+}
+
+.control,
+.select--control,
+.table-search,
+.btn,
+.btn-chip,
+.tabs__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  white-space: nowrap;
+}
+
+.control,
+.select--control,
+.btn,
+.btn-chip,
+.tabs__trigger {
+  justify-content: center;
+}
+
+.btn,
+.btn-chip,
+.table-search {
+  border-width: var(--border-1);
+  border-style: solid;
+  border-color: transparent;
+  border-radius: var(--r-pill);
+}
+
+/* Radius: pill vs field */
+.tabs__trigger {
+  border-radius: var(--control-radius);
+}
+
+.input,
+.select,
+.select--control,
+.textarea {
+  border-radius: var(--r-field);
+}
+
+/* @migration
+   Legacy spacing and radius aliases have been removed; use --space-* and
+   --control-radius with the unified control tokens.
+   Legacy classes: .btn-ghost/.btn-danger → .btn.btn--ghost/.btn.btn--danger.
+*/
+
+.btn {
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-md);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Turnstile loading state - animated shimmer effect */
+.btn[data-turnstile-pending]:disabled {
+  position: relative;
+  overflow: hidden;
+  opacity: 1;
+  cursor: wait;
+}
+
+.btn[data-turnstile-pending]:disabled::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.btn--sm,
+.btn-sm {
+  font-size: calc(var(--fs-control) * var(--control-scale-sm));
+  padding-block: calc(var(--control-pad-y) * var(--control-scale-sm));
+  padding-inline: calc(var(--control-pad-x) * var(--control-scale-sm));
+  min-height: calc(var(--control-min-height) * var(--control-scale-sm));
+}
+
+.btn--lg {
+  font-size: calc(var(--fs-control) * 1.05);
+  padding-block: calc(var(--control-pad-y) * var(--control-scale-lg));
+  padding-inline: calc(var(--control-pad-x) * var(--control-scale-lg));
+  min-height: calc(var(--control-min-height) * var(--control-scale-lg));
+}
+
+.btn--primary {
+  background: var(--primary);
+  color: var(--btn-text-on-dark);
+}
+
+.btn--primary:hover {
+  background: var(--primary-hover);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--text-main);
+  border-color: var(--border-subtle);
+}
+
+.btn--ghost:hover {
+  background: var(--panel);
+  border-color: var(--border-strong);
+  color: var(--text-main);
+}
+
+.btn--cf {
+  background: var(--accent-cf-bg, var(--accent-cf));
+  color: var(--btn-text-on-dark);
+  border-color: var(--accent-cf-soft, transparent);
+}
+
+.btn--cf:hover {
+  background: var(--accent-cf-bg-hover, var(--accent-cf-hover));
+}
+
+/* Fill is --danger-solid, not --danger: white on the dark theme's #FF4F6E is
+   3.18:1 and failed AA; --danger stays for red TEXT and icons. */
+.btn--danger {
+  background: var(--danger-solid);
+  color: var(--btn-text-on-dark);
+  border-color: color-mix(in srgb, var(--danger-solid) 40%, transparent);
+}
+
+.btn--danger:hover {
+  background: color-mix(in srgb, var(--danger-solid) 88%, #000 6%);
+}
+
+.btn--success {
+  background: var(--success);
+  color: var(--btn-text-on-dark);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+/* Dark theme: bright green (#18C27A) needs dark text — white is only 2.32:1 */
+:root[data-theme="dark"] .btn--success {
+  color: var(--btn-text-on-bright);
+}
+
+.btn--success:hover {
+  background: color-mix(in srgb, var(--success) 88%, #000 6%);
+}
+
+.btn--info {
+  background: var(--info, var(--primary));
+  color: var(--btn-text-on-dark);
+  border-color: color-mix(in srgb, var(--info, var(--primary)) 40%, transparent);
+}
+
+.btn--info:hover {
+  background: color-mix(in srgb, var(--info, var(--primary)) 88%, #000 6%);
+}
+
+html[data-theme="light"] .btn--ghost {
+  background: #ffffff;
+  color: var(--text-main);
+  border-color: color-mix(in srgb, var(--text-main) 10%, transparent);
+}
+
+html[data-theme="light"] .btn--ghost:hover {
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  color: var(--primary);
+}
+
+/* =========================
+   Segmented / chip buttons
+   (inherits unified control sizing: no extra height/padding overrides)
+   ========================= */
+
+.btn-chip-group {
+  display: inline-flex;
+  padding: calc(var(--space-1) / 2);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  gap: calc(var(--space-1) / 2);
+}
+
+.btn-chip {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.btn-chip:hover {
+  background: var(--panel-hover, var(--bg-soft));
+  border-color: var(--brand);
+  color: var(--text);
+}
+
+/* Icon sizing unified above */
+.btn-chip svg {
+  width: 0.875em;
+  height: 0.875em;
+  flex: 0 0 0.875em;
+}
+
+.btn-chip__icon,
+.btn-chip__chevron {
+  width: 0.875em;
+  height: 0.875em;
+  flex: 0 0 0.875em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit; /* Inherit from .btn-chip for proper currentColor flow */
+}
+
+.btn-chip__label {
+  line-height: inherit;
+  white-space: nowrap;
+}
+
+/* Badge inside chip — align with control recipe */
+.btn-chip .badge {
+  font-size: 0.7em;
+  line-height: 1;
+  padding: 0.2em 0.5em;
+  margin-inline: 0;
+}
+
+/* Small chip variant (sm scale) */
+
+.btn-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(1em + 1.25rem);
+  height: calc(1em + 1.25rem);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.btn-icon--compact {
+  width: calc(1em + 1.25rem);
+  height: calc(1em + 1.25rem);
+  display: inline-grid;
+  place-items: center;
+}
+
+/* Row-action button for dense tables. The size ladder here varies the rem part,
+   not the em part, so the glyph keeps tracking its text: 0.75rem here, 1.25rem
+   base, 2rem for --lg. Had no rule until 2026-08-01, so it rendered at the base
+   36px inside 50px table rows — a button taking two thirds of the row height. */
+.btn-icon--sm {
+  width: calc(1em + 0.75rem);
+  height: calc(1em + 0.75rem);
+}
+
+.btn-icon--lg {
+  width: calc(1em + 2rem);
+  height: calc(1em + 2rem);
+  font-size: var(--fs-lg);
+}
+
+.btn-icon--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.btn-icon--ghost:hover {
+  /* A wash of the theme's own text colour: light over dark, dark over light.
+     The white rgba it replaced was invisible on the light theme. */
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.btn .icon,
+.btn-icon .icon,
+.btn-chip .icon,
+.role-icon .icon {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+.btn-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--r-field);
+  transition: all 150ms ease;
+}
+
+.btn-close:hover {
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.btn-close .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.form-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field label,
+.field-label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+}
+
+.form-label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+}
+
+.field-hint {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin: -0.25rem 0 0;
+}
+
+/* Required-field marker. Was written as `field__required` for months with no
+   rule behind it, so the asterisk inherited the label's muted grey and read as
+   decoration. Red is the convention users already know. */
+.field-required {
+  color: var(--danger);
+  font-weight: var(--fw-medium);
+}
+
+.input {
+  font-size: var(--fs-control);
+  line-height: var(--lh-control);
+  padding-block: var(--control-pad-y);
+  padding-inline: var(--control-pad-x);
+  min-height: var(--control-min-height);
+  border: var(--border-1) solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-main);
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    border-color var(--transition-md),
+    box-shadow var(--transition-md),
+    background var(--transition-md);
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand), transparent 80%);
+}
+
+.field[data-status='error'] .input,
+.field[data-status='error'] .textarea,
+.input.is-error,
+.textarea.is-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--danger), transparent 85%);
+}
+
+.field[data-status='success'] .input,
+.field[data-status='success'] .textarea {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ok), transparent 88%);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-subtle);
+}
+
+.textarea {
+  font-size: var(--fs-control);
+  line-height: var(--lh-control);
+  padding-block: var(--control-pad-y);
+  padding-inline: var(--control-pad-x);
+  border: var(--border-1) solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-main);
+  -webkit-appearance: none;
+  appearance: none;
+  resize: vertical;
+  min-height: calc(3 * 1em * var(--lh-control) + 2 * var(--control-pad-y) + 2px);
+  transition:
+    border-color var(--transition-md),
+    box-shadow var(--transition-md),
+    background var(--transition-md);
+}
+
+/* Cards */
+.card {
+  --card-bg: var(--panel);
+  --card-border: var(--border-subtle);
+  --card-radius: var(--radius-lg);
+  --card-pad-x: var(--space-4);
+  --card-pad-y: var(--space-4);
+  --card-gap: var(--space-3);
+  --card-shadow: var(--shadow-soft);
+  --card-divider: 1px solid var(--card-border);
+
+  background: var(--card-bg);
+  color: var(--text-main);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+}
+
+.card__media {
+  display: block;
+  border-radius: calc(var(--card-radius) - 1px) calc(var(--card-radius) - 1px) 0 0;
+  overflow: hidden;
+  line-height: 0;
+  margin: -1px -1px 0 -1px;
+}
+
+.card__media img,
+.card__media picture,
+.card__media svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.card__header,
+.card__body,
+.card__footer {
+  padding: var(--card-pad-y) var(--card-pad-x);
+  margin: 0;
+}
+
+/* Merged 2026-08-01 — this selector was declared twice in a row, which is the
+   exact shape the StyleGuide warns about even when, as here, the two blocks set
+   different properties and nothing was actually broken. */
+.card__header {
+  border-bottom: var(--card-divider);
+  padding-top: calc(var(--card-pad-y) - var(--space-2));
+  padding-bottom: calc(var(--card-pad-y) - var(--space-2));
+}
+
+.card__footer {
+  border-top: var(--card-divider);
+}
+
+.card__title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  margin: 0 0 var(--space-1);
+}
+
+.card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--inline-gap);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+
+.card__meta {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.card--panel {
+  --card-bg: var(--panel);
+  --card-border: var(--border-subtle);
+  --card-shadow: var(--shadow-subtle);
+}
+
+.card--soft {
+  --card-bg: var(--bg-soft);
+  --card-border: var(--border-subtle);
+  --card-shadow: none;
+}
+
+.card--ghost {
+  --card-bg: transparent;
+  --card-border: transparent;
+  --card-shadow: none;
+}
+
+.card--compact {
+  --card-pad-x: var(--space-3);
+  --card-pad-y: var(--space-3);
+  --card-gap: var(--space-2);
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em; /* em-relative, matches the badge's em padding; tight space before a trailing status icon */
+  padding-inline: 0.75em;
+  padding-block: 0.15em;
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+
+  background-color: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+/* Secondary badge for dense rows — a locale tag beside a domain, a count in the
+   sidebar. Font size is already the smallest token, so compactness comes from
+   padding; shrinking the text further would undo the contrast work above.
+   Had no rule until 2026-08-01: `badge--sm` and a plain badge measured
+   pixel-identical, so every author who reached for it got nothing. */
+.badge--sm {
+  padding-inline: 0.5em;
+  padding-block: 0.05em;
+  gap: 0.2em;
+}
+
+.badge--pill {
+  border-radius: var(--r-pill);
+}
+
+.badge--circle {
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+}
+
+.badge + .badge {
+  margin-left: var(--space-1);
+}
+
+.badge--neutral {
+  background-color: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+
+.badge--success {
+  background-color: rgba(37, 208, 164, 0.12);
+  border-color: rgba(37, 208, 164, 0.5);
+  color: var(--ok);
+}
+
+.badge--danger {
+  background-color: rgba(255, 107, 107, 0.12);
+  border-color: rgba(255, 107, 107, 0.5);
+  color: var(--danger);
+}
+
+/* Same fix as --brand below, same reason: --primary is darker than its own wash,
+   which measured 3.17:1 in dark theme. --primary-hover is the higher-contrast
+   primary in both themes → 5.69:1. */
+.badge--primary {
+  background-color: var(--primary-soft);
+  border-color: rgba(77, 163, 255, 0.5);
+  color: var(--primary-hover);
+}
+
+/* Same pair as --primary above, so the same fix: --primary on --primary-soft
+   measured 3.17:1 in dark. Missed on the first pass because the contrast sweep
+   rendered eight variants and this was the ninth — a reminder that "all the
+   badges I could see" is not the same set as "all the badges". */
+.badge.badge--info {
+  background-color: var(--primary-soft);
+  border-color: rgba(77, 163, 255, 0.5);
+  color: var(--primary-hover);
+}
+
+.badge--ok {
+  background-color: rgba(37, 208, 164, 0.12);
+  border-color: rgba(37, 208, 164, 0.5);
+  color: var(--ok);
+}
+
+.badge--warning {
+  background-color: rgba(255, 179, 71, 0.12);
+  border-color: rgba(255, 179, 71, 0.5);
+  color: var(--warning);
+}
+
+/* Text is --primary-hover, not --brand. Every other dark badge pairs a light
+   accent wash with light accent text; brand alone used --primary (#3475C0),
+   which is darker than its own wash and measured 2.79:1 on the /redirects rows
+   — the "Target" badge on every acceptor row failed AA. --primary-hover is the
+   higher-contrast primary in BOTH themes (#4DA3FF dark, #003682 light), so one
+   token fixes dark without dulling light. Raising the wash alpha would have made
+   it worse: the wash is lighter than the text, so more of it cuts contrast. */
+.badge--brand {
+  background-color: rgba(94, 139, 255, 0.16);
+  border-color: rgba(94, 139, 255, 0.55);
+  color: var(--primary-hover);
+}
+
+.badge--cf {
+  background-color: rgba(246, 130, 31, 0.16);
+  border-color: rgba(246, 130, 31, 0.55);
+  color: #f6821f;
+}
+
+:root[data-theme='light'] .badge {
+  background-color: color-mix(in srgb, var(--text) 5%, #ffffff);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  color: var(--text);
+}
+
+:root[data-theme='light'] .badge--neutral {
+  background-color: color-mix(in srgb, var(--text) 5%, var(--bg));
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+  color: var(--muted);
+}
+
+:root[data-theme='light'] .badge--success {
+  /* 16% put the wash at rgb(216,234,226) and the text at 4.24:1 — under AA.
+     A lighter wash raises contrast, because here the text is the darker of the
+     two. This is the app's most common badge ("Active"), on its lightest theme. */
+  background-color: color-mix(in srgb, var(--ok) 9%, #ffffff);
+  border-color: color-mix(in srgb, var(--ok) 42%, transparent);
+  color: var(--ok);
+}
+
+/* Light-theme badges: the text is the darker of the two, so contrast is bought by
+   darkening the text rather than washing out the fill. Measured on the card/table
+   backdrop these badges actually sit on: --danger alone gave 3.79:1, and dropping
+   the fill far enough to fix it (4%) left an almost-white badge with no identity.
+   Darkening the text keeps the fill and clears AA. */
+:root[data-theme='light'] .badge--danger {
+  background-color: color-mix(in srgb, var(--danger) 16%, #ffffff);
+  border-color: color-mix(in srgb, var(--danger) 44%, transparent);
+  color: color-mix(in srgb, var(--danger) 85%, #000000);
+}
+
+:root[data-theme='light'] .badge--ok {
+  background-color: color-mix(in srgb, var(--ok) 9%, #ffffff);
+  border-color: color-mix(in srgb, var(--ok) 42%, transparent);
+  color: var(--ok);
+}
+
+:root[data-theme='light'] .badge--warning {
+  background-color: color-mix(in srgb, var(--warning) 16%, #ffffff);
+  border-color: color-mix(in srgb, var(--warning) 42%, transparent);
+  color: color-mix(in srgb, var(--warning) 85%, #000000);
+}
+
+:root[data-theme='light'] .badge--brand {
+  background-color: color-mix(in srgb, var(--brand) 14%, #ffffff);
+  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+  color: var(--brand);
+}
+
+:root[data-theme='light'] .badge--cf {
+  background-color: color-mix(in srgb, var(--accent-cf-bg) 14%, #ffffff);
+  border-color: color-mix(in srgb, var(--accent-cf-bg) 40%, transparent);
+  color: color-mix(in srgb, var(--accent-cf-bg) 85%, #000000);
+}
+
+:root[data-theme='light'] .badge.badge--info {
+  background-color: rgba(0, 85, 220, 0.12);
+  border-color: rgba(0, 85, 220, 0.5);
+  color: var(--primary);
+}
+
+.auth-grid {
+  display: grid;
+  gap: var(--stack-gap);
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: start;
+}
+
+.auth-card {
+  background: var(--bg-elevated);
+  border: var(--border-width) var(--border-style) var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  box-shadow: none;
+  position: relative;
+}
+
+.auth-grid > .auth-card {
+  margin-top: 0;
+}
+
+.auth-card h1 {
+  margin: 0 0 var(--space-2);
+}
+
+.auth-card .auth-subtitle {
+  margin: 0 0 var(--space-4);
+  color: var(--text-muted);
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field .input {
+  width: 100%;
+  padding-right: calc(var(--control-pad-x) + 1.4em);
+}
+
+.password-toggle {
+  position: absolute;
+  inset-inline-end: 0.5em;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 1.2rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+}
+
+.password-toggle .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--inline-gap);
+  margin-top: var(--stack-gap);
+}
+
+/* Tabs handle Login↔Register switching, so each view keeps a single primary
+   action — stretch it full-width. */
+.auth-actions > .btn:only-child {
+  flex: 1 1 100%;
+}
+
+.auth-actions .btn {
+  flex: 1 1 0;
+  min-width: 11.25rem;
+}
+
+.auth-status {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-soft);
+  color: var(--text-main);
+}
+
+.auth-status[data-turnstile-status] {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  gap: var(--space-2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.auth-status[data-turnstile-status] .turnstile-widget {
+  width: 100%;
+  max-width: 100%;
+  min-height: 65px;
+  overflow: hidden;
+}
+
+.auth-status[data-type='error'] {
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  color: var(--danger);
+  background: var(--bg-danger);
+}
+
+.auth-status[data-type='success'] {
+  border-color: color-mix(in srgb, var(--success) 60%, transparent);
+  color: var(--success);
+  background: var(--bg-success);
+}
+
+.auth-status[data-type='loading'],
+.auth-status[data-type='pending'] {
+  color: var(--text-muted);
+}
+
+/* Idle = the default "enter your email…" hint. Don't state the obvious — the
+   block only appears for real feedback (pending/error/success). */
+.auth-status[data-type='idle'] {
+  display: none;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-form > .auth-status:first-child {
+  margin-top: 0;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  /* Phase 4: Container queries - table adapts to container width */
+  container-type: inline-size;
+  container-name: table;
+}
+
+/* ============================================
+   3. TABLE STRUCTURE
+   ============================================ */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.table thead {
+  background: var(--bg-soft);
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+/* The rule above is a compound selector (0,0,1,1); `.text-right`, `.text-center`
+   and `.th-num` are bare classes (0,0,1,0), so inside a table they lose no matter
+   where they sit in the file. That is why every numeric column in the app rendered
+   left-aligned even after `.text-right` was given a definition on 2026-07-28 — the
+   class existed, it just never won. Measured, not deduced: a `<td class="text-right">`
+   computed to `text-align: left` on /sites, /projects and /streams.
+   These pairs restore the intent at equal-or-higher specificity; `!important` is
+   banned by the StyleGuide, and raising specificity is the sanctioned fix. */
+.table th.text-right,
+.table td.text-right,
+.table th.th-num,
+.table td.th-num {
+  text-align: right;
+  /* Digits share one advance width, so amounts line up column-wise instead of
+     drifting with the glyphs. Scoped to tables: elsewhere `.text-right` is prose. */
+  font-variant-numeric: tabular-nums;
+}
+
+.table th.text-center,
+.table td.text-center {
+  text-align: center;
+}
+
+.table th {
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+/* Sortable table header button. Wired 2026-08-12 via src/ui/table-sort.ts
+   (domains, sites, projects, integrations) — recipe in StyleGuide → Tables.
+   Merged 2026-08-01 from two full declarations ~700 lines apart, which disagreed
+   on nine properties and on the hover colour (--text here, --brand there). The
+   later one won, so everything in this block was dead — and since the component
+   was wired to zero tables back then, nobody could have noticed.
+   Values below are the ones that actually rendered. */
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.th-sort:hover {
+  color: var(--brand);
+}
+
+/* Direction indicator: dim two-way arrow at rest, full-color chevron when the
+   column is active. State lives in aria-sort on the <th> (set by
+   src/ui/table-sort.ts), so CSS keys off the attribute instead of a class. */
+.th-sort .icon {
+  width: 1em;
+  height: 1em;
+  opacity: 0.45;
+}
+
+th[aria-sort] .th-sort {
+  color: var(--brand);
+}
+
+th[aria-sort] .th-sort .icon {
+  opacity: 1;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table tbody tr:hover {
+  /* Theme text colour, not white: white at 2% was zero on the light theme. */
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  text-align: center;
+}
+
+.empty-state .stack,
+.empty-state .stack--md {
+  align-items: center;
+}
+
+.empty-state .icon--lg {
+  width: 64px;
+  height: 64px;
+  color: var(--text-muted);
+}
+
+.empty-state .btn-group {
+  margin-top: var(--space-4);
+  justify-content: center;
+}
+
+/* Stats Grid - responsive grid for stat cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+@media (min-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* Stat Card as link — clickable card without underline */
+a.stat-card {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Stat Card - individual metric display */
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background: var(--bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-md);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.stat-card__value {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.stat-card__label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+}
+
+/* Stat card variants with left border accent */
+.stat-card--ok {
+  border-left: 3px solid var(--ok);
+}
+
+.stat-card--ok .stat-card__value {
+  color: var(--ok);
+}
+
+.stat-card--neutral {
+  border-left: 3px solid var(--text-muted);
+}
+
+.stat-card--danger {
+  border-left: 3px solid var(--danger);
+}
+
+.stat-card--danger .stat-card__value {
+  color: var(--danger);
+}
+
+.stat-card--primary {
+  border-left: 3px solid var(--primary);
+}
+
+.stat-card--primary .stat-card__value {
+  color: var(--primary);
+}
