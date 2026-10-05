@@ -70,7 +70,7 @@ const step = (what, ok, extra = '') => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Poll the account until `until` holds or the time is up; the per-minute cron drives the install. */
-async function poll(id, auth, until, minutes = 6) {
+async function poll(id, auth, until, minutes = 16) {
   const end = Date.now() + minutes * 60_000;
   for (;;) {
     const a = (await clx('GET', `/v1/accounts/${id}`, auth)).body.account;

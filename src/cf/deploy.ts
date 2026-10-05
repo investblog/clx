@@ -2,7 +2,7 @@
 // or an update is an operation of recorded steps (§15): it is started by a request, run right after
 // the answer, and resumed by the per-minute cron from its last recorded step if the run dies; one
 // operation at a time holds the account's lease. Its last step waits for the worker's `setup_ok`
-// (src/hook.ts), which sets the working cron; none within five minutes and the operation is undone.
+// (src/hook.ts), which sets the working cron; none within fifteen minutes and the operation is undone.
 //
 // Ownership: clx deletes only what it recorded — the database by its UUID, the script while
 // `script_owned` says clx put it there — and before it replaces or deletes the script it checks that
@@ -20,8 +20,9 @@ import { edgeById, lease, owned, release, step, workingToken, type EdgeAccount }
 
 const SCRIPT = 'clx-edge';
 const DATABASE = 'clx-edge';
-/** No setup_ok within this — the deployment failed (§4). */
-export const SELF_CHECK_TIMEOUT = 5 * 60_000;
+/** No setup_ok within this — the deployment failed (§4). A new script's cron first fired after
+ *  ~4.5 minutes on 05.10.2026 (an updated one's after ~40 s), so five minutes was too tight. */
+export const SELF_CHECK_TIMEOUT = 15 * 60_000;
 /** Cron triggers per account on Workers Free (§5). */
 const CRON_LIMIT = 5;
 /** Runs of one operation that may end in a passing failure before it is given up. */
@@ -343,7 +344,7 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
       return;
     }
     r = { env, db, edge, owner, opId, kind: op.kind as Kind, data: JSON.parse(fresh.data) as DeployData, token, log: { db, edgeAccountId: edge.id, principal: data.principal } };
-    if (at === 'selfcheck') fail(504, 'self_check_timeout', 'The worker did not report within five minutes of its upload.');
+    if (at === 'selfcheck') fail(504, 'self_check_timeout', 'The worker did not report within fifteen minutes of its upload.');
     while (at !== 'selfcheck') at = await advance(r, at);
   } catch (e) {
     if (!r) throw e;
@@ -396,7 +397,13 @@ export async function confirmSetup(env: Env, edge: EdgeAccount, report: { deploy
 /** The per-minute cron: operations that stalled, wait for setup_ok, or lost their account. */
 export async function runOperations(env: Env, now = Date.now()): Promise<number> {
   const ops = (
-    await env.DB.prepare("SELECT id FROM operations WHERE state = 'running' AND kind IN ('install', 'update') AND updated_at < ? ORDER BY updated_at LIMIT 20").bind(now - 60_000).all<{ id: string }>()
+    // A self-check still within its deadline needs nothing; leaving it out keeps the batch for
+    // operations that do.
+    await env.DB.prepare(
+      "SELECT id FROM operations WHERE state = 'running' AND kind IN ('install', 'update') AND updated_at < ?1 AND NOT (step = 'selfcheck' AND json_extract(data, '$.deadline') > ?2) ORDER BY updated_at LIMIT 20",
+    )
+      .bind(now - 60_000, now)
+      .all<{ id: string }>()
   ).results;
   // One account's trouble never stops the others.
   for (const op of ops) await runDeploy(env, op.id).catch((e: unknown) => console.error('operation', op.id, e instanceof Error ? e.message : e));

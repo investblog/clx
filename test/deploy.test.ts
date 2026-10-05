@@ -104,8 +104,11 @@ describe('install', () => {
     expect(await setupOk()).toMatchObject({ status: 409 });
   });
 
-  it('no setup_ok within five minutes: the worker and database it created are deleted', async () => {
+  it('no setup_ok in time: the worker and database it created are deleted', async () => {
     const { body } = await connect();
+    // Still within its deadline, it is not even picked up by the cron.
+    await env.DB.prepare('UPDATE operations SET updated_at = 0').run();
+    expect(await runOperations(env)).toBe(0);
     expect(await overdue()).toBe(1);
     expect(fakeCf.scripts.size).toBe(0);
     expect(fakeCf.dbs.size).toBe(0);

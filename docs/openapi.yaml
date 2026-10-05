@@ -152,7 +152,7 @@ paths:
         The bootstrap token (Account Settings Read + Account API Tokens Write, one day) is used
         within this request and deleted; it is never stored. The account then goes on to the
         install of clx-edge (§4) — poll GET for its state: `installing`, then `ready` once the
-        worker has confirmed itself (within about two minutes), or `connected` with an `error`.
+        worker has confirmed itself (about five minutes for a first install), or `connected` with an `error`.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:

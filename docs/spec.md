@@ -168,7 +168,8 @@ Why:
      to `HOOK_URL/setup` with `Bearer EDGE_KEY`; `deployment_id` is single-use and passed as a
      binding of this deployment, so an old or delayed `setup_ok` cannot count for another
      deployment. When all three fields match, clx.cx sets the working cron `5 * * * *`. No
-     `setup_ok` within 5 minutes — the install failed.
+     `setup_ok` within 15 minutes — the install failed (measured 05.10.2026: the cron of a new
+     script first fired ~4.5 minutes after it was set, of an updated one after ~40 s).
   A failure deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
   own script is the same install: it keeps the database, and on failure returns to the script's
   previous version as an update does.
