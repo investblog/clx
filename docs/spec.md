@@ -125,45 +125,76 @@ Why:
 ## 4. Deploy and updates
 
 - **One bundle** `clx-edge` — the same code for everyone; the deployment's own settings are in
-  bindings (`HOOK_URL`) and secrets (`EDGE_KEY`), the sites and links in the synced config (§6). The bundle's sha256 is pinned by a test, and before a
-  rollout it is checked with `GET /admin/edge/bundle-info` (a broken bundle must never reach all
-  accounts at once).
-- **Resource ownership.** clx.cx records the ID of everything it creates: the database UUID, route
-  IDs, the script's name and sha256. If `clx-edge` (worker or database) already exists and is not in
-  our records, the install stops with "name taken" and deletes nothing. Rollback and disconnect
-  delete only recorded IDs. Before updating or deleting the script, clx.cx reads its current sha256:
-  if it matches no clx bundle — status `resource_drift`, the automatic operation stops.
-- **Schema migrations** — one ordered list `edge/migrations.ts`, the number kept in
-  `PRAGMA user_version`. clx.cx applies them through the D1 REST API **before** uploading new code;
-  every migration is compatible with the previous code version (additive only: new tables and
-  columns with defaults). The worker compares `user_version` and reports a mismatch in the heartbeat.
+  bindings (`HOOK_URL`, `BUNDLE`, `DEPLOYMENT_ID`) and the secret `EDGE_KEY`, the sites and links in
+  the synced config (§6). The bundle is built from `edge/worker.ts` into the committed
+  `edge/bundle.gen.ts` (code, sha256, `compatibility_date`); a test rebuilds it and compares, and
+  `edge/released.json` lists the sha256 of every bundle ever committed — the code clx may call its
+  own. Before a rollout it is checked with `GET /admin/edge/bundle-info` (a broken bundle must never
+  reach all accounts at once).
+- **Resource ownership.** clx.cx records what it creates: the database UUID, route IDs, and a mark
+  that the `clx-edge` script is ours — set just before the upload, cleared only when clx has deleted
+  it. If `clx-edge` (worker or database) already exists and is not in our records, the install stops
+  with `name_taken` and touches nothing. Rollback and disconnect delete only what is recorded.
+  Before replacing or deleting the script, clx.cx reads its code (`GET …/workers/scripts/clx-edge`,
+  the `worker.js` part of the multipart answer — byte for byte what was uploaded, checked
+  05.10.2026): if its sha256 is not in `edge/released.json` — `resource_drift`, and the script is
+  left alone. The check is repeated right before every upload and every rollback, but it and the
+  upload are two calls — Cloudflare has no conditional create — so a `clx-edge` made by someone
+  else in the moment between them would still be overwritten; the window is one API call, not a
+  step. A failed return to the previous version leaves the account `connected` with no bundle
+  claimed (`serving_unknown`), so a reinstall sets it right.
+- **Schema migrations** — one ordered list `edge/migrations.ts`. D1 refuses `PRAGMA user_version`
+  (`SQLITE_AUTH`, checked 05.10.2026), so the number of the last migration applied is kept in the
+  table `meta` under the key `schema`. clx.cx applies them through the D1 REST API **before**
+  uploading new code, each in one call with its number; every migration is re-runnable
+  (`IF NOT EXISTS`) and compatible with the previous code version (additive only: new tables and
+  columns with defaults). The worker reports its `schema` in `setup_ok` and the heartbeat.
+- **Operations.** An install or an update is an operation of recorded steps (§15). The request that
+  starts it answers `202` and runs the first steps after the answer; the clx.cx cron runs **every
+  minute** (the hourly jobs at `:20`) and resumes an operation that stalled from its last recorded
+  step, and ends a self-check that is overdue. A passing failure (Cloudflare `5xx`, `429`, network)
+  is retried by the cron, at most 10 runs; any other failure undoes the operation at once.
 - **Install** (every step is checked):
-  1. D1 `clx-edge` + migrations;
-  2. the worker key: 32 random bytes, we keep only its SHA-256; on reinstall the previous hash is
+  1. what is there: the account's scripts and their cron triggers (only scripts with a `scheduled`
+     handler can hold one; 5 in use → `cron_limit`), and `clx-edge` by name → `name_taken`;
+  2. D1 `clx-edge` (or the recorded one, if it is still there) + migrations; the step is recorded
+     before the create call, so a resumed step adopts a database it finds by name;
+  3. the worker key: 32 random bytes, we keep only its SHA-256; on reinstall the previous hash is
      accepted for one more day;
-  3. upload the script (`PUT …/workers/scripts/clx-edge`, `compatibility_date` fixed in the bundle)
-     → secrets → an **every-minute** cron;
-  4. self-check: within the next minute the worker sends `setup_ok {deployment_id, bundle,
-     user_version}` to `HOOK_URL`; `deployment_id` is single-use and passed as a binding of this
-     deployment, so an old or delayed `setup_ok` cannot count for another deployment. When all three
-     fields match, clx.cx sets the working cron `5 * * * *`. No `setup_ok` within 5 minutes — the
-     install failed.
-  A failure in steps 1–4 deletes what this run created.
-- **Update**: migrations → upload the new script with a new `deployment_id` and the every-minute
-  cron → self-check (as step 4) → the working cron. Before the upload clx.cx remembers the previous
-  bundle's sha256 (all bundles are kept in the repository by sha256); if the secrets, the cron or the
-  self-check fail, the previous bundle is uploaded again and the `5 * * * *` cron restored. Rollout —
-  by an admin command, to everyone or a list, with `dry_run`; the result per account goes into a
-  table. Compatibility: the receiver accepts body version `v` of the current and the previous
-  release.
-- **Liveness:** a heartbeat in every push (§7): bundle sha256, `user_version`, last error, queue
+  4. upload the script (`PUT …/workers/scripts/clx-edge`, `compatibility_date` fixed in the bundle)
+     with the key as a `secret_text` binding in the same upload — one call, no separate secrets
+     step — then an **every-minute** cron;
+  5. self-check: within the next minute the worker sends `setup_ok {deployment_id, bundle, schema}`
+     to `HOOK_URL/setup` with `Bearer EDGE_KEY`; `deployment_id` is single-use and passed as a
+     binding of this deployment, so an old or delayed `setup_ok` cannot count for another
+     deployment. When all three fields match, clx.cx sets the working cron `5 * * * *`. No
+     `setup_ok` within 5 minutes — the install failed.
+  A failure deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
+  own script is the same install: it keeps the database, and on failure returns to the script's
+  previous version as an update does.
+- **Update**: drift check → migrations → upload the new script with a new `deployment_id`, keeping
+  the key (`keep_bindings: ["secret_text"]`) → the every-minute cron → self-check (as step 5) → the
+  working cron. Before the upload clx.cx records the version serving now (`GET …/deployments`); if
+  the cron or the self-check fail, that version is deployed again at 100%
+  (`POST …/workers/scripts/clx-edge/deployments`) and the `5 * * * *` cron restored — no old bundle
+  has to be kept. Checked on a Free account 05.10.2026 with the working token's rights: versions,
+  deployments and the rollback work; after a rollback the script's code endpoint still shows the
+  latest *uploaded* version, which is a clx bundle too, so the drift check holds. Rollout — by an
+  admin command (`POST /admin/edge/rollout`, an admin's page session), to every installed account or
+  a list, with `dry_run`; the operations table holds each account's result. Compatibility: the
+  receiver accepts body version `v` of the current and the previous release.
+- **Liveness:** a heartbeat in every push (§7): bundle sha256, `schema`, last error, queue
   depth. 26 hours of silence — "no connection" in the UI and an e-mail to the user.
 - **Disconnecting clx** by the user: the working token removes the recorded routes, deletes the
-  recorded worker and database; we delete the ciphertext. The working token cannot delete itself (it
-  has no API Tokens Edit right and never will) — the user revokes it in Cloudflare from a link, or
-  pastes a new bootstrap token and clx deletes the working one with it. Totals on clx.cx are deleted
-  after 30 days (or at once, by a button).
-- **Worker cron:** one, `5 * * * *` (Free allows 5 crons per account).
+  recorded worker (if its code is a clx bundle) and database; we delete the ciphertext. What could
+  not be deleted — the token is revoked or lacks a right, the worker was changed — is listed in the
+  answer for the user to remove by hand. The working token cannot delete itself (it has no API
+  Tokens Edit right and never will) — the user revokes it in Cloudflare from a link, or pastes a new
+  bootstrap token and clx deletes the working one with it. Totals on clx.cx are deleted after 30
+  days (or at once, by a button).
+- **Worker cron:** one, `5 * * * *` (Free allows 5 crons per account). The `workers.dev` address
+  of a script uploaded through the API is off by default (checked 05.10.2026); the worker answers
+  `404` there anyway, so a pass-through never loops.
 
 ## 5. Counter
 
@@ -591,7 +622,9 @@ moving into `clx-edge`).
    test account at stage 2.
 3. **The D1 REST API** accepts several statements separated by `;` or as an array (API docs,
    04.10.2026) but does not promise a transaction — so the config sync (§6) and snapshots (§7) are built
-   so that a partial failure is safe.
+   so that a partial failure is safe. (On a Free account 05.10.2026 a call whose second of three
+   statements failed left nothing of the first — but one observation is not a promise: migrations
+   stay re-runnable, §4.)
 4. **Free quotas are shared** with the user's other workers — the upgrade advice (§8) reads the
    whole account through the Analytics API; without it we see only our own use.
 5. **Route conflicts** with the user's other workers and Pages — refuse, never overwrite.
@@ -706,7 +739,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `plan_required`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.
@@ -723,6 +756,7 @@ that adds a site and embeds its counter at build time.
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
 | `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `bootstrap_lost`, `connected` — token ready, not yet installed, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), last push, versions, **upgrade advice** (§8) |
 | `POST /v1/accounts/{id}/token` `{bootstrap_token}` | renew the working token |
+| `POST /v1/accounts/{id}/install` | install `clx-edge` again — after a failed install, or a reinstall (§4) → `202` |
 | `DELETE /v1/accounts/{id}` | disconnect (§4) |
 | `POST /v1/sites` `{account_id, host, excluded_paths?}` | add a site: the zone is found in the account, the route is created → the site with its snippet |
 | `GET /v1/sites?account_id=`, `GET /v1/sites/{id}` | state (`route_pending`, `active`, `route_conflict`), `snippet: {inline, script_tag}` |

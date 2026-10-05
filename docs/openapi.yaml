@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: clx management API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
     Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
@@ -47,7 +47,10 @@ components:
                 account_taken, already_connected, account_not_ready, invalid_bootstrap,
                 bootstrap_permission_error, permission_catalog, orphan_not_deleted,
                 token_rights_mismatch, token_check_failed, renew_lost, rate_limited, cloudflare_unavailable,
-                not_configured, internal.
+                not_configured, internal. In an account's or operation's `error` (the install, §4):
+                name_taken, resource_drift, cron_limit, permission_error, revoked, self_check_timeout,
+                credentials_missing, credentials_unreadable (clx cannot open the stored token),
+                cloudflare_error.
             message: { type: string }
             details: { type: object }
     Key:
@@ -66,13 +69,33 @@ components:
         id: { type: string }
         cf_account_id: { type: string }
         name: { type: string }
-        state: { type: string, enum: [pending, bootstrap_lost, connected, permission_error, revoked] }
+        state:
+          type: string
+          enum: [pending, bootstrap_lost, connected, installing, ready, permission_error, revoked, resource_drift]
+          description: 'connected — token ready, clx-edge not installed; installing — the install runs or waits for the worker; ready — installed and confirmed'
         token:
           type: [object, 'null']
           properties:
             name: { type: string, description: 'clx-<operation id>' }
             expires_at: { type: string, format: date-time }
         error: { type: [object, 'null'], description: 'code and details, or warnings such as bootstrap_not_deleted' }
+        edge:
+          type: [object, 'null']
+          description: The installed clx-edge, once confirmed
+          properties:
+            bundle: { type: string, description: sha256 of the bundle }
+            up_to_date: { type: boolean }
+            schema: { type: integer }
+            installed_at: { type: string, format: date-time }
+        operation:
+          type: [object, 'null']
+          description: The latest operation on the account (GET /v1/accounts/{id} only)
+          properties:
+            kind: { type: string, enum: [connect, renew, install, update, disconnect] }
+            state: { type: string, enum: [running, done, failed] }
+            step: { type: string }
+            error: { type: [object, 'null'] }
+            updated_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
   responses:
     Error:
@@ -128,7 +151,8 @@ paths:
       description: |
         The bootstrap token (Account Settings Read + Account API Tokens Write, one day) is used
         within this request and deleted; it is never stored. The account then goes on to the
-        install (stage 3) — poll GET for its state.
+        install of clx-edge (§4) — poll GET for its state: `installing`, then `ready` once the
+        worker has confirmed itself (within about two minutes), or `connected` with an `error`.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:
@@ -150,10 +174,34 @@ paths:
         '200': { description: OK }
         default: { $ref: '#/components/responses/Error' }
     delete:
-      summary: Disconnect (scope accounts); the answer names the working token to revoke in Cloudflare
+      summary: Disconnect (scope accounts) — delete clx-edge and its database, then the record
+      description: |
+        The answer names the working token to revoke in Cloudflare (it cannot delete itself), and in
+        `left` whatever clx could not delete — the token is revoked, a right is missing, or the
+        worker was changed outside clx — for the user to remove by hand.
       parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses:
-        '200': { description: Disconnected }
+        '200':
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  revoke_token: { type: [string, 'null'] }
+                  left: { type: array, items: { type: string } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/accounts/{id}/install:
+    post:
+      summary: Install clx-edge again (scope accounts) — after a failed install, or to reinstall
+      description: |
+        The recorded database is kept; the worker gets a new key (the previous one is accepted for a
+        day). A clx-edge worker or database clx did not create is never touched (`name_taken`), nor
+        a worker changed outside clx (`resource_drift`). Poll GET for the state.
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '202': { description: Started, content: { application/json: { schema: { type: object, properties: { account: { $ref: '#/components/schemas/Account' } } } } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/accounts/{id}/token:
     post:

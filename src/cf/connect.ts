@@ -7,6 +7,7 @@
 // names clx can prove it made) are deleted and made again, and an operation that got past its
 // checks is finished even when its bootstrap token is already gone. The sealed token lives in the
 // account's own row, so a renewal swaps secret and metadata in one statement.
+import { EDGE_SHA256 } from '../../edge/bundle.gen';
 import { open, seal, type Sealed } from '../lib/crypto';
 import { FREE_ACCOUNTS_CAP, LIMITS, planOf } from '../limits';
 import type { Env, Principal } from '../types';
@@ -70,6 +71,17 @@ export interface EdgeAccount {
   token_checked_at: number;
   created_at: number;
   updated_at: number;
+  // the install (§4, src/cf/deploy.ts)
+  d1_id: string | null;
+  script_owned: number;
+  bundle: string | null;
+  version_id: string | null;
+  schema: number;
+  edge_key_hash: string | null;
+  edge_key_prev_hash: string | null;
+  edge_key_prev_until: number | null;
+  deployment_id: string | null;
+  installed_at: number | null;
 }
 
 /** AAD: the ciphertext belongs to this record and this Cloudflare account only (§3 item 5). */
@@ -84,20 +96,27 @@ export function accountView(a: EdgeAccount) {
     state: a.state,
     token: a.token_name ? { name: a.token_name, expires_at: a.token_expires_at ? new Date(a.token_expires_at).toISOString() : null } : null,
     error: a.error ? JSON.parse(a.error) : null,
+    edge: a.bundle ? { bundle: a.bundle, up_to_date: a.bundle === EDGE_SHA256, schema: a.schema, installed_at: a.installed_at ? new Date(a.installed_at).toISOString() : null } : null,
     created_at: new Date(a.created_at).toISOString(),
   };
 }
 
-const edgeById = (db: D1Database, id: string) => db.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(id).first<EdgeAccount>();
+/**
+ * The state an account returns to when an operation on its token ends: an install keeps its
+ * standing (installing, ready, drift) — a renewed token does not undo it.
+ */
+export const restingState = (a: EdgeAccount) => (a.state === 'installing' || a.state === 'resource_drift' ? a.state : a.bundle ? 'ready' : 'connected');
+
+export const edgeById = (db: D1Database, id: string) => db.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(id).first<EdgeAccount>();
 
 /** Take the account for one operation, or say another one is running. */
-async function lease(db: D1Database, edgeId: string, owner: string): Promise<void> {
+export async function lease(db: D1Database, edgeId: string, owner: string): Promise<void> {
   const now = Date.now();
   const r = await db.prepare('UPDATE edge_accounts SET lease_until = ?, lease_owner = ? WHERE id = ? AND (lease_until IS NULL OR lease_until < ?)').bind(now + LEASE, owner, edgeId, now).run();
   if (!r.meta.changes) fail(409, 'operation_in_progress', 'Another operation on this Cloudflare account is running; retry shortly.');
 }
 /** Only the owner releases; a second release, or one after a takeover, does nothing. */
-const release = (db: D1Database, edgeId: string, owner: string) => db.prepare('UPDATE edge_accounts SET lease_until = NULL, lease_owner = NULL WHERE id = ? AND lease_owner = ?').bind(edgeId, owner).run();
+export const release = (db: D1Database, edgeId: string, owner: string) => db.prepare('UPDATE edge_accounts SET lease_until = NULL, lease_owner = NULL WHERE id = ? AND lease_owner = ?').bind(edgeId, owner).run();
 
 /** Renew the lease before an outside change; a lost lease (a takeover) stops this request first. */
 async function held(db: D1Database, edgeId: string, owner: string): Promise<void> {
@@ -106,13 +125,13 @@ async function held(db: D1Database, edgeId: string, owner: string): Promise<void
 }
 
 /** A write that only the lease owner may make; none made means the lease was lost. */
-async function owned(stmt: D1PreparedStatement): Promise<void> {
+export async function owned(stmt: D1PreparedStatement): Promise<void> {
   const r = await stmt.run();
   if (!r.meta.changes) fail(409, 'operation_in_progress', 'This operation was taken over by a newer request.');
 }
 
 /** Record a step and renew the lease; a lost lease (another request took over) stops this one. */
-async function step(db: D1Database, edgeId: string, owner: string, opId: string, name: string, data: OpData, state = 'running'): Promise<void> {
+export async function step(db: D1Database, edgeId: string, owner: string, opId: string, name: string, data: object, state = 'running'): Promise<void> {
   const now = Date.now();
   const [held] = await db.batch([
     db.prepare('UPDATE edge_accounts SET lease_until = ? WHERE id = ? AND lease_owner = ?').bind(now + LEASE, edgeId, owner),
@@ -229,6 +248,12 @@ export async function connect(env: Env, p: Principal, cfAccountId: string, boots
       data = { old_token_id: edge.token_id, old_token_name: edge.token_name };
     }
     const prior = edge.operation_id ? await db.prepare('SELECT kind, state, step, data FROM operations WHERE id = ?').bind(edge.operation_id).first<{ kind: string; state: string; step: string; data: string }>() : null;
+    // An install or update holds the account until it ends (its self-check waits without the
+    // lease): a renewal must not take its place, or the worker's setup_ok would find no operation.
+    if (prior && prior.state === 'running' && (prior.kind === 'install' || prior.kind === 'update')) {
+      await release(db, edge.id, owner);
+      fail(409, 'operation_in_progress', 'clx-edge is being installed or updated in this account; retry in a few minutes.');
+    }
     const resumable = prior && prior.state === 'running' && prior.kind === (renew ? 'renew' : 'connect');
     if (resumable) {
       opId = edge.operation_id!;
@@ -393,7 +418,7 @@ async function finish(env: Env, p: Principal, edge: EdgeAccount, owner: string, 
     if (!deleted) warnings.add('bootstrap_not_deleted');
   }
   const list = [...warnings];
-  const state = data.permission_error ? 'permission_error' : 'connected';
+  const state = data.permission_error ? 'permission_error' : restingState(edge);
   const error = data.permission_error ? { code: 'permission_error', ...data.permission_error, warnings: list } : list.length ? { warnings: list } : null;
   await owned(
     db
@@ -408,17 +433,6 @@ async function finish(env: Env, p: Principal, edge: EdgeAccount, owner: string, 
 export async function workingToken(env: Env, edge: EdgeAccount): Promise<string> {
   if (!edge.token_sealed) return fail(409, 'account_not_ready', 'This account has no working token; connect it again.');
   return open(env.MASTER_KEYS, JSON.parse(edge.token_sealed) as Sealed, aad(edge));
-}
-
-/**
- * Disconnect (§4). Until the install exists (stage 3) there is nothing of clx in the account but
- * the working token, which cannot delete itself: the answer names it for the user to revoke.
- */
-export async function disconnect(env: Env, edge: EdgeAccount): Promise<{ revoke_token: string | null }> {
-  const owner = newId();
-  await lease(env.DB, edge.id, owner);
-  await env.DB.prepare('DELETE FROM edge_accounts WHERE id = ? AND lease_owner = ?').bind(edge.id, owner).run();
-  return { revoke_token: edge.token_name };
 }
 
 /** Accounts the token check visits per cron run: hourly runs cover ~4,800 accounts a day. */
@@ -438,7 +452,7 @@ export async function checkTokens(env: Env, now = Date.now()): Promise<{ checked
     .bind(now, now - BOOTSTRAP_LOST_AFTER)
     .run();
   const rows = (
-    await env.DB.prepare("SELECT * FROM edge_accounts WHERE state IN ('connected', 'permission_error') AND token_checked_at < ? ORDER BY token_checked_at LIMIT ?")
+    await env.DB.prepare("SELECT * FROM edge_accounts WHERE state NOT IN ('pending', 'bootstrap_lost', 'revoked') AND token_checked_at < ? ORDER BY token_checked_at LIMIT ?")
       .bind(now - CHECK_EVERY, CHECK_BATCH)
       .all<EdgeAccount>()
   ).results;

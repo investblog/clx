@@ -1,101 +1,23 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { checkTokens } from '../src/cf/connect';
 import { seal } from '../src/lib/crypto';
 import { app } from '../src/index';
 import { signAccess } from '../src/auth/jwt';
 import type { Env } from '../src/types';
-import { testEnv } from './env';
+import { fakeCtx, testEnv } from './env';
+import { ACC, BOOT, fakeCf, OTHER, useFakeCloudflare } from './fake-cf';
 
 let env: Env;
 let dispose: () => Promise<void>;
 beforeAll(async () => ({ env, dispose } = await testEnv()));
 afterAll(() => dispose());
 
-const ACC = 'a'.repeat(32);
-const OTHER = 'b'.repeat(32);
-const BOOT = 'boot_'.padEnd(40, 'x');
-
-/** A small Cloudflare: tokens of one account, a catalog, empty D1, scripts and routes. */
-const fakeCf = {
-  tokens: new Map<string, { id: string; name: string; value: string; status: string; rights: string[] }>(),
-  seq: 0,
-  /** path fragments that answer 503 once (a passing failure), or 403 to the working token */
-  failOnce: new Set<string>(),
-  denyWorking: new Set<string>(),
-  /** path fragments where the working token gets 401 (unusable) */
-  rejectWorking: new Set<string>(),
-  /** token ids whose DELETE fails */
-  stuck: new Set<string>(),
-};
-const CATALOG = [
-  ...['Account Settings Read', 'Account Analytics Read', 'D1 Read', 'D1 Write', 'Workers Scripts Read', 'Workers Scripts Write', 'Account API Tokens Write'].map((name, i) => ({ id: `g${i}`, name, scopes: ['com.cloudflare.api.account'] })),
-  ...['Zone Read', 'Workers Routes Read', 'Workers Routes Write'].map((name, i) => ({ id: `z${i}`, name, scopes: ['com.cloudflare.api.account.zone'] })),
-];
-
-const realFetch = globalThis.fetch;
-const ok = (result: unknown) => Response.json({ success: true, result, errors: [] });
-const no = (status: number, code = 1000) => Response.json({ success: false, result: null, errors: [{ code, message: `fake ${status}` }] }, { status });
-
-async function cloudflare(url: URL, init: RequestInit): Promise<Response> {
-  const method = init.method ?? 'GET';
-  const path = url.pathname.replace('/client/v4', '');
-  const bearer = String((init.headers as Record<string, string>).authorization ?? '').replace('Bearer ', '');
-  const caller = [...fakeCf.tokens.values()].find((t) => t.value === bearer && t.status === 'active');
-  if (!caller) return no(401, 9109);
-  for (const f of fakeCf.failOnce)
-    if (path.includes(f)) {
-      fakeCf.failOnce.delete(f);
-      return no(503);
-    }
-  if (caller.name.startsWith('clx-') && [...fakeCf.rejectWorking].some((f) => path.includes(f))) return no(401, 9109);
-  if (caller.name.startsWith('clx-') && [...fakeCf.denyWorking].some((f) => path.includes(f))) {
-    if (path === '/graphql') return Response.json({ data: null, errors: [{ message: 'not authorized', extensions: { code: 'authz' } }] });
-    return no(403, 9109);
-  }
-  if (path === '/graphql') return Response.json({ data: { viewer: { accounts: [{ workersInvocationsAdaptive: [] }] } }, errors: null });
-  if (!path.startsWith(`/accounts/${ACC}`) && !path.startsWith('/zones')) return no(403);
-  if (path.endsWith('/tokens/verify')) return ok({ id: caller.id, status: 'active', expires_on: new Date(Date.now() + 86_400_000).toISOString() });
-  if (path === `/accounts/${ACC}`) return ok({ id: ACC, name: 'Test account' });
-  if (path.endsWith('/tokens/permission_groups')) return ok(CATALOG);
-  if (path.endsWith('/tokens') && method === 'GET') {
-    const page = Number(url.searchParams.get('page') ?? 1);
-    return ok([...fakeCf.tokens.values()].slice((page - 1) * 50, page * 50).map(({ id, name, status }) => ({ id, name, status })));
-  }
-  if (path.endsWith('/tokens') && method === 'POST') {
-    const body = JSON.parse(String(init.body)) as { name: string; policies: { permission_groups: { id: string }[] }[] };
-    const id = `t${++fakeCf.seq}`;
-    const t = { id, name: body.name, value: `working_${id}`.padEnd(40, 'w'), status: 'active', rights: body.policies.flatMap((p) => p.permission_groups.map((g) => g.id)) };
-    fakeCf.tokens.set(id, t);
-    return ok({ id, name: t.name, value: t.value, policies: body.policies });
-  }
-  const del = path.match(/\/tokens\/([^/]+)$/u);
-  if (del && method === 'DELETE') {
-    if (fakeCf.stuck.has(del[1]!)) return no(500);
-    return fakeCf.tokens.delete(del[1]!) ? ok({ id: del[1] }) : no(404);
-  }
-  if (path.endsWith('/d1/database') || path.endsWith('/workers/scripts') || path.endsWith('/workers/routes')) return ok([]);
-  if (path === '/zones') return ok([{ id: 'zone1' }]);
-  return no(404);
-}
-
-beforeAll(() => {
-  vi.stubGlobal('fetch', (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    return url.hostname === 'api.cloudflare.com' ? cloudflare(url, init) : realFetch(input, init);
-  });
-});
-afterAll(() => vi.unstubAllGlobals());
+useFakeCloudflare();
 
 beforeEach(async () => {
   for (const t of ['cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
   await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, plan) VALUES (1, 'free@example.com', 'x', 0, 'free'), (2, 'api@example.com', 'x', 0, 'api')").run();
-  fakeCf.tokens.clear();
-  fakeCf.failOnce.clear();
-  fakeCf.denyWorking.clear();
-  fakeCf.rejectWorking.clear();
-  fakeCf.stuck.clear();
-  fakeCf.seq = 0;
-  fakeCf.tokens.set('boot', { id: 'boot', name: 'bootstrap', value: BOOT, status: 'active', rights: [] });
+  fakeCf.reset();
 });
 
 const session = async (user: number) => `Bearer ${await signAccess('test-jwt-secret', user, Date.now())}`;
@@ -104,7 +26,10 @@ async function call(method: string, path: string, opts: { auth: string; body?: u
   const headers: Record<string, string> = { authorization: opts.auth, 'cf-connecting-ip': `10.1.0.${++ip % 250}` };
   if (opts.body !== undefined) headers['content-type'] = 'application/json';
   if (opts.key) headers['idempotency-key'] = opts.key;
-  const res = await app.request(`https://clx.cx${path}`, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) }, env);
+  // Work after the answer (the install) is waited for, so every test sees where it stopped.
+  const { ctx, settle } = fakeCtx();
+  const res = await app.request(`https://clx.cx${path}`, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) }, env, ctx);
+  await settle();
   return { status: res.status, body: (await res.json()) as Record<string, any> };
 }
 const connectAs = async (auth: string, key = 'k1', body: unknown = { cf_account_id: ACC, bootstrap_token: BOOT }) => call('POST', '/v1/accounts', { auth, body, key });
@@ -167,7 +92,7 @@ describe('connecting a Cloudflare account', () => {
   it('makes a named working token, stores it sealed, deletes the bootstrap, logs only mutations', async () => {
     const r = await connectAs(await session(1));
     expect(r.status).toBe(202);
-    expect(r.body.account).toMatchObject({ cf_account_id: ACC, name: 'Test account', state: 'connected', token: { name: expect.stringMatching(/^clx-/u) } });
+    expect(r.body.account).toMatchObject({ cf_account_id: ACC, name: 'Test account', state: 'installing', token: { name: expect.stringMatching(/^clx-/u) } });
     expect(fakeCf.tokens.has('boot')).toBe(false);
     const [working] = clxTokens();
     expect(working!.rights.sort()).toEqual(['g0', 'g1', 'g2', 'g3', 'g4', 'g5', 'z0', 'z1', 'z2']);
@@ -175,7 +100,9 @@ describe('connecting a Cloudflare account', () => {
     expect(sealed).toBeTruthy();
     expect(sealed).not.toContain(working!.value);
     const calls = (await env.DB.prepare('SELECT method, path FROM cf_calls ORDER BY id').all<{ method: string; path: string }>()).results;
-    expect(calls.map((c) => c.method)).toEqual(['POST', 'DELETE']);
+    // The connect's own: the token made, the bootstrap deleted; the install's follow.
+    expect(calls.slice(0, 2).map((c) => c.method)).toEqual(['POST', 'DELETE']);
+    expect(calls.slice(2).every((c) => !c.path.includes('/tokens'))).toBe(true);
   });
 
   it('a repeat with the same Idempotency-Key replays the answer and makes nothing new', async () => {
@@ -235,6 +162,8 @@ describe('connecting a Cloudflare account', () => {
 
   it('renewal swaps in a new token and deletes the old one only after it works', async () => {
     const { body } = await connectAs(await session(1));
+    // The install the connect started has ended (a renewal waits for it otherwise).
+    await env.DB.prepare("UPDATE operations SET state = 'done' WHERE kind = 'install'").run();
     const old = clxTokens()[0]!.id;
     fakeCf.tokens.set('boot2', { id: 'boot2', name: 'bootstrap', value: BOOT.replace('x', 'q'), status: 'active', rights: [] });
     fakeCf.rejectWorking.add('/workers/scripts');
@@ -256,7 +185,8 @@ describe('connecting a Cloudflare account', () => {
     expect(await checkTokens(env, Date.now() + 21 * 3_600_000)).toMatchObject({ checked: 1, revoked: 1 });
     expect((await call('GET', `/v1/accounts/${body.account.id}`, { auth: await session(1) })).body.account.state).toBe('revoked');
     const gone = await call('DELETE', `/v1/accounts/${body.account.id}`, { auth: await session(1), key: 'd1' });
-    expect(gone.body).toEqual({ ok: true, revoke_token: body.account.token.name });
+    // A revoked token deletes nothing: what clx put there is listed for the user.
+    expect(gone.body).toEqual({ ok: true, revoke_token: body.account.token.name, left: ['worker clx-edge', expect.stringMatching(/^database clx-edge/u)] });
     expect(await env.DB.prepare('SELECT count(*) AS n FROM edge_accounts').first('n')).toBe(0);
   });
 });
@@ -289,7 +219,7 @@ describe('review fixes', () => {
     fakeCf.tokens.delete('boot');
     const r = await connectAs(auth, 'c3');
     expect(r.status).toBe(202);
-    expect(r.body.account).toMatchObject({ state: 'connected', token: { name: 'clx-op1' } });
+    expect(r.body.account).toMatchObject({ state: 'installing', token: { name: 'clx-op1' } });
   });
 
   it('a stored refusal of POST /v1/keys replays as that refusal, not as "already issued"', async () => {
@@ -310,7 +240,7 @@ describe('review fixes', () => {
     await env.DB.prepare('UPDATE edge_accounts SET token_checked_at = 0').run();
     expect((await checkTokens(env)).revoked).toBe(0);
     const a = (await call('GET', `/v1/accounts/${body.account.id}`, { auth: await session(1) })).body.account;
-    expect(a).toMatchObject({ state: 'connected', error: { code: 'credentials_missing' } });
+    expect(a).toMatchObject({ state: 'installing', error: { code: 'credentials_missing' } });
   });
 
   it('a pending connect left for an hour becomes bootstrap_lost, naming the possible orphan', async () => {
@@ -388,7 +318,7 @@ describe('review fixes, round 3', () => {
     await env.DB.prepare('UPDATE edge_accounts SET token_sealed = ?, token_checked_at = 0 WHERE id = ?').bind(JSON.stringify({ key_id: 'gone', iv: 'AAAA', data: 'AAAA' }), body.account.id).run();
     expect((await checkTokens(env)).checked).toBe(1);
     const a = (await call('GET', `/v1/accounts/${body.account.id}`, { auth: await session(1) })).body.account;
-    expect(a).toMatchObject({ state: 'connected', error: { code: 'credentials_unreadable' } });
+    expect(a).toMatchObject({ state: 'installing', error: { code: 'credentials_unreadable' } });
   });
 
   it('every mutation is in the call log, with its answer', async () => {

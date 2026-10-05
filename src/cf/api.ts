@@ -37,6 +37,31 @@ export async function cfGraphql<T>(token: string, query: string): Promise<T> {
   return json.data as T;
 }
 
+/**
+ * The sha256 of a script's main module as Cloudflare holds it, or null when there is no script.
+ * The answer is multipart with a new boundary each time, so the part named `worker.js` is taken
+ * out and hashed — that is byte for byte what was uploaded (checked 05.10.2026). It is the latest
+ * uploaded version: after a rollback through deployments it is still the one rolled back from.
+ */
+export async function scriptDigest(token: string, cfAccountId: string, script: string): Promise<string | null> {
+  const path = `/accounts/${cfAccountId}/workers/scripts/${script}`;
+  let res: Response;
+  try {
+    res = await fetch(`${CF_API}${path}`, { headers: { authorization: `Bearer ${token}` } });
+  } catch (e) {
+    throw new CfError(0, 'GET', path, [], e instanceof Error ? e.message : 'network error');
+  }
+  if (res.status === 404) return null;
+  const boundary = /boundary="?([^";]+)"?/iu.exec(res.headers.get('content-type') ?? '')?.[1];
+  const raw = await res.text();
+  if (!res.ok || !boundary) throw new CfError(res.ok ? 502 : res.status, 'GET', path, [], 'not a script');
+  const part = raw.split(`--${boundary}`).find((p) => /^\r\nContent-Disposition: form-data; name="worker\.js"/iu.test(p));
+  if (!part) return 'unknown';
+  const body = part.slice(part.indexOf('\r\n\r\n') + 4).replace(/\r\n$/u, '');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export interface CallLog {
   db: D1Database;
   edgeAccountId: string;
@@ -56,10 +81,12 @@ export async function cf<T>(token: string, method: string, path: string, body?: 
   const answered = (status: number) => (log && logged !== null ? log.db.prepare('UPDATE cf_calls SET status = ? WHERE id = ?').bind(status, logged).run().catch(() => undefined) : undefined);
   let res: Response;
   try {
+    // A script upload is multipart: FormData sets its own content type.
+    const form = body instanceof FormData;
     res = await fetch(`${CF_API}${path}`, {
       method,
-      headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: { authorization: `Bearer ${token}`, ...(body === undefined || form ? {} : { 'content-type': 'application/json' }) },
+      body: body === undefined ? undefined : form ? body : JSON.stringify(body),
     });
   } catch (e) {
     throw new CfError(0, method, path.split('?')[0]!, [], e instanceof Error ? e.message : 'network error');

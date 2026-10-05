@@ -1,8 +1,9 @@
 // The management API (docs/spec.md §15). The page is a thin client over the same endpoints.
-// Stage 2: who am I, API keys, connecting Cloudflare accounts.
+// Stage 2: who am I, API keys, connecting Cloudflare accounts. Stage 3: installing clx-edge.
 import { Hono, type Context } from 'hono';
 import { CfError } from '../cf/api';
-import { accountView, connect, disconnect, type EdgeAccount } from '../cf/connect';
+import { accountView, connect, type EdgeAccount } from '../cf/connect';
+import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
 import { sha256 } from '../lib/crypto';
 import { LIMITS, planOf, SCOPES } from '../limits';
 import type { Env, Principal } from '../types';
@@ -28,6 +29,16 @@ async function bodyOf(c: C): Promise<Record<string, unknown>> {
 }
 
 const send = (c: C, a: Answer) => c.json(a.body as object, a.status as 200);
+
+/** Work that goes on after the answer; the per-minute cron resumes it if this run dies. */
+const background = (c: C, work: Promise<unknown>) => c.executionCtx.waitUntil(work.catch((e: unknown) => console.error('background', e)));
+
+/** Start the install of a connected account and run its first steps after the answer. */
+async function install(c: C, p: Principal, edge: EdgeAccount): Promise<EdgeAccount> {
+  const opId = await startDeploy(c.env, p.id, edge, 'install');
+  background(c, runDeploy(c.env, opId));
+  return (await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(edge.id).first<EdgeAccount>())!;
+}
 
 /**
  * One endpoint: who calls, may they, and — for a mutation — the idempotency record around the
@@ -171,8 +182,9 @@ v1.post(
     if (!/^[0-9a-f]{32}$/u.test(cfAccountId)) fail(400, 'invalid_request', '"cf_account_id" must be 32 hex characters.', { field: 'cf_account_id' });
     if (!BOOTSTRAP.test(bootstrap)) fail(400, 'invalid_request', '"bootstrap_token" is missing or malformed.', { field: 'bootstrap_token' });
     if (!mayTouch(p, cfAccountId)) fail(403, 'scope_required', 'This key may not touch that Cloudflare account.');
-    // 202: the account goes on to the install (§4, stage 3); the caller polls GET for its state.
-    return { status: 202, body: { account: accountView(await connect(c.env, p, cfAccountId, bootstrap)) } };
+    // 202: a connected account goes on to the install (§4); the caller polls GET for its state.
+    const edge = await connect(c.env, p, cfAccountId, bootstrap);
+    return { status: 202, body: { account: accountView(edge.state === 'connected' ? await install(c, p, edge) : edge) } };
   }),
 );
 
@@ -189,7 +201,12 @@ v1.get(
   '/accounts/:id',
   handle({}, async (c, p) => {
     requireAccountRead(p);
-    return { status: 200, body: { account: accountView(await accountOf(c, p)) } };
+    const edge = await accountOf(c, p);
+    const op = edge.operation_id
+      ? await c.env.DB.prepare('SELECT kind, state, step, data, updated_at FROM operations WHERE id = ?').bind(edge.operation_id).first<{ kind: string; state: string; step: string; data: string; updated_at: number }>()
+      : null;
+    const operation = op ? { kind: op.kind, state: op.state, step: op.step, error: (JSON.parse(op.data) as { error?: unknown }).error ?? null, updated_at: new Date(op.updated_at).toISOString() } : null;
+    return { status: 200, body: { account: { ...accountView(edge), operation } } };
   }),
 );
 
@@ -203,7 +220,12 @@ v1.post(
   }),
 );
 
+v1.post(
+  '/accounts/:id/install',
+  handle({ scope: 'accounts' }, async (c, p) => ({ status: 202, body: { account: accountView(await install(c, p, await accountOf(c, p))) } })),
+);
+
 v1.delete(
   '/accounts/:id',
-  handle({ scope: 'accounts' }, async (c, p) => ({ status: 200, body: { ok: true, ...(await disconnect(c.env, await accountOf(c, p))) } })),
+  handle({ scope: 'accounts' }, async (c, p) => ({ status: 200, body: { ok: true, ...(await disconnect(c.env, p.id, await accountOf(c, p))) } })),
 );

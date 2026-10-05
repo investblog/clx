@@ -33,12 +33,13 @@ pnpm install
 node scripts/wrangler.mjs login
 node scripts/wrangler.mjs d1 create clx
 node scripts/wrangler.mjs kv namespace create SESSIONS
-cp wrangler.example.jsonc wrangler.jsonc     # then fill in your route, the D1 and KV ids
+cp wrangler.example.jsonc wrangler.jsonc     # then fill in your route, the D1 and KV ids, HOOK_URL
 node scripts/wrangler.mjs d1 migrations apply clx --remote
 node scripts/secrets.mjs JWT_SECRET
 node scripts/secrets.mjs MASTER_KEYS         # seals users' Cloudflare tokens; set once
 pnpm run deploy
 node scripts/user.mjs add you@example.com    # the password goes to .secrets/
+node scripts/user.mjs admin you@example.com on   # rollouts of clx-edge (docs/spec.md §4)
 ```
 
 `scripts/wrangler.mjs` runs the repository's own wrangler. With a `.secrets/cloudflare.env`

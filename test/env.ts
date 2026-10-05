@@ -14,3 +14,10 @@ export async function testEnv(): Promise<{ env: Env; dispose: () => Promise<void
   }
   return { env, dispose: () => proxy.dispose() };
 }
+
+/** An ExecutionContext whose waitUntil work the test can wait for. */
+export function fakeCtx(): { ctx: ExecutionContext; settle: () => Promise<unknown> } {
+  const work: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => void work.push(p), passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+  return { ctx, settle: () => Promise.all(work) };
+}

@@ -7,9 +7,9 @@
   "workers_dev": false,
   "preview_urls": false,
   "routes": [{ "pattern": "clx.example.com/*", "zone_name": "example.com" }],
-  // The page and its files (public/, app.js built by scripts/build-ui.mjs). Sign-in goes to the
-  // Worker first, and so does the API; everything else is a file or 404.
-  "assets": { "directory": "public", "run_worker_first": ["/auth/*", "/v1/*"] },
+  // The page and its files (public/, app.js built by scripts/build-ui.mjs). Sign-in, the API,
+  // admin commands and worker reports go to the Worker first; everything else is a file or 404.
+  "assets": { "directory": "public", "run_worker_first": ["/auth/*", "/v1/*", "/admin/*", "/hook/*"] },
   // Secrets (scripts/secrets.mjs): JWT_SECRET, MASTER_KEYS. Tests set their own (test/env.ts).
   "d1_databases": [
     {
@@ -25,7 +25,10 @@
   ],
   // Requests per API key (§15).
   "ratelimits": [{ "name": "API_LIMIT", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
-  // Hourly: a slice of the token check (docs/spec.md §3), expired idempotency and call-log rows.
-  "triggers": { "crons": ["20 * * * *"] },
+  // Every minute: install operations (docs/spec.md §4); at :20 the hourly jobs — a slice of the
+  // token check (§3), expired idempotency and call-log rows.
+  "triggers": { "crons": ["* * * * *"] },
+  // Where clx-edge workers report: this deployment's own origin + /hook.
+  "vars": { "HOOK_URL": "https://clx.example.com/hook" },
   "observability": { "enabled": true }
 }
