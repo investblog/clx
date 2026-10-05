@@ -70,7 +70,8 @@ async function visit(path, init = {}) {
 
 const zone = await cfAdmin('GET', `/zones/${env.CF_ZONE_ID}`);
 const host = `clx-probe.${zone.name}`;
-const pagesHome = await visit('/');
+// A custom domain just attached answers 52x for a while: wait for the site itself first.
+const pagesHome = await until(() => visit('/'), (r) => r.status === 200, 10);
 step(`the Pages site answers on ${host} (probe-pages.mjs up)`, pagesHome.status === 200 && pagesHome.body.includes('pages index'), String(pagesHome.status));
 const pages404 = await visit('/no-such-page-here');
 
@@ -112,7 +113,8 @@ try {
   const js = await until(() => visit(src), (r) => r.status === 200, 2);
   step('the script answers on the site, the snippet\'s own code', js.status === 200 && js.body === code, `${js.status} ${js.headers.get('content-type')}`);
   step('… with no clx header', ![...js.headers.keys()].some((h) => /clx/iu.test(h)) && js.headers.get('cache-control') === 'public, max-age=86400');
-  const beacon = await visit(collector, { method: 'POST', body: 'https://ref.example/', headers: { 'content-type': 'text/plain' } });
+  // Isolates that looked before the sync may still hold "no such site" for a few seconds.
+  const beacon = await until(() => visit(collector, { method: 'POST', body: 'https://ref.example/', headers: { 'content-type': 'text/plain' } }), (r) => r.status === 204, 2);
   step('the collector answers 204 no-store', beacon.status === 204 && beacon.headers.get('cache-control') === 'no-store', String(beacon.status));
   const probe = await visit(`${site.path}/anything-else`);
   step("a probe under the path gets the site's own 404", probe.status === pages404.status && probe.body === pages404.body, String(probe.status));

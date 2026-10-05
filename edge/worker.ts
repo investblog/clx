@@ -20,11 +20,14 @@ interface Env {
 /** Sites by host, for speed only: 60 s in isolate memory (§6). */
 const cache = new Map<string, { at: number; site: SiteConfig | null }>();
 const CACHE_MS = 60_000;
+/** "No such site" is kept only briefly: it happens only before a new site's first sync or after a
+ *  delete — and kept for 60 s it can hide a fresh site from an isolate that looked before the sync. */
+const MISS_MS = 5_000;
 
 /** The committed version of a site's config, or null — one query, one consistent answer (§6). */
 async function siteFor(env: Env, host: string): Promise<SiteConfig | null> {
   const hit = cache.get(host);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.site;
+  if (hit && Date.now() - hit.at < (hit.site ? CACHE_MS : MISS_MS)) return hit.site;
   const row = await env.DB.prepare(
     'SELECT c.deleted, c.data FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = ? ORDER BY c.revision DESC LIMIT 1',
   )
