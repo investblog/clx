@@ -1,6 +1,6 @@
 ---
 title: clx — Cloudflare behaviour checked live
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Cloudflare behaviour checked live
@@ -35,6 +35,8 @@ to the token clx actually holds.
 | `/query` takes a `CREATE TRIGGER … BEGIN …; …; END` among other statements in one call; an `UPSERT` inside a trigger body works. | 05.10.2026 | migration 3 (`rows_hourly`) |
 | `meta.rows_written` counts index entries too: a new row in a table with a `TEXT PRIMARY KEY` or a composite key = 2, in a `WITHOUT ROWID` table = 1; an update of an existing row = 1 either way; an `UPDATE` matching nothing = 0. | 05.10.2026 | the collector's tables are `WITHOUT ROWID` (§8) |
 | An ignored `INSERT OR IGNORE` (or `ON CONFLICT DO NOTHING`) writes 0 rows; a trigger on it does not fire. | 05.10.2026 | repeat visitors (§8), the cap counters (§5) |
+| Window functions (`row_number()`/`count()` `OVER (PARTITION BY …)`), row-value comparison and `(a, b) IN (SELECT …)`, `json_group_array(json_object(…))`, `json_each(?)` over a bound string, a CTE with windows inside an `INSERT`, and `INSERT … SELECT * FROM (… UNION ALL …) WHERE true ON CONFLICT DO UPDATE` all work. `ALTER TABLE … ADD COLUMN` works on a `WITHOUT ROWID` table, but it cannot be repeated — a migration that must be re-runnable adds a table instead. | 06.10.2026 | the day close and the queue (§5, §7) |
+| `/query` with `params` takes one statement only: `7400 params with multiple statements is not supported`. | 06.10.2026 | clx.cx's REST calls inline literals (`lit()`) |
 | `INSERT … SELECT … WHERE … ON CONFLICT DO NOTHING / DO UPDATE` works as SQLite documents (the `WHERE` must be there). Every answer carries `meta.size_after`, the database size in bytes. | 05.10.2026 | the collector batch, backpressure (§5, §8) |
 
 ## Workers scripts (stage 3)

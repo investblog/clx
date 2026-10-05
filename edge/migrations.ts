@@ -24,6 +24,15 @@ export const MIGRATIONS: string[] = [
     'CREATE TABLE IF NOT EXISTS visitors_daily (target TEXT NOT NULL, day INTEGER NOT NULL, vhash TEXT NOT NULL, PRIMARY KEY (target, day, vhash)) WITHOUT ROWID; ' +
     'CREATE TABLE IF NOT EXISTS bots_hourly (target TEXT NOT NULL, hour INTEGER NOT NULL, category TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY (target, hour, category)) WITHOUT ROWID; ' +
     'CREATE TABLE IF NOT EXISTS salts (day INTEGER PRIMARY KEY, salt TEXT NOT NULL)',
+  // 4. The day close and the queue (§5, §7). A closed day's totals with its visitor count wait in
+  //    final_days until clx.cx accepts them (new columns on totals could not be re-run: ALTER TABLE
+  //    ADD COLUMN fails the second time). Drop counters of refused items live in sync_status.
+  'CREATE TABLE IF NOT EXISTS views_daily (target TEXT NOT NULL, day INTEGER NOT NULL, page TEXT NOT NULL, source TEXT NOT NULL, country TEXT NOT NULL, device TEXT NOT NULL, browser TEXT NOT NULL, os TEXT NOT NULL, views INTEGER NOT NULL, PRIMARY KEY (target, day, page, source, country, device, browser, os)) WITHOUT ROWID; ' +
+    'CREATE TABLE IF NOT EXISTS bots_daily (target TEXT NOT NULL, day INTEGER NOT NULL, category TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY (target, day, category)) WITHOUT ROWID; ' +
+    'CREATE TABLE IF NOT EXISTS final_days (target TEXT NOT NULL, day INTEGER NOT NULL, views INTEGER NOT NULL, bots INTEGER NOT NULL, visitors INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (target, day)) WITHOUT ROWID; ' +
+    'CREATE TABLE IF NOT EXISTS closed_days (day INTEGER PRIMARY KEY); ' +
+    'CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY, hour INTEGER NOT NULL, items TEXT NOT NULL); ' +
+    'CREATE TABLE IF NOT EXISTS sync_status (reason TEXT PRIMARY KEY, n INTEGER NOT NULL)',
 ];
 
 export const SCHEMA = MIGRATIONS.length;

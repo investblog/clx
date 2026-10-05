@@ -263,9 +263,11 @@ Why:
   - **exact totals and capped detail are separate.** Every counted event adds 1 to the target's
     totals row — `totals(target, day, views, bots, …)`, one row per target and day; for sites it
     also has 24 hourly columns — so totals are always exact, whatever the caps below drop. A totals
-    row is the source of the target's day items for clx.cx (§7) and is deleted only after clx.cx
-    accepted its final day item and the day is 2 days old (or after 31 days, when clx.cx would
-    refuse it anyway); clx.cx keeps the 400-day history;
+    row is the source of the target's hour and day items for clx.cx (§7); when the day closes,
+    its totals and visitor count are copied into `final_days`, which holds the final day item until
+    clx.cx accepts it (a new table, not new columns: `ALTER TABLE ADD COLUMN` cannot be re-run). A
+    totals row is deleted once its day is closed, its final item gone and the day 2 days old (or
+    after 31 days, when clx.cx would refuse it anyway); clx.cx keeps the 400-day history;
   - **detail caps** — what bounds the breakdown tables (sizes in §8): per hour, at most 299
     `views_hourly` combination rows per target and 1,500 per Cloudflare account (all targets
     together, every `(other)` row included). A view whose combination row does not exist and cannot
@@ -303,19 +305,22 @@ Why:
   `l<id>` for a link): `totals` (exact, one row per target and day), `views_hourly`/`views_daily`
   (target, hour or day, page, source, country, device, browser, OS → views; capped), `visitors_daily`
   (hashes of the open day) / `visitors` (daily counts), `bots_hourly`/`bots_daily` (category →
-  hits), `salts`, `closed_days`; plus `cfg`/`commits` (§6), `outbox` and `sync_status` (§7).
+  hits), `salts`, `closed_days`, `final_days` (closed days' totals with visitors, until clx.cx
+  accepts them); plus `cfg`/`commits` (§6), `outbox` and `sync_status` (§7).
 - **Worker cron** (hourly). On Free one invocation may make at most 50 D1 queries, and every
   statement of a `batch` counts. Each run works to a fixed **query ledger** and leaves the rest for
   the next hour:
 
   | Step | Queries at most |
   |---|---|
-  | close past days, at most 3 — set-based `INSERT … SELECT … GROUP BY`, one `batch` per day: hours → days with the caps above, the visitor count into the day's `totals` rows (now final, pending for clx.cx), deleting hashes, salt and the day's `rows_hourly` counters, a mark in `closed_days` (a failure leaves the day open as a whole) | 3 × 8 = 24 |
+  | read `meta` (cursors, counters) and the latest config commit (§6) | 1 |
+  | find the days to close | 1 |
+  | close past days, at most 3 — set-based `INSERT … SELECT … GROUP BY` with window functions for the caps, one `batch` per day: hours → days with the caps above, the day's totals with its visitor count into `final_days` (pending for clx.cx), deleting hashes, salt and the day's `rows_hourly` counters, a mark in `closed_days` (a failure leaves the day open as a whole) | 3 × 7 = 21 |
   | queue the closed hours after the `outboxed_through` cursor and the running day snapshot; the cursor moves in the same `batch` | 3 |
-  | send: at most 6 pushes (§7) — `outbox` parts first, then pages of pending final days from `totals`; each a read, then one `batch` of the delete, rewrite or marking and the `sync_status` drop counters | 6 × 3 = 18 |
+  | send: at most 6 pushes (§7) — `outbox` parts first, then pages of `final_days`; each a read, then one `batch` of the delete or rewrite and the `sync_status` drop counters | 6 × 3 = 18 |
   | delete expired data, one table per run in turn | 3 |
-  | config sync check (§6) | 1 |
-  | **total** | **49** |
+  | record or clear the last error | 1 |
+  | **total** | **48** |
 
   Catching up after 3 days down: one part per account-hour for most accounts (72 parts), up to
   ~90 at the `api` maximum (the day-closing hour of 500 sites and 10,000 links is several parts);
@@ -387,14 +392,15 @@ Why:
     not one row per target, so the queue does not grow with the number of sites and links; an hour
     with more than 2,000 items is queued as several parts;
   - **final day**, sites and links: `(target, day, final = true) → views, bots, visitors`. It is not
-    copied into the queue: the worker reads it from the target's `totals` row (§5) once the day is
-    closed, and marks that row when clx.cx has accepted it. Links send only this — their "today"
+    copied into the queue: the day close writes it to `final_days` (§5), the worker sends it from
+    there and deletes the row when clx.cx has accepted it. Links send only this — their "today"
     comes from the user's D1 with the breakdowns.
   Daily totals are computed by the worker (it has all the hours); clx.cx does not recompute days
   from hours.
 - **Body** (`v: 1`, up to 2,000 items and 256 KB): `{ v, bundle, schema, queue, error?, items:
   [...] }` — one `outbox` part, or a page of pending final days; every item has its own `id`
-  within the body. The body carries no account.- **The receiver `POST /hook/push` does not trust the body:**
+  within the body. The body carries no account.
+- **The receiver `POST /hook/push` does not trust the body:**
   - `Bearer EDGE_KEY` → SHA-256 → the current or previous hash → the internal `account_id`;
   - a strict schema: known fields only, `target` belongs to the account, `hour`/`day` not in the
     future and not older than 31 days, numbers — integers ≥ 0 and ≤ 10⁹, the strings
@@ -410,16 +416,18 @@ Why:
   A double push is harmless by protocol; no lock is needed.
 - **The queue on the user's side:** after the answer the worker deletes the `outbox` part when
   nothing is left to retry, or rewrites it with only the retryable items and their attempt counts;
-  for final days it marks the accepted `totals` rows. Rejection reasons are of two kinds, fixed in
-  the contract: **terminal** (`budget`, `invalid`, `unknown_target`, `too_old`) — the item is
-  dropped at once (a final day is marked as sent); **retryable** (`busy`) — kept, and dropped after
+  for final days it deletes the accepted `final_days` rows. Rejection reasons are of two kinds,
+  fixed in the contract: **terminal** (`budget`, `invalid`, `unknown_target`, `too_old`) — the item
+  is dropped at once (a final day's row is deleted); **retryable** (`busy`) — kept, and dropped after
   3 attempts. Dropped items are only counted, per reason, in `sync_status` (same `batch`) and shown
   in the status UI; there is no rejected-items table.
 - **Queue size**, bounded on both sides: `outbox` keeps hourly and running items for at most 7 days
   (older parts are deleted, with a mark in the heartbeat) — at the `api` maximum of 500 sites about
-  7 × 24 parts of ~30 KB, ≈ 5 MB; pending final days are `totals` rows, at most 31 days old (then
-  clx.cx would refuse them), counted in the `totals` bound of §8. Under storage backpressure (§8)
-  the worker queues no new hourly or running items; final days keep flowing from `totals`.- **Whole-request errors:**
+  7 × 24 parts of ~30 KB, ≈ 5 MB; pending final days are `final_days` rows, at most 31 days old
+  (then clx.cx would refuse them; older ones are deleted and counted as `too_old`), counted in the
+  `final_days` bound of §8. Under storage backpressure (§8) the worker queues no new hourly or running
+  items; final days keep flowing from `final_days`.
+- **Whole-request errors:**
   - `401` — after 20 in a row, one attempt a day (an endless retry loop on a revoked key would burn
     the user's quota); a successful secret install (§4) resets the counter through the D1 REST API;
   - `429`/`5xx`/timeout — retry next hour, the queue is left as is.
@@ -484,7 +492,7 @@ there, and by the user's other workers. D1 writes spent:
 | a visitor new for the day | +2: `visitors_daily` at once, the hash deletion when the day closes (a repeat visitor is an ignored `INSERT OR IGNORE` — 0 rows written, checked 05.10.2026) |
 | a new hour row (a new combination) | +5: two `rows_hourly` counters, the day row at rollup, the hour deletion after 31 days, the day deletion after 400 days |
 | a bot | 2 (the `totals` row, `bots_hourly`) + 2 for a new row (deletions) |
-| overhead per **active target** per day | 3: its `totals` row created, marked when clx.cx accepts the final day, deleted |
+| overhead per **active target** per day | 4: its `totals` row created and deleted, its `final_days` row created at the close and deleted when clx.cx accepts it |
 | overhead per account per day | `outbox` ≈ 50 (24 parts inserted and deleted); config sync ≈ 2 per changed site or link plus one commit (§6) |
 
 D1 counts every index entry as a row written, so a new row of a keyed table costs 2; the counting
@@ -493,11 +501,11 @@ tables are `WITHOUT ROWID` (one entry per row), which is what the figures above 
 
 The steady-state worst case — every event comes from a new visitor and makes a new hour row:
 2 + 2 + 5 = **9 writes**. The guaranteed ceiling per Cloudflare account is
-(100,000 − 50 − 3 × active targets) / 9:
+(100,000 − 50 − 4 × active targets) / 9:
 - a typical account (up to ~100 active sites and links) — ≈ **11,000 events a day**;
 - the `api` maximum in one account (500 sites + 10,000 links, all active every day) —
-  (100,000 − 31,550) / 9 ≈ **7,600 events a day**: the overhead of 10,500 targets is itself a third
-  of the Free quota, which the upgrade advice reports.
+  (100,000 − 42,050) / 9 ≈ **6,400 events a day**: the overhead of 10,500 targets is itself over
+  40% of the Free quota, which the upgrade advice reports.
 The UI shows the account's own figure as "guaranteed". A typical site (returning visitors,
 repeating pages — 2–3 writes per event) gets 30–45 thousand; the upgrade advice (below) works from
 measured use.
@@ -509,10 +517,11 @@ measured use.
 | hourly detail | 1,500 rows × 24 × 31 days ≈ 1.1M rows (§5 caps) | ≈ 135 MB |
 | daily detail | 1,500 × 400 days ≈ 0.6M rows | ≈ 70 MB |
 | `totals` | one row per active target and day, at most 31 days while clx.cx cannot be reached, usually 2: ≤ 0.33M rows at the `api` maximum | ≈ 25 MB |
+| `final_days` | one row per active target and closed day until clx.cx accepts it — usually none, at most 31 days: ≤ 0.33M rows at the `api` maximum | ≈ 20 MB |
 | config | the 50 MB `data` budget (§6) and its versions | ≤ 50 MB |
 | `outbox` | hourly and running items of sites, at most 7 days (§7) | ≈ 5 MB |
 | visitors, salts, bots, counters | one open day, small | ≈ 10 MB |
-| **total** | | **≈ 295 MB** of the 500 MB Free limit |
+| **total** | | **≈ 315 MB** of the 500 MB Free limit |
 
 The per-row size (120 bytes with indexes) is an estimate, measured at stage 4. **Backpressure:**
 every D1 answer reports the database size (`meta.size_after`); at 400 MB the collector stops

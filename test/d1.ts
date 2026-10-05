@@ -4,7 +4,10 @@ import type { DatabaseSync } from 'node:sqlite';
 
 type Arg = string | number | null;
 
-export function d1(db: DatabaseSync, opts: { size?: () => number } = {}): D1Database {
+/** `count.n` grows by one per statement run, each statement of a batch included — as Free counts
+ *  the 50 D1 queries an invocation may make. */
+export function d1(db: DatabaseSync, opts: { size?: () => number; count?: { n: number } } = {}): D1Database {
+  const counted = <T>(n: number, v: T) => ((opts.count ? (opts.count.n += n) : 0), v);
   const size = opts.size ?? (() => {
     const page = db.prepare('PRAGMA page_size').get() as { page_size: number };
     const count = db.prepare('PRAGMA page_count').get() as { page_count: number };
@@ -15,15 +18,16 @@ export function d1(db: DatabaseSync, opts: { size?: () => number } = {}): D1Data
     args,
     bind: (...more: Arg[]) => statement(sql, more),
     first: async <T>(col?: string) => {
-      const row = db.prepare(sql).get(...args) as Record<string, unknown> | undefined;
+      const row = counted(1, db.prepare(sql).get(...args) as Record<string, unknown> | undefined);
       return (col ? (row?.[col] ?? null) : (row ?? null)) as T;
     },
-    all: async () => ({ results: db.prepare(sql).all(...args), meta: { size_after: size() } }),
-    run: async () => ({ results: [], meta: { changes: Number(db.prepare(sql).run(...args).changes), size_after: size() } }),
+    all: async () => counted(1, { results: db.prepare(sql).all(...args), meta: { size_after: size() } }),
+    run: async () => counted(1, { results: [], meta: { changes: Number(db.prepare(sql).run(...args).changes), size_after: size() } }),
   });
   return {
     prepare: (sql: string) => statement(sql),
     batch: async (list: ReturnType<typeof statement>[]) => {
+      counted(list.length, null);
       db.exec('BEGIN');
       try {
         const out = list.map((s) => ({ results: [], meta: { changes: Number(db.prepare(s.sql).run(...s.args).changes), size_after: size() } }));

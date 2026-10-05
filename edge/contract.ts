@@ -26,7 +26,32 @@ export const ACCOUNT = '*';
 /** `totals` keeps a target's views per UTC hour of the day in v00…v23. Bots per hour are summed
  *  from `bots_hourly`, which is exact: at most one row per bot category. */
 export const HOUR_COLUMNS = Array.from({ length: 24 }, (_, h) => `v${String(h).padStart(2, '0')}`);
-/** Detail caps per hour (§5) and the database size at which no new detail row is made (§8). */
+/** Detail caps per hour (§5) and the database size at which no new detail row is made (§8). The
+ *  day close keeps the same caps per day. */
 export const TARGET_ROWS = 299;
 export const ACCOUNT_ROWS = 1500;
 export const FULL_BYTES = 400 * 1024 * 1024;
+
+// What the worker sends clx.cx (§7): totals only. Hour items and the running day snapshot are sites
+// only and wait in `outbox`; a final day (sites and links) waits in `final_days` until accepted.
+/** A closed hour of a site: final. */
+export interface HourItem {
+  target: string;
+  hour: number;
+  views: number;
+  bots: number;
+}
+/** A day: a running snapshot as of the end of `as_of_hour`, or final once the day is closed. */
+export interface DayItem {
+  target: string;
+  day: number;
+  as_of_hour?: number;
+  final: boolean;
+  views: number;
+  bots: number;
+  visitors: number;
+}
+/** At most this many items in one `outbox` part and one push. */
+export const PART_ITEMS = 2000;
+/** How long hourly and running items wait in `outbox` (§7), and how far back hours are queued. */
+export const OUTBOX_HOURS = 7 * 24;

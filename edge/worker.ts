@@ -4,7 +4,8 @@
 // request through to the origin, so a probe under the path gets the site's own answer. While
 // clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
 import { bodyHead, collect } from './collect';
-import { SELF_CHECK_CRON, siteKey, type SiteConfig } from './contract';
+import { SELF_CHECK_CRON, siteKey, WORKING_CRON, type SiteConfig } from './contract';
+import { hourly } from './cron';
 
 interface Env {
   DB: D1Database;
@@ -64,6 +65,11 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    if (controller.cron === WORKING_CRON) {
+      const r = await hourly(env.DB, controller.scheduledTime);
+      if (r.errors.length) console.log(`hourly: ${r.errors.join('; ')}`);
+      return;
+    }
     if (controller.cron !== SELF_CHECK_CRON) return;
     const schema = await env.DB.prepare("SELECT value FROM meta WHERE key = 'schema'")
       .first<number>('value')
