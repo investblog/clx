@@ -169,16 +169,22 @@ Why:
   5. self-check: within the next minute the worker sends `setup_ok {deployment_id, bundle, schema}`
      to `HOOK_URL/setup` with `Bearer EDGE_KEY`; `deployment_id` is single-use and passed as a
      binding of this deployment, so an old or delayed `setup_ok` cannot count for another
-     deployment. When all three fields match, clx.cx sets the working cron `5 * * * *`. No
-     `setup_ok` within 15 minutes — the install failed (measured 05.10.2026: the cron of a new
-     script first fired ~4.5 minutes after it was set in one run; in another it fired at once and
-     then not for 14 minutes; an updated script's after ~40 s). So one cron run must be enough:
-     while clx.cx answers `503` (the run has not recorded its step yet, or holds the lease) or
-     fails, the worker asks again every 5 s for up to 50 s; `401` or `409` ends the run.
-  A failure deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
+     deployment. When all three fields match, clx.cx sets the working cron `5 * * * *`. One
+     cron run must be enough: while clx.cx answers `503` (the run has not recorded its step yet,
+     or holds the lease) or fails, the worker asks again every 5 s for up to 50 s; `401` or `409`
+     ends the run.
+  **An install is in service from step 4** — `ready` as soon as the script, its database and the
+  cron are in place: serving the script and the collector needs no cron. The `setup_ok` of step 5
+  only confirms it. The cron of a *new* script is unreliable at first (measured 05.10.2026 on five
+  installs: first run after ~4.5, ~5.5 and ~6.5 minutes; once at once and then not for 14 minutes;
+  once not at all within 15 minutes), so an install with no `setup_ok` within 15 minutes is **not**
+  undone: clx.cx sets the working cron anyway and marks the account `not_confirmed`; whether the
+  cron runs is then shown by the heartbeat of the pushes (§7, "no connection" after 26 hours).
+  A failure in steps 1–4 deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
   own script is the same install: it keeps the database, and on failure returns to the script's
   previous version as an update does.
-- **Update**: drift check → migrations → upload the new script with a new `deployment_id`, keeping
+- **Update** — still undone without its `setup_ok` (the cron of an existing script fired after
+  40–49 s each time measured): drift check → migrations → upload the new script with a new `deployment_id`, keeping
   the key (`keep_bindings: ["secret_text"]`) → the every-minute cron → self-check (as step 5) → the
   working cron. Before the upload clx.cx records the version serving now (`GET …/deployments`); if
   the cron or the self-check fail, that version is deployed again at 100%

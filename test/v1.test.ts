@@ -240,7 +240,7 @@ describe('review fixes', () => {
     await env.DB.prepare('UPDATE edge_accounts SET token_checked_at = 0').run();
     expect((await checkTokens(env)).revoked).toBe(0);
     const a = (await call('GET', `/v1/accounts/${body.account.id}`, { auth: await session(1) })).body.account;
-    expect(a).toMatchObject({ state: 'installing', error: { code: 'credentials_missing' } });
+    expect(a).toMatchObject({ state: 'ready', error: { code: 'credentials_missing' } });
   });
 
   it('a pending connect left for an hour becomes bootstrap_lost, naming the possible orphan', async () => {
@@ -318,7 +318,7 @@ describe('review fixes, round 3', () => {
     await env.DB.prepare('UPDATE edge_accounts SET token_sealed = ?, token_checked_at = 0 WHERE id = ?').bind(JSON.stringify({ key_id: 'gone', iv: 'AAAA', data: 'AAAA' }), body.account.id).run();
     expect((await checkTokens(env)).checked).toBe(1);
     const a = (await call('GET', `/v1/accounts/${body.account.id}`, { auth: await session(1) })).body.account;
-    expect(a).toMatchObject({ state: 'installing', error: { code: 'credentials_unreadable' } });
+    expect(a).toMatchObject({ state: 'ready', error: { code: 'credentials_unreadable' } });
   });
 
   it('every mutation is in the call log, with its answer', async () => {

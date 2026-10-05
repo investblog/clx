@@ -228,6 +228,10 @@ async function advance(r: Run, at: string): Promise<string> {
     case 'uploaded':
       await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, [{ cron: SELF_CHECK_CRON }], r.log);
       data.deadline = Date.now() + SELF_CHECK_TIMEOUT;
+      // An install is in service from here: serving the script and the collector needs no cron,
+      // and a new script's first cron can be late by a quarter of an hour or more (measured
+      // 05.10.2026). Its setup_ok only confirms it. An update still waits for it (below).
+      if (r.kind === 'install') await ownedUpdate(r, "state = 'ready', bundle = ?, version_id = ?, schema = ?, installed_at = ?, error = NULL", data.bundle, data.version_id ?? null, data.schema ?? 0, Date.now());
       await record(r, 'selfcheck');
       return 'selfcheck';
   }
@@ -306,6 +310,26 @@ async function undo(r: Run, at: string, e: unknown): Promise<void> {
 }
 
 /**
+ * An install whose worker has not reported in time: it stays — it serves without cron — with the
+ * working cron set and a `not_confirmed` warning; the heartbeat of the pushes (§7) shows later
+ * whether its cron runs. A passing failure to set the cron is retried like any step.
+ */
+async function unconfirmed(r: Run): Promise<void> {
+  const warnings = ['not_confirmed'];
+  try {
+    await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, [{ cron: WORKING_CRON }], r.log);
+  } catch (e) {
+    if (passing(e) && (r.data.attempts ?? 0) + 1 < MAX_ATTEMPTS) throw e;
+    warnings.push('cron_not_set');
+  }
+  r.data.warnings = warnings;
+  await r.db.batch([
+    r.db.prepare('UPDATE edge_accounts SET deployment_id = NULL, error = ?, updated_at = ? WHERE id = ? AND lease_owner = ?').bind(JSON.stringify({ warnings }), Date.now(), r.edge.id, r.owner),
+    r.db.prepare("UPDATE operations SET state = 'done', step = 'unconfirmed', data = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(r.data), Date.now(), r.opId),
+  ]);
+}
+
+/**
  * Run an operation from its last recorded step as far as it goes now. Called right after the
  * request that started it, and by the per-minute cron for one that stalled or waits for setup_ok.
  */
@@ -346,7 +370,11 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
       return;
     }
     r = { env, db, edge, owner, opId, kind: op.kind as Kind, data: JSON.parse(fresh.data) as DeployData, token, log: { db, edgeAccountId: edge.id, principal: data.principal } };
-    if (at === 'selfcheck') fail(504, 'self_check_timeout', 'The worker did not report within fifteen minutes of its upload.');
+    if (at === 'selfcheck') {
+      if (r.kind === 'update') fail(504, 'self_check_timeout', 'The worker did not report within fifteen minutes of its upload.');
+      await unconfirmed(r);
+      return;
+    }
     while (at !== 'selfcheck') at = await advance(r, at);
   } catch (e) {
     if (!r) throw e;

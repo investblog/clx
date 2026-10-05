@@ -53,7 +53,7 @@ to the token clx actually holds.
 
 | Fact | Checked | Used in |
 |---|---|---|
-| The cron of a **new** script fires late and unevenly: first run after ~4.5 min in one install and ~5.5 min in another; in a third it fired at once and then not for 14 minutes. The cron of an **existing** script that is updated fired after ~40 s. | 05.10.2026, three live installs | self-check timeout 15 min; the worker retries `setup_ok` within one run |
+| The cron of a **new** script fires late and unevenly: first run after ~4.5, ~5.5 and ~6.5 min in three installs; in a fourth it fired at once and then not for 14 minutes; in a fifth it did not run at all within 15 minutes (no invocation of any kind in the analytics). The cron of an **existing** script that is updated fired after 40–49 s. | 05.10.2026, five live installs | an install does not wait for its first cron (§4); an update does |
 | So a self-check must succeed from **one** cron run: clx.cx answers `503` while it is not ready, the worker asks again every 5 s for up to 50 s. | 05.10.2026 | `confirmSetup()`, `edge/worker.ts` |
 
 ## Routes and Pages (stages 2, 4)

@@ -73,7 +73,7 @@ components:
         state:
           type: string
           enum: [pending, bootstrap_lost, connected, installing, ready, permission_error, revoked, resource_drift]
-          description: 'connected — token ready, clx-edge not installed; installing — the install runs or waits for the worker; ready — installed and confirmed'
+          description: 'connected — token ready, clx-edge not installed; installing — the install runs; ready — installed and serving (confirmed by the worker once its first cron runs; until then, or if it never does, error.warnings may say not_confirmed)'
         token:
           type: [object, 'null']
           properties:
@@ -174,8 +174,9 @@ paths:
       description: |
         The bootstrap token (Account Settings Read + Account API Tokens Write, one day) is used
         within this request and deleted; it is never stored. The account then goes on to the
-        install of clx-edge (§4) — poll GET for its state: `installing`, then `ready` once the
-        worker has confirmed itself (about five minutes for a first install), or `connected` with an `error`.
+        install of clx-edge (§4) — poll GET for its state: `installing`, then `ready` once the script,
+        its database and cron are in place (seconds; the worker's own confirmation may follow
+        minutes later, or never — then `error.warnings` says `not_confirmed`), or `connected` with an `error`.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:

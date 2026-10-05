@@ -98,7 +98,9 @@ describe('install', () => {
     expect(await setupOk({ schema: 0 })).toMatchObject({ status: 409 });
     expect(await setupOk({}, 'x'.repeat(40))).toMatchObject({ status: 401 });
     expect(await setupOk({ extra: 1 })).toMatchObject({ status: 400 });
-    expect((await account(body.account.id)).state).toBe('installing');
+    // In service already, still waiting for its confirmation.
+    expect(await account(body.account.id)).toMatchObject({ state: 'ready', operation: { state: 'running', step: 'selfcheck' } });
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
     expect(await setupOk()).toMatchObject({ status: 200 });
     expect(edge()!.crons).toEqual([WORKING_CRON]);
     expect(await account(body.account.id)).toMatchObject({ state: 'ready', edge: { bundle: EDGE_SHA256, up_to_date: true, schema: SCHEMA }, operation: { state: 'done' } });
@@ -114,18 +116,18 @@ describe('install', () => {
     expect((await account(body.account.id)).state).toBe('ready');
   });
 
-  it('no setup_ok in time: the worker and database it created are deleted', async () => {
+  it('no setup_ok in time: the install stays, with the working cron and a not_confirmed warning', async () => {
     const { body } = await connect();
     // Still within its deadline, it is not even picked up by the cron.
     await env.DB.prepare('UPDATE operations SET updated_at = 0').run();
     expect(await runOperations(env)).toBe(0);
     expect(await overdue()).toBe(1);
-    expect(fakeCf.scripts.size).toBe(0);
-    expect(fakeCf.dbs.size).toBe(0);
-    const a = await account(body.account.id);
-    expect(a).toMatchObject({ state: 'connected', error: { code: 'self_check_timeout' }, operation: { state: 'failed' } });
-    const row = (await env.DB.prepare('SELECT script_owned, d1_id, edge_key_hash FROM edge_accounts').first())!;
-    expect(row).toEqual({ script_owned: 0, d1_id: null, edge_key_hash: null });
+    expect(fakeCf.scripts.has('clx-edge')).toBe(true);
+    expect(fakeCf.dbs.size).toBe(1);
+    expect(edge()!.crons).toEqual([WORKING_CRON]);
+    expect(await account(body.account.id)).toMatchObject({ state: 'ready', edge: { bundle: EDGE_SHA256 }, error: { warnings: ['not_confirmed'] }, operation: { state: 'done', step: 'unconfirmed' } });
+    // A late report changes nothing.
+    expect(await setupOk()).toMatchObject({ status: 409 });
   });
 
   it("a clx-edge worker clx did not put there is left alone: name_taken, nothing created", async () => {
