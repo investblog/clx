@@ -44,6 +44,8 @@ admin.post('/edge/rollout', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { accounts?: unknown; dry_run?: unknown; force?: unknown };
   const ids = Array.isArray(body.accounts) && body.accounts.every((x) => typeof x === 'string') ? (body.accounts as string[]) : null;
   if (body.accounts !== undefined && !ids) fail(400, 'invalid_request', '"accounts" must be a list of account ids.');
+  // Not "no connection": an update waits for the worker's setup_ok, which a silent worker would not
+  // send — it would only be rolled back. Such an account is reinstalled by its user.
   const rows = (await c.env.DB.prepare("SELECT * FROM edge_accounts WHERE state = 'ready' AND bundle IS NOT NULL ORDER BY created_at").all<EdgeAccount>()).results;
   const chosen = rows.filter((a) => (ids ? ids.includes(a.id) : true) && (body.force === true || a.bundle !== EDGE_SHA256));
   if (body.dry_run === true) return c.json({ bundle: EDGE_SHA256, dry_run: true, accounts: chosen.map((a) => ({ id: a.id, from: a.bundle })) });

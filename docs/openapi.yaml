@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: clx management API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
     Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
@@ -72,8 +72,8 @@ components:
         name: { type: string }
         state:
           type: string
-          enum: [pending, bootstrap_lost, connected, installing, ready, permission_error, revoked, resource_drift]
-          description: 'connected — token ready, clx-edge not installed; installing — the install runs; ready — installed and serving (confirmed by the worker once its first cron runs; until then, or if it never does, error.warnings may say not_confirmed)'
+          enum: [pending, bootstrap_lost, connected, installing, ready, permission_error, revoked, resource_drift, no_connection]
+          description: 'connected — token ready, clx-edge not installed; installing — the install runs; ready — installed and serving (confirmed by the worker once its first cron runs; until then, or if it never does, error.warnings may say not_confirmed); no_connection — installed, but no push from the worker for 26 hours (sites can still be added; its next push makes it ready again)'
         token:
           type: [object, 'null']
           properties:
@@ -88,6 +88,16 @@ components:
             up_to_date: { type: boolean }
             schema: { type: integer }
             installed_at: { type: string, format: date-time }
+        push:
+          type: [object, 'null']
+          description: The worker's own report from its last push of totals (hourly)
+          properties:
+            at: { type: string, format: date-time }
+            bundle: { type: string, description: sha256 of the bundle the worker runs }
+            schema: { type: [integer, 'null'] }
+            queue: { type: integer, description: queue parts and final days waiting to be sent }
+            error: { type: [string, 'null'], description: the worker's last error }
+            dropped: { type: object, additionalProperties: { type: integer }, description: 'items dropped unsent, by reason: budget, invalid, unknown_target, too_old, busy, expired' }
         operation:
           type: [object, 'null']
           description: The latest operation on the account (GET /v1/accounts/{id} only)

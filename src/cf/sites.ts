@@ -13,7 +13,7 @@ import { namesFor, scriptFor, snippetFor } from '../snippet';
 import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
 import { cf, CfError, type CallLog } from './api';
-import { edgeById, held, lease, release, workingToken, type EdgeAccount } from './connect';
+import { edgeById, held, inService, lease, release, workingToken, type EdgeAccount } from './connect';
 
 const SCRIPT = 'clx-edge';
 /** After a rotation the old path is served this long: cached pages still carry it (§5). */
@@ -169,7 +169,7 @@ async function placeRoute(env: Env, edge: EdgeAccount, site: SiteRow, principal:
 
 /** Add a site: the zone is found in the account, the site recorded, the route made (§15). */
 export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: string, excluded: string[]): Promise<SiteRow> {
-  if (edge.state !== 'ready') fail(409, 'account_not_ready', 'clx-edge is not installed and confirmed in this account yet.', { state: edge.state });
+  if (!inService(edge)) fail(409, 'account_not_ready', 'clx-edge is not installed and confirmed in this account yet.', { state: edge.state });
   const token = await workingToken(env, edge);
   const zone = await zoneFor(token, edge.cf_account_id, host);
   if (!zone) fail(400, 'zone_not_found', `No zone of this Cloudflare account holds ${host}.`, { field: 'host' });
@@ -327,11 +327,32 @@ export async function syncAccount(env: Env, accountId: string, principal = 'cron
         `DELETE FROM cfg WHERE (sync_id NOT IN (SELECT sync_id FROM commits) AND at < ${now - 3_600_000}) OR EXISTS (SELECT 1 FROM cfg n JOIN commits m ON m.revision = n.revision AND m.sync_id = n.sync_id WHERE n.key = cfg.key AND n.revision > cfg.revision)`,
       );
     }
-    await db.prepare('UPDATE edge_accounts SET synced_revision = max(synced_revision, ?) WHERE id = ?').bind(target, edge.id).run();
+    await db.prepare('UPDATE edge_accounts SET synced_revision = max(synced_revision, ?), synced_at = ? WHERE id = ?').bind(target, Date.now(), edge.id).run();
     return true;
   } finally {
     await release(db, accountId, owner);
   }
+}
+
+/** A heartbeat's revision is trusted only this long after a sync finished: the worker reads its
+ *  head shortly before it pushes, and a sync may commit in between. */
+const SYNC_SETTLE = 10 * 60_000;
+
+/**
+ * The worker-side sync check (§6): the latest config commit the worker reports in its heartbeat.
+ * With no sync pending and none finished in the last 10 minutes, a commit that is not the one clx.cx
+ * synced means the worker's database was changed elsewhere (restored, edited by hand, lost): every
+ * site is written again above both revisions, as for a head found ahead. Returns whether it was.
+ */
+export async function staleSync(db: D1Database, edge: EdgeAccount, revision: number, now: number): Promise<boolean> {
+  if (!edge.bundle || revision === edge.synced_revision || edge.config_revision !== edge.synced_revision || (edge.synced_at ?? 0) > now - SYNC_SETTLE) return false;
+  const next = Math.max(edge.config_revision, revision) + 1;
+  const [moved] = await db.batch([
+    db.prepare('UPDATE edge_accounts SET config_revision = ?1, synced_revision = 0 WHERE id = ?2 AND config_revision = ?3 AND synced_revision = ?3').bind(next, edge.id, edge.config_revision),
+    db.prepare('UPDATE sites SET revision = ?1 WHERE account_id = ?2 AND (SELECT config_revision FROM edge_accounts WHERE id = ?2) = ?1').bind(next, edge.id),
+  ]);
+  if (moved!.meta.changes) console.log(`sync_stale ${edge.id}: worker at ${revision}, clx.cx at ${edge.synced_revision}`);
+  return Boolean(moved!.meta.changes);
 }
 
 /**
@@ -347,7 +368,7 @@ export async function runSites(env: Env, now = Date.now()): Promise<{ synced: nu
   const pending = (await db.prepare("SELECT * FROM sites WHERE state = 'route_pending' AND updated_at < ? ORDER BY updated_at LIMIT 20").bind(now - 60_000).all<SiteRow>()).results;
   for (const s of pending) {
     const edge = await edgeById(db, s.account_id);
-    if (edge?.state === 'ready') await placeRoute(env, edge, s, 'cron').catch((e: unknown) => console.error('route', s.id, e instanceof Error ? e.message : e));
+    if (edge && inService(edge)) await placeRoute(env, edge, s, 'cron').catch((e: unknown) => console.error('route', s.id, e instanceof Error ? e.message : e));
   }
 
   const due = (await db.prepare('SELECT * FROM sites WHERE retire_at <= ? LIMIT 20').bind(now).all<SiteRow>()).results;

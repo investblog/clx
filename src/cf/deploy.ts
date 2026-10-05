@@ -128,7 +128,9 @@ async function databaseNamed(r: Run): Promise<Database | null> {
 /** Bring the database to SCHEMA; each migration and its number in one call (edge/migrations.ts). */
 async function migrate(r: Run): Promise<number> {
   const query = (sql: string) => cf<{ results: { value?: number }[] }[]>(r.token, 'POST', `${acc(r)}/d1/database/${r.edge.d1_id}/query`, { sql }, r.log);
-  const read = await query("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value); SELECT value FROM meta WHERE key = 'schema'");
+  // A (re)install also clears the worker's count of refused pushes (§7): the key it is about to
+  // receive will be accepted, so the once-a-day back-off must not hold it.
+  const read = await query("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value); DELETE FROM meta WHERE key IN ('push_401', 'push_401_next'); SELECT value FROM meta WHERE key = 'schema'");
   let at = Number(read.at(-1)?.results[0]?.value ?? 0);
   for (; at < SCHEMA; at++) {
     await query(`${MIGRATIONS[at]}; INSERT INTO meta (key, value) VALUES ('schema', ${at + 1}) ON CONFLICT (key) DO UPDATE SET value = excluded.value`);
@@ -499,6 +501,8 @@ export async function disconnect(env: Env, principal: string, edge: EdgeAccount)
     if (database) left.push(`database clx-edge (${database})`);
     await db.batch([
       db.prepare('DELETE FROM edge_accounts WHERE id = ? AND lease_owner = ?').bind(current.id, owner),
+      // Its totals stay 30 days, then the hourly job deletes them (§4).
+      db.prepare('INSERT INTO departed (account_id, at) SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM edge_accounts WHERE id = ?1) ON CONFLICT (account_id) DO UPDATE SET at = excluded.at').bind(current.id, Date.now()),
       db.prepare("UPDATE operations SET state = 'done', step = 'done', data = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify({ left }), Date.now(), opId),
     ]);
     return { revoke_token: current.token_name, left };

@@ -53,5 +53,30 @@ export interface DayItem {
 }
 /** At most this many items in one `outbox` part and one push. */
 export const PART_ITEMS = 2000;
+/** A push body (`POST HOOK_URL/push`, `Bearer EDGE_KEY`): the items with an `id` unique within the
+ *  body, and the heartbeat — this bundle, the schema, the queue depth, the latest config commit, the
+ *  last error and the counters of dropped items (§4, §6, §7). It never names the account. */
+export interface PushBody {
+  v: typeof PUSH_VERSION;
+  bundle: string;
+  schema: number | null;
+  queue: number;
+  revision: number;
+  error?: string;
+  dropped?: Partial<Record<DropReason, number>>;
+  items: ((HourItem | DayItem) & { id: number })[];
+}
+export const PUSH_VERSION = 1;
+export const PUSH_BYTES = 256 * 1024;
+/** Why clx.cx refused an item. Terminal ones drop it at once; `busy` is retried, at most 3 times. */
+export const TERMINAL = ['budget', 'invalid', 'unknown_target', 'too_old'] as const;
+export type Reason = (typeof TERMINAL)[number] | 'busy';
+export const ATTEMPTS = 3;
+/** What `sync_status` counts: refused items by reason, and queue parts expired unsent. */
+export type DropReason = Reason | 'expired';
+export interface PushAnswer {
+  accepted: number[];
+  rejected: { id: number; reason: Reason }[];
+}
 /** How long hourly and running items wait in `outbox` (§7), and how far back hours are queued. */
 export const OUTBOX_HOURS = 7 * 24;

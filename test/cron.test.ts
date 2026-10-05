@@ -31,9 +31,19 @@ function view(at: number, o: { t?: string; page?: string; ip?: string; ua?: stri
   const req = new Request('https://example.com/p/c', { method: 'POST', body: 'x', headers: { referer: `https://example.com${o.page ?? '/'}`, 'user-agent': o.ua ?? CHROME, 'cf-connecting-ip': o.ip ?? '10.0.0.1' } });
   return collect(binding(), req, '', 'example.com', site(o.t ?? 's1'), at);
 }
-const run = (at: number) => {
+// clx.cx is down here (503): the queue stays as it is, so these tests see what the steps left.
+// Sending itself is tested in push.test.ts.
+const WORKER = { HOOK_URL: 'https://clx.test/hook', EDGE_KEY: 'k'.repeat(43), BUNDLE: 'b'.repeat(64) };
+let pushes: unknown[] = [];
+beforeEach(() => {
+  pushes = [];
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => (pushes.push(JSON.parse(String(init.body))), new Response('{}', { status: 503 })));
+  return () => vi.unstubAllGlobals();
+});
+const run = async (at: number) => {
   count = { n: 0 };
-  return hourly(binding(), at);
+  const r = await hourly(binding(), at, WORKER);
+  return { ...r, errors: r.errors.filter((e) => e !== 'push: 503') };
 };
 const outbox = () => all('SELECT hour, items FROM outbox ORDER BY id').map((r) => ({ hour: r.hour, items: JSON.parse(r.items as string) }));
 
@@ -134,9 +144,10 @@ describe('the query ledger', () => {
     // First run: the 4 days are past, so 3 close now; every hour of them is queued.
     const first = await run(D0 + 4 * 24 * H + 300_000);
     expect(first.closed).toEqual([DAY0, DAY0 + 1, DAY0 + 2]);
-    // Of the 49 queries a run may make (§5 ledger), this part takes: meta 1, find 1, 3 closes × 7,
-    // queue 3, expire 2 — 28; sending (stage 4c-2) gets at most 6 × 3 = 18, the error mark 1.
-    expect(count.n).toBeLessThanOrEqual(28);
+    // Of the 49 queries a run may make (§5 ledger): meta 1, find 1, 3 closes × 7, queue 3,
+    // expire 2 — 28; then one push here (clx.cx answers 503) and the error mark.
+    expect(first.statements).toBe(count.n);
+    expect(count.n).toBeLessThanOrEqual(30);
     expect(outbox().filter((o) => o.items[0].hour !== undefined)).toHaveLength(8);
     const second = await run(D0 + 4 * 24 * H + H + 300_000);
     expect(second.closed).toEqual([DAY0 + 3]);
@@ -168,7 +179,7 @@ describe('expiry', () => {
     // This run's queue step fails, so the cursor stays where it was.
     db.exec('DROP TABLE outbox');
     const r = await run(now);
-    expect(r.errors).toEqual([expect.stringMatching(/^queue: /u)]);
+    expect(r.errors[0]).toMatch(/^queue: /u);
     expect(all('SELECT day FROM totals ORDER BY day')).toEqual([{ day: DAY0 + 1 }]);
   });
 });

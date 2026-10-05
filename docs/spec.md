@@ -196,7 +196,11 @@ Why:
   a list, with `dry_run`; the operations table holds each account's result. Compatibility: the
   receiver accepts body version `v` of the current and the previous release.
 - **Liveness:** a heartbeat in every push (§7): bundle sha256, `schema`, last error, queue
-  depth. 26 hours of silence — "no connection" in the UI and an e-mail to the user.
+  depth, the latest config commit, the counters of dropped items. Every hourly run pushes at least
+  once — with nothing to send, an empty push — so silence means the worker is not running. 26
+  hours of silence — "no connection" in the UI and an e-mail to the user (the e-mail comes with
+  e-mail sending, stage 6). A push ends it; an account with no connection still takes new sites,
+  but a rollout skips it (its update would wait for a `setup_ok` that will not come).
 - **Disconnecting clx** by the user: the working token removes the recorded routes, deletes the
   recorded worker (if its code is a clx bundle) and database; we delete the ciphertext. What could
   not be deleted — the token is revoked or lacks a right, the worker was changed — is listed in the
@@ -317,15 +321,16 @@ Why:
   | find the days to close | 1 |
   | close past days, at most 3 — set-based `INSERT … SELECT … GROUP BY` with window functions for the caps, one `batch` per day: hours → days with the caps above, the day's totals with its visitor count into `final_days` (pending for clx.cx), deleting hashes, salt and the day's `rows_hourly` counters, a mark in `closed_days` (a failure leaves the day open as a whole) | 3 × 7 = 21 |
   | queue the closed hours after the `outboxed_through` cursor and the running day snapshot; the cursor moves in the same `batch` | 3 |
-  | send: at most 6 pushes (§7) — `outbox` parts first, then pages of `final_days`; each a read, then one `batch` of the delete or rewrite and the `sync_status` drop counters | 6 × 3 = 18 |
   | delete expired data, one table per run in turn | 3 |
+  | send: at most 6 pushes (§7) — `outbox` parts first, then pages of `final_days`; each a read, then one `batch` of the delete or rewrite, the attempt counts and the `sync_status` drop counters — as many as fit in what the steps above left | ≤ 6 × 4 = 24 |
   | record or clear the last error | 1 |
-  | **total** | **48** |
+  | **total** | **≤ 49** — the run counts its queries and stops sending first |
 
-  Catching up after 3 days down: one part per account-hour for most accounts (72 parts), up to
-  ~90 at the `api` maximum (the day-closing hour of 500 sites and 10,000 links is several parts);
-  each run sends 6 and one new hour arrives, so the backlog drains by 5 a run — 15 to 18 runs,
-  within a day. The ledger is a test: a fake D1 counts statements per run.
+  An ordinary run queues two parts (the hour's items and the running snapshot) and sends them.
+  Catching up after 3 days down: one part per account-hour (72), plus pages of final days; the
+  first run closes the 3 days and has room for 4 pushes, every later run sends 6 while 2 new parts
+  arrive, so the backlog drains by 4 a run — about 18 runs, within a day. The ledger is a test: a
+  fake D1 counts statements per run.
 - **Cron triggers.** Free allows 5 per account. Before the install (§4) clx.cx counts the cron
   triggers of the account's scripts; with 5 in use the install stops with `cron_limit` and says
   which scripts hold them. clx needs one.
@@ -373,10 +378,14 @@ Why:
     writes every site again (found on clx.cx's next sync of that account, or, with no change
     pending, by the worker-side check below); a site that is deleted or in `route_conflict` is
     written as deleted;
-  - a check from the worker side — the cron compares its latest commit with `GET clx.cx/hook/sync`
-    (`Bearer EDGE_KEY`, the account resolved from the key alone, answer `{revision}`); a mismatch
-    older than 10 minutes is reported in the heartbeat as `sync_stale`, and clx.cx runs the sync
-    again. The worker never writes config itself;
+  - a check from the worker side — every push's heartbeat carries the worker's latest commit
+    (`revision`, §7). When no sync of the account is pending and none finished in the last 10
+    minutes (the worker reads its head shortly before it pushes, and a sync may commit in between),
+    a commit other than the one clx.cx synced means the database was changed elsewhere: clx.cx
+    moves its revision above both and writes every site again, as for a head found ahead. (Planned
+    first as a separate `GET /hook/sync` compared by the worker; the heartbeat carries the same
+    number at no extra request, and clx.cx is the side that knows whether a sync is in flight.) The
+    worker never writes config itself;
   - config has a size budget per Cloudflare account — 50 MB of `data`, counted by clx.cx before it
     syncs; over it the change is refused (`storage_limit`, §15);
   - a link and site cache in isolate memory — 60 s, for speed only.
@@ -397,9 +406,11 @@ Why:
     comes from the user's D1 with the breakdowns.
   Daily totals are computed by the worker (it has all the hours); clx.cx does not recompute days
   from hours.
-- **Body** (`v: 1`, up to 2,000 items and 256 KB): `{ v, bundle, schema, queue, error?, items:
-  [...] }` — one `outbox` part, or a page of pending final days; every item has its own `id`
-  within the body. The body carries no account.
+- **Body** (`v: 1`, up to 2,000 items and 256 KB): `{ v, bundle, schema, queue, revision,
+  error?, dropped?, items: [...] }` — one `outbox` part, or a page of pending final days (an
+  empty `items` when nothing waits: the heartbeat); every item has its own `id` within the body;
+  `revision` is the worker's latest config commit (§6), `dropped` its counters from `sync_status`.
+  The shapes are in `edge/contract.ts`. The body carries no account.
 - **The receiver `POST /hook/push` does not trust the body:**
   - `Bearer EDGE_KEY` → SHA-256 → the current or previous hash → the internal `account_id`;
   - a strict schema: known fields only, `target` belongs to the account, `hour`/`day` not in the
@@ -464,8 +475,9 @@ $0.35 per 1,000 e-mails), so the budget is capped by D1 writes, not by items per
   counted with a ×1.5 margin: **110**;
 - a **link** with clicks, per day: the final day row + its deletion after 400 days ≈ 2, with the
   margin **3** (links have no hourly totals on clx.cx, §7);
-- **write budget per account**, counted by the receiver and by the API (idempotency rows and
-  changes count too): `free` 3,000 a day (≈ 27 sites with traffic); `api` 3,000 + 110 per site +
+- **write budget per account** (per connected Cloudflare account, per UTC day), counted by the
+  receiver — every accepted item and the heartbeat — and by the API (idempotency rows and changes
+  count too; the API's share is not counted yet, `docs/TODO.md`): `free` 3,000 a day (≈ 27 sites with traffic); `api` 3,000 + 110 per site +
   3 per link. Over budget only the final day items are accepted; hours and running snapshots are
   rejected for good (`reason: budget`, no retry) — daily totals stay exact, the "today" chart is
   marked "incomplete";

@@ -2,6 +2,7 @@
 // data. Every step makes a fixed number of D1 queries — Free allows 50 per invocation and counts each
 // statement of a batch — and the work is set-based SQL, so the run's CPU does not grow with traffic.
 import { ACCOUNT, ACCOUNT_ROWS, dayOf, FULL_BYTES, HOUR_COLUMNS, hourOf, OTHER, OUTBOX_HOURS, PART_ITEMS, TARGET_ROWS } from './contract';
+import { send } from './push';
 
 /** Days closed per run, at most (the query ledger of §5). */
 export const CLOSE_DAYS = 3;
@@ -138,14 +139,25 @@ function expire(db: D1Database, turn: number, now: number): D1PreparedStatement[
 export interface HourlyResult {
   closed: number[];
   queuedThrough: number;
+  pushes: number;
+  /** D1 queries this run made: at most LEDGER. */
+  statements: number;
   errors: string[];
 }
 
-/** One hourly run at `now` (the cron's scheduled time). A failed step is recorded and the run goes on. */
-export async function hourly(db: D1Database, now: number): Promise<HourlyResult> {
+/** D1 queries a Free invocation may make, less one for headroom (§5). */
+export const LEDGER = 49;
+
+/** One hourly run at `now` (the cron's scheduled time). A failed step is recorded and the run goes
+ *  on; sending gets what the steps before it left of the ledger. */
+export async function hourly(db: D1Database, now: number, worker: { HOOK_URL: string; EDGE_KEY: string; BUNDLE: string }): Promise<HourlyResult> {
   const last = hourOf(now) - 1;
   const today = dayOf(now);
-  const read = await db.prepare('SELECT key, value FROM meta').all<{ key: string; value: number | string }>();
+  // The run's own state, the latest config commit and the drop counters, in one query.
+  const read = await db
+    .prepare("SELECT key, value FROM meta UNION ALL SELECT 'head', coalesce(max(revision), 0) FROM commits UNION ALL SELECT 'drop:' || reason, n FROM sync_status")
+    .all<{ key: string; value: number | string }>();
+  let statements = 1;
   const meta = new Map(read.results.map((r) => [r.key, r.value]));
   const size = read.meta?.size_after ?? 0;
   const errors: string[] = [];
@@ -158,10 +170,12 @@ export async function hourly(db: D1Database, now: number): Promise<HourlyResult>
   };
 
   const closed: number[] = [];
+  const batch = (list: D1PreparedStatement[]) => ((statements += list.length), db.batch(list));
   await step('close', async () => {
+    statements++;
     const days = (await db.prepare(`SELECT DISTINCT day FROM totals WHERE day < ?1 AND day NOT IN (SELECT day FROM closed_days) ORDER BY day LIMIT ${CLOSE_DAYS}`).bind(today).all<{ day: number }>()).results;
     for (const { day } of days) {
-      await db.batch(closeDay(db, day));
+      await batch(closeDay(db, day));
       closed.push(day);
     }
   });
@@ -170,12 +184,25 @@ export async function hourly(db: D1Database, now: number): Promise<HourlyResult>
   const cursor = Math.max(stored, last - OUTBOX_HOURS);
   let queuedThrough = cursor;
   await step('queue', async () => {
-    await db.batch(queue(db, stored, cursor, last, size < FULL_BYTES));
+    await batch(queue(db, stored, cursor, last, size < FULL_BYTES));
     queuedThrough = last;
   });
-  await step('expire', () => db.batch(expire(db, Number(meta.get('expire_turn') ?? 0), now)));
+  await step('expire', () => batch(expire(db, Number(meta.get('expire_turn') ?? 0), now)));
 
+  // One query stays for the error mark at the end.
+  const dropped = Object.fromEntries([...meta].filter(([k]) => k.startsWith('drop:')).map(([k, v]) => [k.slice(5), Number(v)]));
+  const beat = { bundle: worker.BUNDLE, schema: meta.has('schema') ? Number(meta.get('schema')) : null, revision: Number(meta.get('head') ?? 0), error: (errors.join('; ') || String(meta.get('last_error') ?? '')).slice(0, 200) || undefined, dropped };
+  let pushes = 0;
+  await step('push', async () => {
+    const r = await send(db, worker, beat, meta, LEDGER - 1 - statements, now);
+    statements += r.statements;
+    pushes = r.pushes;
+    if (r.error) throw new Error(r.error);
+  });
+
+  statements++;
   if (errors.length) await db.prepare("INSERT INTO meta (key, value) VALUES ('last_error', ?1) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(errors.join('; ').slice(0, 200)).run().catch(() => undefined);
   else if (meta.has('last_error')) await db.prepare("DELETE FROM meta WHERE key = 'last_error'").run().catch(() => undefined);
-  return { closed, queuedThrough, errors };
+  else statements--;
+  return { closed, queuedThrough, pushes, statements, errors };
 }

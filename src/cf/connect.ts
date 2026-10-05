@@ -85,6 +85,17 @@ export interface EdgeAccount {
   // the config sync (§6, src/cf/sites.ts)
   config_revision: number;
   synced_revision: number;
+  synced_at: number | null;
+  // the last push (§4, §7, src/push.ts)
+  last_push_at: number | null;
+  push_bundle: string | null;
+  push_schema: number | null;
+  push_queue: number | null;
+  push_error: string | null;
+  push_revision: number | null;
+  push_dropped: string | null;
+  budget_day: number;
+  budget_used: number;
 }
 
 /** AAD: the ciphertext belongs to this record and this Cloudflare account only (§3 item 5). */
@@ -100,15 +111,25 @@ export function accountView(a: EdgeAccount) {
     token: a.token_name ? { name: a.token_name, expires_at: a.token_expires_at ? new Date(a.token_expires_at).toISOString() : null } : null,
     error: a.error ? JSON.parse(a.error) : null,
     edge: a.bundle ? { bundle: a.bundle, up_to_date: a.bundle === EDGE_SHA256, schema: a.schema, installed_at: a.installed_at ? new Date(a.installed_at).toISOString() : null } : null,
+    // The worker's own report, from its last push (§4, §7).
+    push: a.last_push_at
+      ? { at: new Date(a.last_push_at).toISOString(), bundle: a.push_bundle, schema: a.push_schema, queue: a.push_queue, error: a.push_error, dropped: a.push_dropped ? JSON.parse(a.push_dropped) : {} }
+      : null,
     created_at: new Date(a.created_at).toISOString(),
   };
 }
 
 /**
  * The state an account returns to when an operation on its token ends: an install keeps its
- * standing (installing, ready, drift) — a renewed token does not undo it.
+ * standing (installing, ready, drift, no connection) — a renewed token does not undo it; only a
+ * push from the worker ends "no connection" (src/push.ts).
  */
-export const restingState = (a: EdgeAccount) => (a.state === 'installing' || a.state === 'resource_drift' ? a.state : a.bundle ? 'ready' : 'connected');
+/** Installed and in service — a silent worker ("no connection") may still be serving, and its
+ *  token works, so sites can still be added and routes made. */
+export const inService = (a: Pick<EdgeAccount, 'state'>) => a.state === 'ready' || a.state === 'no_connection';
+
+export const restingState = (a: EdgeAccount) =>
+  a.state === 'installing' || a.state === 'resource_drift' || a.state === 'no_connection' ? a.state : a.bundle ? 'ready' : 'connected';
 
 export const edgeById = (db: D1Database, id: string) => db.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(id).first<EdgeAccount>();
 

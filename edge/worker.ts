@@ -66,7 +66,7 @@ export default {
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     if (controller.cron === WORKING_CRON) {
-      const r = await hourly(env.DB, controller.scheduledTime);
+      const r = await hourly(env.DB, controller.scheduledTime, env);
       if (r.errors.length) console.log(`hourly: ${r.errors.join('; ')}`);
       return;
     }

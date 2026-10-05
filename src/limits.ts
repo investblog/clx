@@ -9,6 +9,10 @@ export const LIMITS: Record<Plan, { cfAccounts: number; sites: number; links: nu
 
 export const planOf = (plan: string): Plan => (plan === 'api' ? 'api' : 'free');
 
+/** Writes of totals a Cloudflare account may cost clx.cx in a UTC day (§8): beyond it only final
+ *  days are taken. Links are not counted until they exist (stage 5). */
+export const writeBudget = (plan: Plan, sites: number, links = 0) => 3000 + (plan === 'api' ? 110 * sites + 3 * links : 0);
+
 /** Connected `free` accounts the service takes before the waiting list (§8). */
 export const FREE_ACCOUNTS_CAP = 500;
 
