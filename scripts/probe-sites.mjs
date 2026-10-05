@@ -95,6 +95,7 @@ try {
   });
   const connected = await clx('POST', '/v1/accounts', key, { cf_account_id: account, bootstrap_token: boot.value }, `probe-connect-${run}`);
   accountId = connected.body.account?.id;
+  step('POST /v1/accounts', Boolean(accountId), `${connected.status} ${accountId ? connected.body.account.state : JSON.stringify(connected.body.error)}`);
   const t0 = Date.now();
   const acc = await until(async () => (await clx('GET', `/v1/accounts/${accountId}`, key)).body.account, (a) => a?.state !== 'installing', 16);
   step('connected and installed', acc?.state === 'ready', `${acc?.state} in ${Math.round((Date.now() - t0) / 1000)} s ${acc?.error ? JSON.stringify(acc.error) : ''}`);
