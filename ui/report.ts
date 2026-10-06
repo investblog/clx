@@ -129,7 +129,7 @@ export async function reportPage(id: string, period: string): Promise<HTMLElemen
       statCard('Посетители', num(t.visitors), 'сумма дневных уникальных'),
       statCard('Просмотры', num(t.views)),
       statCard('Просмотров на посетителя', t.visitors ? (t.views / t.visitors).toFixed(1).replace('.', ',') : '—'),
-      statCard('Доля ботов', pct(t.bots, t.bots + t.views), `${num(t.bots)} заходов`),
+      statCard('Доля ботов', pct(t.bots, t.bots + t.views), `заходов ботов: ${num(t.bots)}`),
     ),
     chart(r),
     b
