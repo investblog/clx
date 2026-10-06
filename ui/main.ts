@@ -49,7 +49,7 @@ async function page(path: string, mine: number): Promise<[HTMLElement, string]> 
   const site = path.match(/^\/sites\/([\w-]+)$/u);
   if (site) return [await sitePage(site[1]!, live, redraw), 'Сайт'];
   const [accounts, sites] = await Promise.all([accountsPage(me!), sitesBlock()]);
-  return [h('div', {}, accounts, sites), 'clx'];
+  return [h('div', {}, accounts, sites), 'Главная'];
 }
 
 async function route(): Promise<void> {

@@ -191,6 +191,9 @@ function d1(path: string, method: string, init: RequestInit, url: URL): Response
     // With params D1 takes a single statement (7400, docs/cloudflare-facts.md).
     if (params) {
       if (statements(sql).length !== 1) return no(400, 7400);
+      // D1 refuses a compound SELECT of more than 5 terms (cloudflare-facts.md). Counted over the
+      // whole statement — stricter than D1, which counts per compound.
+      if ((sql.match(/\b(UNION|INTERSECT|EXCEPT)\b/giu)?.length ?? 0) > 4) return no(400, 7500);
       try {
         return ok([{ results: d.db.prepare(sql).all(...params) as unknown[], meta: { changes: 0 } }]);
       } catch {

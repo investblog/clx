@@ -24,6 +24,8 @@ export type Unavailable = 'not_installed' | 'cloudflare' | 'rate_limited';
 // "as of" as the totals, so the open hour the worker has not sent yet is left out. Closed days come
 // from the daily detail, days not closed yet — today, or days the worker has not reached after a
 // downtime — from the hourly detail, so no view is counted twice; then the top of each dimension.
+// D1 takes at most 5 terms in a compound SELECT (cloudflare-facts.md), so the six view dimensions
+// are one pass over the rows joined with a list of dimension names, not six UNION ALL terms.
 const COLUMNS = { pages: 'page', sources: 'source', countries: 'country', devices: 'device', browsers: 'browser', os: 'os' } as const;
 const RANGE = 'hour >= CAST(?2 AS INTEGER) * 24 AND hour < CAST(?3 AS INTEGER) AND hour / 24 NOT IN (SELECT day FROM closed)';
 const BREAKDOWNS = `WITH closed AS (SELECT day FROM closed_days WHERE day >= CAST(?2 AS INTEGER) AND day * 24 + 24 <= CAST(?3 AS INTEGER)),
@@ -31,9 +33,10 @@ v AS (SELECT page, source, country, device, browser, os, views FROM views_daily 
   UNION ALL SELECT page, source, country, device, browser, os, views FROM views_hourly WHERE target = ?1 AND ${RANGE}),
 b AS (SELECT category, hits FROM bots_daily WHERE target = ?1 AND day IN (SELECT day FROM closed)
   UNION ALL SELECT category, hits FROM bots_hourly WHERE target = ?1 AND ${RANGE}),
-d AS (${Object.entries(COLUMNS)
-  .map(([dim, col]) => `SELECT '${dim}' AS dim, ${col} AS key, sum(views) AS n FROM v GROUP BY ${col}`)
-  .join(' UNION ALL ')} UNION ALL SELECT 'bots', category, sum(hits) FROM b GROUP BY category)
+d AS (SELECT j.value AS dim, CASE j.value ${Object.entries(COLUMNS)
+  .map(([dim, col]) => `WHEN '${dim}' THEN ${col}`)
+  .join(' ')} END AS key, sum(views) AS n FROM v CROSS JOIN json_each('${JSON.stringify(Object.keys(COLUMNS))}') j GROUP BY dim, key
+  UNION ALL SELECT 'bots', category, sum(hits) FROM b GROUP BY category)
 SELECT dim, key, n FROM (SELECT dim, key, n, row_number() OVER (PARTITION BY dim ORDER BY n DESC, key) AS r FROM d) WHERE r <= ${TOP}`;
 
 // Answers kept for speed only, per isolate; a request already in flight is shared — the rate limit
