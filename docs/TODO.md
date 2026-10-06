@@ -7,6 +7,18 @@ updated: 2026-10-06
 
 v2 stages — [`docs/spec.md`](./spec.md) §14.
 
+Owner's steps (stages 5–7 are built; these open them to real users):
+- [ ] Turnstile: a widget for clx.cx (dashboard → Turnstile); its site key goes to
+      `TURNSTILE_SITE_KEY` in `wrangler.jsonc`, its secret to the Worker secret `TURNSTILE_SECRET`.
+      Until then sign-up and reset say they do not work yet.
+- [ ] Email Sending: onboard clx.cx (dashboard → Email Sending → Onboard Domain; adds MX on
+      `cf-bounce`, SPF, DKIM, DMARC). Until then e-mail reaches only the account's verified addresses.
+- [ ] `abuse@clx.cx` (the /abuse page names it): an Email Routing rule to a real mailbox.
+- [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
+- [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
+- [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published
+      and `src/qr` gives way to the dependency (ADR 0009).
+
 - [ ] Open questions of spec §13, on a test Cloudflare account: rights for Workers Custom Domains.
       (A route on a Pages host — verified 05.10, §13 item 9; an ignored `INSERT OR IGNORE` writes
       0 rows — verified 05.10, `cloudflare-facts.md`.)
