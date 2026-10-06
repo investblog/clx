@@ -124,7 +124,9 @@ try {
   const h = hours.find((r) => r.hour === hour);
   step('clx.cx has the closed hour: 2 views, the bots', h?.views === 2 && h?.bots >= 2, JSON.stringify(hours));
   const d = days.find((r) => r.day === day);
-  step('… and the running day: 2 views, 1 visitor', d?.views === 2 && d?.visitors === 1 && d?.final === 0, JSON.stringify(days));
+  // Past midnight UTC the same run closes the day, and clx.cx gets its final total instead.
+  const closed = hour % 24 === 23;
+  step(`… and the ${closed ? 'closed' : 'running'} day: 2 views, 1 visitor`, d?.views === 2 && d?.visitors === 1 && d?.final === (closed ? 1 : 0), JSON.stringify(days));
 
   const gone = await clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-disconnect-${run}`);
   step('disconnect', gone.status === 200 && gone.body.left?.length === 0, JSON.stringify(gone.body.left ?? gone.body.error));
