@@ -1,6 +1,6 @@
 ---
 title: clx — spec of the open visit counter and short links
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # clx v2 spec: an open visit counter and short links on users' own workers
@@ -179,7 +179,8 @@ Why:
   installs: first run after ~4.5, ~5.5 and ~6.5 minutes; once at once and then not for 14 minutes;
   once not at all within 15 minutes), so an install with no `setup_ok` within 15 minutes is **not**
   undone: clx.cx sets the working cron anyway and marks the account `not_confirmed`; whether the
-  cron runs is then shown by the heartbeat of the pushes (§7, "no connection" after 26 hours).
+  cron runs is then shown by the heartbeat of the pushes (§7, "no connection" after 26 hours) —
+  [ADR 0003](./decisions/0003-install-without-cron.md).
   A failure in steps 1–4 deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
   own script is the same install: it keeps the database, and on failure returns to the script's
   previous version as an update does.
@@ -269,7 +270,8 @@ Why:
     also has 24 hourly columns — so totals are always exact, whatever the caps below drop. A totals
     row is the source of the target's hour and day items for clx.cx (§7); when the day closes,
     its totals and visitor count are copied into `final_days`, which holds the final day item until
-    clx.cx accepts it (a new table, not new columns: `ALTER TABLE ADD COLUMN` cannot be re-run). A
+    clx.cx accepts it (a new table, not new columns: `ALTER TABLE ADD COLUMN` cannot be re-run —
+    [ADR 0002](./decisions/0002-final-days-table.md)). A
     totals row is deleted once its day is closed, its final item gone and the day 2 days old (or
     after 31 days, when clx.cx would refuse it anyway); clx.cx keeps the 400-day history;
   - **detail caps** — what bounds the breakdown tables (sizes in §8): per hour, at most 299
@@ -384,8 +386,8 @@ Why:
     a commit other than the one clx.cx synced means the database was changed elsewhere: clx.cx
     moves its revision above both and writes every site again, as for a head found ahead. (Planned
     first as a separate `GET /hook/sync` compared by the worker; the heartbeat carries the same
-    number at no extra request, and clx.cx is the side that knows whether a sync is in flight.) The
-    worker never writes config itself;
+    number at no extra request, and clx.cx is the side that knows whether a sync is in flight —
+    [ADR 0001](./decisions/0001-sync-check-in-heartbeat.md).) The worker never writes config itself;
   - config has a size budget per Cloudflare account — 50 MB of `data`, counted by clx.cx before it
     syncs; over it the change is refused (`storage_limit`, §15);
   - a link and site cache in isolate memory — 60 s, for speed only.
@@ -454,12 +456,25 @@ Why:
   the same limit and with the same unavailable state; breakdowns (top 10 pages, sources,
   countries, devices, browsers, OS, bots by category) — from the user's D1 through the D1 REST API
   when the report is opened:
-  - one `/query` call with a fixed set of queries, 5 s timeout;
+  - periods `today`, `7d`, `30d` — UTC days ending with today; the series is hourly for `today`,
+    daily otherwise;
+  - everything is **as of** the end of the latest closed hour the worker sent today (`as_of`; the
+    start of today when nothing came yet): the series stops there and the breakdowns read the
+    user's D1 up to the same hour, so the open hour — counted there, not yet sent — never shows
+    in one part of the report and not in another;
+  - closed days come from the daily detail, days not closed yet (today, or days a stalled worker
+    has not reached) from the hourly detail — never both;
+  - one `/query` call — one statement, since D1 takes one statement with params
+    ([`cloudflare-facts.md`](./cloudflare-facts.md)) — 5 s timeout;
   - identical requests in flight are merged; the answer is cached for 5 minutes (in isolate memory —
-    for speed only);
-  - at most 30 breakdown requests a minute per user;
-  - a Cloudflare `429`/`5xx`/timeout or a missing token — the totals from clx.cx are shown, while
-    breakdowns and a link's "today" are "temporarily unavailable".
+    for speed only); a cached answer and a merged request do not count against the limit;
+  - at most 30 breakdown requests a minute per user (a rate limiting binding);
+  - a Cloudflare `429`/`5xx`/timeout, a missing or unreadable token, an account out of service or
+    the limit — the totals from clx.cx are shown (`200`), while breakdowns and a link's "today"
+    are "temporarily unavailable", with the reason (`cloudflare`, `not_installed`,
+    `rate_limited`); the account's state is not changed here — the token check owns it (§3);
+  - "today" is marked incomplete when the account is over today's write budget (§8).
+  See [ADR 0004](./decisions/0004-report-as-of.md).
 
 ## 8. Quotas and limits
 
@@ -586,8 +601,14 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
     writes: busiest day 84,000 of 100,000; at this trend the limit is reached around 19.10";
 - size grows slowly and has a free alternative: when it alone is `watch` or worse, the advice also
   offers shorter hourly retention (31 → 14 days) instead of an upgrade;
+- **schedule and failures:** at most once per UTC day per account (never sooner than 20 hours, and
+  only once a new complete day exists), a slice of accounts per hourly run; `403` leaves that
+  metric unavailable; `401` stores nothing and hands the account to the token check (§3), which
+  owns `revoked`; anything passing (`429`, `5xx`, network) is retried the next hour;
 - the advice is in the UI (account status) and in the API (`GET /v1/accounts/{id}`, §15), so an
-  integrator can pass it on to its customer.
+  integrator can pass it on to its customer — only while the account is in service (`ready`,
+  `no_connection`): an account no longer measured shows none. See
+  [ADR 0005](./decisions/0005-upgrade-advice.md).
 
 **clx limits** (one place to change — `src/limits.ts`):
 
@@ -706,6 +727,9 @@ moving into `clx-edge`).
     least-privilege scopes (a build pipeline holds no `accounts`), per-key allow lists of Cloudflare
     accounts and IPs, keys hashed and shown once, revocable one by one, the Cloudflare API call log
     (item 1) shows the key ID.
+12. **Backups of the clx.cx database.** A nightly copy to R2 needs R2 switched on, a paid plan in
+    the clx.cx account — decided 06.10.2026: after the release ([ADR 0006](./decisions/0006-backups-after-release.md)). The users'
+    own databases are theirs; clx.cx keeps only totals (§7).
 
 ## 14. Implementation stages
 
@@ -731,6 +755,10 @@ stage.
    the site's own 404; a repeated and a late push of an hour and an old day snapshot do not change the numbers; a
    foreign target in the body is rejected; after 3 days of downtime the cron catches up within a day
    (15–18 runs), none over the query ledger of §5; a site with 1,500+ combinations in an hour stays within the caps.
+   Built in parts, each with its own review and live check: 4a sites, route, snippet, config sync;
+   4b the collector; 4c the worker's hourly run, the push and the receiver; 4d the report (4d-1) and
+   the upgrade advice (4d-2); **4e the pages of §10** — connection, sites, report, status — for
+   everything built so far (stages 2–4 were API only; links get their page in stage 5).
 5. **Links, QR, rules** (§6): `/v1/links`, versioned sync, redirect, clicks. Check: a country rule, scanning a QR
    with a phone → a click with source `qr`; an interrupted sync leaves the previous links working.
 6. **Sign-up** (§9): e-mails, Turnstile, reset, privacy/terms/abuse. Check: a live e-mail; reusing an
