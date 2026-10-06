@@ -77,7 +77,7 @@ step(`the Pages site answers on ${host}`, home === 200, String(home));
 const login = await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });
 const session = `Bearer ${(await login.json()).access_token}`;
 const run = Date.now().toString(36);
-const issued = await clx('POST', '/v1/keys', session, { scopes: ['accounts', 'sites'], allow_accounts: [account] }, `probe-key-${run}`);
+const issued = await clx('POST', '/v1/keys', session, { scopes: ['accounts', 'sites', 'reports'], allow_accounts: [account] }, `probe-key-${run}`);
 step('sign in, API key', login.ok && issued.status === 201, issued.body.prefix);
 const key = `Bearer ${issued.body.key}`;
 
@@ -127,6 +127,16 @@ try {
   // Past midnight UTC the same run closes the day, and clx.cx gets its final total instead.
   const closed = hour % 24 === 23;
   step(`… and the ${closed ? 'closed' : 'running'} day: 2 views, 1 visitor`, d?.views === 2 && d?.visitors === 1 && d?.final === (closed ? 1 : 0), JSON.stringify(days));
+
+  // The report: totals from clx.cx, breakdowns read from the account's own D1 (§7). Past midnight
+  // the views are yesterday's, so the 7-day period covers both cases.
+  const rep = (await clx('GET', `/v1/sites/${siteId}/report?period=7d&breakdowns=1`, key)).body.report;
+  step('the report: totals of the 7 days', rep?.totals?.views === 2 && rep?.totals?.visitors === 1, JSON.stringify(rep?.totals ?? rep));
+  const b = rep?.breakdowns;
+  const n = (dim) => (b?.[dim] ?? []).reduce((s, r) => s + r.n, 0);
+  step("… breakdowns from the account's D1: pages, sources, devices", n('pages') === 2 && n('sources') === 2 && n('devices') === 2, JSON.stringify(b ?? rep?.unavailable));
+  step('… the country is known (cf.country)', (b?.countries ?? []).some((r) => /^[A-Z]{2}$/u.test(r.key)), JSON.stringify(b?.countries));
+  step('… the bot is in its category', n('bots') >= 1, JSON.stringify(b?.bots));
 
   const gone = await clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-disconnect-${run}`);
   step('disconnect', gone.status === 200 && gone.body.left?.length === 0, JSON.stringify(gone.body.left ?? gone.body.error));

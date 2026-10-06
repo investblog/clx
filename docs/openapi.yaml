@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: clx management API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
     Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
@@ -130,6 +130,44 @@ components:
         retiring: { type: array, items: { type: object, properties: { path: { type: string }, until: { type: string, format: date-time } } }, description: 'old paths still counted after a rotation' }
         error: { type: [object, 'null'] }
         created_at: { type: string, format: date-time }
+    Top:
+      type: array
+      maxItems: 10
+      description: 'the top 10 by count; "(other)" holds what went over the detail caps'
+      items: { type: object, properties: { key: { type: string }, n: { type: integer } } }
+    Report:
+      type: object
+      properties:
+        period: { type: string, enum: [today, 7d, 30d] }
+        from: { type: string, format: date, description: first UTC day }
+        to: { type: string, format: date, description: last UTC day — today }
+        as_of: { type: [string, 'null'], format: date-time, description: 'today is counted up to this moment (the end of the latest closed hour the worker sent); hours arrive up to an hour late' }
+        totals:
+          type: object
+          properties:
+            views: { type: integer }
+            bots: { type: integer }
+            visitors: { type: integer, description: the sum of daily unique visitors }
+        series:
+          type: array
+          description: 'today — one point per hour up to as_of; 7d/30d — one per day (with visitors)'
+          items: { type: object, properties: { at: { type: string, format: date-time }, views: { type: integer }, bots: { type: integer }, visitors: { type: integer } } }
+        incomplete: { type: boolean, description: "today's hours were refused over the account's write budget; daily totals stay exact" }
+        breakdowns:
+          type: [object, 'null']
+          description: 'only with breakdowns=1; read from the account''s own database, null when unavailable'
+          properties:
+            pages: { $ref: '#/components/schemas/Top' }
+            sources: { $ref: '#/components/schemas/Top' }
+            countries: { $ref: '#/components/schemas/Top' }
+            devices: { $ref: '#/components/schemas/Top' }
+            browsers: { $ref: '#/components/schemas/Top' }
+            os: { $ref: '#/components/schemas/Top' }
+            bots: { $ref: '#/components/schemas/Top' }
+        unavailable:
+          type: string
+          enum: [not_installed, cloudflare, rate_limited]
+          description: 'why breakdowns is null: the worker is not installed or the token is gone; Cloudflare failed or took over 5 s; over 30 breakdown requests a minute'
   responses:
     Error:
       description: An error
@@ -303,6 +341,16 @@ paths:
       parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses:
         '200': { description: Deleted, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/sites/{id}/report:
+    get:
+      summary: Totals and series of the site (scope reports); with breakdowns=1 also the top pages, sources, countries, devices, browsers, OS and bots
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: period, in: query, schema: { type: string, enum: [today, 7d, 30d], default: today } }
+        - { name: breakdowns, in: query, schema: { type: string, enum: ['1'] }, description: 'read the breakdowns from the account''s database (cached 5 minutes)' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { report: { $ref: '#/components/schemas/Report' } } } } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/sites/{id}/rotate:
     post:

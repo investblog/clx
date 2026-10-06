@@ -7,6 +7,7 @@ import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
 import { addSite, deleteSite, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { sha256 } from '../lib/crypto';
 import { LIMITS, planOf, SCOPES } from '../limits';
+import { PERIODS, siteReport, type Period } from '../report';
 import type { Env, Principal } from '../types';
 import { KEY_PREFIX, mayTouch, principalOf, requireScope, requireSession } from './auth';
 import { ApiError, errorBody, fail, newId } from './http';
@@ -287,6 +288,17 @@ v1.get(
   handle({ scope: 'sites' }, async (c, p) => {
     const { site, edge } = await siteOf(c, p);
     return { status: 200, body: { site: siteView(site, edge.synced_revision) } };
+  }),
+);
+
+v1.get(
+  '/sites/:id/report',
+  handle({ scope: 'reports' }, async (c, p) => {
+    const { site, edge } = await siteOf(c, p);
+    const period = c.req.query('period') ?? 'today';
+    if (!Object.hasOwn(PERIODS, period)) fail(400, 'invalid_request', `"period" must be one of ${Object.keys(PERIODS).join(', ')}.`, { field: 'period' });
+    const report = await siteReport(c.env, { id: p.userId, plan: p.plan }, edge, site.target, period as Period, c.req.query('breakdowns') === '1');
+    return { status: 200, body: { report } };
   }),
 );
 

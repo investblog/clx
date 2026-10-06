@@ -3,6 +3,8 @@ export interface Env {
   SESSIONS: KVNamespace;
   /** Requests per API key (§15): 120 a minute, per location. */
   API_LIMIT: RateLimit;
+  /** Breakdown reports per user (§7): 30 a minute, per location. */
+  REPORT_LIMIT: RateLimit;
   /** Worker secrets (scripts/secrets.mjs): the access-token key and the token keyring. */
   JWT_SECRET: string;
   MASTER_KEYS: string;

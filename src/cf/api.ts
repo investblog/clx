@@ -68,7 +68,7 @@ export interface CallLog {
   principal: string;
 }
 
-export async function cf<T>(token: string, method: string, path: string, body?: unknown, log?: CallLog): Promise<T> {
+export async function cf<T>(token: string, method: string, path: string, body?: unknown, log?: CallLog, signal?: AbortSignal): Promise<T> {
   // A mutation is logged before it is sent (status 0 = sent, no answer yet), so none goes
   // unrecorded: if the log cannot be written, the call is not made.
   const logged =
@@ -87,6 +87,7 @@ export async function cf<T>(token: string, method: string, path: string, body?: 
       method,
       headers: { authorization: `Bearer ${token}`, ...(body === undefined || form ? {} : { 'content-type': 'application/json' }) },
       body: body === undefined ? undefined : form ? body : JSON.stringify(body),
+      signal,
     });
   } catch (e) {
     throw new CfError(0, method, path.split('?')[0]!, [], e instanceof Error ? e.message : 'network error');

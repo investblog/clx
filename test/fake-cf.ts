@@ -179,9 +179,18 @@ function d1(path: string, method: string, init: RequestInit, url: URL): Response
   }
   if (!m[2] && method === 'GET') return ok({ uuid: m[1], name: d.name });
   if (m[2] && method === 'POST') {
-    const { sql } = JSON.parse(String(init.body)) as { sql: string };
+    const { sql, params } = JSON.parse(String(init.body)) as { sql: string; params?: (string | number)[] };
     if (fakeCf.failSql && fakeCf.failSql.test(sql)) return no(503);
     d.sql.push(sql);
+    // With params D1 takes a single statement (7400, docs/cloudflare-facts.md).
+    if (params) {
+      if (statements(sql).length !== 1) return no(400, 7400);
+      try {
+        return ok([{ results: d.db.prepare(sql).all(...params) as unknown[], meta: { changes: 0 } }]);
+      } catch {
+        return no(400, 7500);
+      }
+    }
     const out: { results: unknown[]; meta: { changes: number } }[] = [];
     // All or nothing, as observed on D1 (docs/cloudflare-facts.md).
     d.db.exec('BEGIN');

@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Backlog
@@ -32,4 +32,8 @@ v2 stages — [`docs/spec.md`](./spec.md) §14.
 - [ ] A site added while its account is being disconnected: the route made in that moment is
       dropped by `placeRoute` when the row is gone, but only if the token still works.
 - [ ] Watch how late a new script's first cron fires (4.5 min on 05.10.2026; the self-check
-      allows 15) — if it grows, the timeout moves to `src/cf/deploy.ts` config.
+      allows 15) — if it grows, the timeout moves to `src/cf/deploy.ts` config. On 05–06.10 the
+      `setup_ok` confirmation did not come in 2 of 2 totals checks (the install stayed
+      `not_confirmed`, the fallback worked) — find out whether the self-check cron fires at all.
+- [ ] Nightly backup of the clx.cx D1 to R2 (as 301 does) — after the release: R2 needs a paid
+      plan switched on in the clx.cx account (owner's decision 06.10.2026).

@@ -23,8 +23,11 @@
   "kv_namespaces": [
     { "binding": "SESSIONS", "id": "00000000000000000000000000000000" }
   ],
-  // Requests per API key (§15).
-  "ratelimits": [{ "name": "API_LIMIT", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+  // Requests per API key (§15); breakdown reports per user (§7).
+  "ratelimits": [
+    { "name": "API_LIMIT", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
+    { "name": "REPORT_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+  ],
   // Every minute: install operations (docs/spec.md §4); at :20 the hourly jobs — a slice of the
   // token check (§3), expired idempotency and call-log rows.
   "triggers": { "crons": ["* * * * *"] },

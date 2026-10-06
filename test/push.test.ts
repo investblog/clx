@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { signAccess } from '../src/auth/jwt';
 import worker from '../src/index';
 import { app } from '../src/index';
+import { clearReportCache } from '../src/report';
 import type { Env } from '../src/types';
 import { d1 } from './d1';
 import { fakeCtx, testEnv } from './env';
@@ -24,6 +25,7 @@ afterAll(() => dispose());
 useFakeCloudflare();
 
 let accountId = '';
+let siteId = '';
 let target = '';
 let idem = 0;
 const at = (t: number) => vi.setSystemTime(t);
@@ -56,7 +58,9 @@ beforeEach(async () => {
   const text = (n: string) => script().bindings.find((b) => b.name === n)?.text;
   await app.request('https://clx.cx/hook/setup', { method: 'POST', headers: { authorization: `Bearer ${script().secrets.get('EDGE_KEY')}` }, body: JSON.stringify({ deployment_id: text('DEPLOYMENT_ID'), bundle: text('BUNDLE'), schema: fakeCf.schemaOf(script().bindings.find((b) => b.name === 'DB')!.id!) }) }, env);
   const site = (await call('POST', '/v1/sites', { account_id: accountId, host: 'example.com' })).body.site;
+  siteId = site.id;
   target = (await rows('SELECT target FROM sites WHERE id = ?', site.id))[0]!.target as string;
+  clearReportCache();
   answer = null;
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init: RequestInit = {}) => {
     const req = new Request(input, init);
@@ -254,5 +258,106 @@ describe('after a disconnect', () => {
     await job(D0 + 31 * 24 * H + 20 * 60_000);
     expect(await rows('SELECT count(*) AS n FROM daily')).toEqual([{ n: 0 }]);
     expect(await rows('SELECT count(*) AS n FROM departed')).toEqual([{ n: 0 }]);
+  });
+});
+
+describe('the report', () => {
+  const report = async (q: string) => (await call('GET', `/v1/sites/${siteId}/report?${q}`)).body;
+  const top = (b: Record<string, { key: string; n: number }[]>, dim: string) => b[dim]!.reduce((n, r) => n + r.n, 0);
+  const reads = () => fakeCf.dbs.get(script().bindings.find((b) => b.name === 'DB')!.id!)!.sql.length;
+  // The platform proxy's binding cannot be spied on: it is swapped for the test and put back.
+  let real: RateLimit;
+  beforeAll(() => {
+    real = env.REPORT_LIMIT;
+  });
+  afterEach(() => {
+    env.REPORT_LIMIT = real;
+  });
+  const limited = (success: boolean) => {
+    const limit = vi.fn(async () => ({ success }));
+    env.REPORT_LIMIT = { limit } as unknown as RateLimit;
+    return limit;
+  };
+
+  it("today: totals and hours from clx.cx, breakdowns from the account's database", async () => {
+    await view(D0 + 10.2 * H);
+    await view(D0 + 10.4 * H, { ip: '10.0.0.2' });
+    await view(D0 + 10.6 * H, { ua: 'curl/8' });
+    await hourly(D0 + 11 * H + 300_000);
+    // The open hour is not sent yet: neither the series nor the breakdowns show it.
+    await view(D0 + 11.3 * H, { ip: '10.0.0.9' });
+    at(D0 + 11.5 * H);
+    const { report: r } = await report('period=today&breakdowns=1');
+    expect(r).toMatchObject({ period: 'today', from: '2026-10-05', to: '2026-10-05', as_of: new Date(D0 + 11 * H).toISOString(), totals: { views: 2, bots: 1, visitors: 2 }, incomplete: false });
+    expect(r.series).toHaveLength(11);
+    expect(r.series[10]).toEqual({ at: new Date(D0 + 10 * H).toISOString(), views: 2, bots: 1 });
+    for (const dim of ['pages', 'sources', 'countries', 'devices', 'browsers', 'os']) expect(top(r.breakdowns, dim)).toBe(2);
+    expect(top(r.breakdowns, 'bots')).toBe(1);
+    // Without breakdowns=1 the user's database is not read.
+    const before = reads();
+    expect((await report('period=today')).report.breakdowns).toBeUndefined();
+    expect(reads()).toBe(before);
+  });
+
+  it('7 days: a closed day counts once (daily detail), a day not closed yet comes from its hours', async () => {
+    await view(D0 + 10.2 * H);
+    await view(D0 + 10.4 * H, { ip: '10.0.0.2' });
+    await hourly(D0 + 11 * H + 300_000);
+    await hourly(D0 + 24 * H + 300_000); // closes day 0; its hours stay 31 days
+    await view(D0 + 25.2 * H, { ip: '10.0.0.3' });
+    await hourly(D0 + 26 * H + 300_000);
+    at(D0 + 26.5 * H);
+    const { report: r } = await report('period=7d&breakdowns=1');
+    expect(r.totals).toEqual({ views: 3, bots: 0, visitors: 3 });
+    expect(r.series).toHaveLength(7);
+    expect(r.series.at(-2)).toMatchObject({ views: 2, visitors: 2 });
+    expect(top(r.breakdowns, 'pages')).toBe(3);
+  });
+
+  it('Cloudflare failing leaves the totals and marks the breakdowns unavailable; an answer is cached 5 minutes', async () => {
+    await view(D0 + 10.2 * H);
+    await hourly(D0 + 11 * H + 300_000);
+    at(D0 + 11.5 * H);
+    fakeCf.failSql = /closed_days/u;
+    expect((await report('breakdowns=1')).report).toMatchObject({ totals: { views: 1 }, breakdowns: null, unavailable: 'cloudflare' });
+    fakeCf.failSql = null;
+    expect(top((await report('breakdowns=1')).report.breakdowns, 'pages')).toBe(1);
+    // Cached: Cloudflare failing now does not show, and the limit is not asked.
+    fakeCf.failSql = /closed_days/u;
+    const limit = limited(true);
+    expect(top((await report('breakdowns=1')).report.breakdowns, 'pages')).toBe(1);
+    expect(limit).not.toHaveBeenCalled();
+    at(D0 + 11.5 * H + 5 * 60_000);
+    expect((await report('breakdowns=1')).report.unavailable).toBe('cloudflare');
+    expect(limit).toHaveBeenCalledOnce();
+  });
+
+  it('the same report asked twice at once spends one request of the limit', async () => {
+    await view(D0 + 10.2 * H);
+    await hourly(D0 + 11 * H + 300_000);
+    at(D0 + 11.5 * H);
+    const limit = limited(true);
+    const both = await Promise.all([report('breakdowns=1'), report('breakdowns=1')]);
+    expect(both.map((b) => top(b.report.breakdowns, 'pages'))).toEqual([1, 1]);
+    expect(limit).toHaveBeenCalledOnce();
+  });
+
+  it('over 30 breakdown requests a minute the breakdowns wait; a bad period is refused', async () => {
+    limited(false);
+    expect((await report('period=30d&breakdowns=1')).report).toMatchObject({ breakdowns: null, unavailable: 'rate_limited', series: expect.any(Array) });
+    for (const bad of ['year', 'constructor']) expect((await call('GET', `/v1/sites/${siteId}/report?period=${bad}`)).status).toBe(400);
+  });
+
+  it('a token that cannot be opened leaves the totals and marks the breakdowns unavailable', async () => {
+    await view(D0 + 10.2 * H);
+    await hourly(D0 + 11 * H + 300_000);
+    at(D0 + 11.5 * H);
+    await env.DB.prepare('UPDATE edge_accounts SET token_sealed = ?1 WHERE id = ?2').bind('{"k":"gone","iv":"","ct":""}', accountId).run();
+    expect(await call('GET', `/v1/sites/${siteId}/report?breakdowns=1`)).toMatchObject({ status: 200, body: { report: { totals: { views: 1 }, breakdowns: null, unavailable: 'not_installed' } } });
+  });
+
+  it('over the write budget today is marked incomplete', async () => {
+    await env.DB.prepare('UPDATE edge_accounts SET budget_day = ?1, budget_used = 3000 WHERE id = ?2').bind(DAY0, accountId).run();
+    expect((await report('period=today')).report.incomplete).toBe(true);
   });
 });
