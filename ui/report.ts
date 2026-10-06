@@ -3,6 +3,7 @@
 import { call } from './api';
 import { num, when } from './accounts';
 import { h, s } from './dom';
+import type { Link } from './links';
 import type { Site } from './sites';
 
 type Top = { key: string; n: number }[];
@@ -57,18 +58,27 @@ function statCard(title: string, value: string, hint?: string): HTMLElement {
   return h('div', { class: 'stat-card' }, h('span', { class: 'stat-card__label' }, title), h('span', { class: 'stat-card__value' }, value), hint ? h('span', { class: 'text-subtle text-sm' }, hint) : null);
 }
 
-function chart(r: Report): HTMLElement {
+/** The words of a site's report, or of a link's: a link's view is a click. */
+interface Words {
+  views: string;
+  ofViews: string;
+  empty: string;
+}
+const SITE_WORDS: Words = { views: 'Просмотры', ofViews: 'просмотров', empty: 'За сегодня ещё нет закрытых часов: первые цифры придут в начале следующего часа.' };
+const LINK_WORDS: Words = { views: 'Клики', ofViews: 'кликов', empty: 'Сегодняшние клики сейчас недоступны.' };
+
+function chart(r: Report, w: Words): HTMLElement {
   const hourly = r.period === 'today';
   const n = r.series.length;
-  if (!n) return h('div', { class: 'card chart-card' }, h('p', { class: 'muted' }, 'За сегодня ещё нет закрытых часов: первые цифры придут в начале следующего часа.'));
+  if (!n) return h('div', { class: 'card chart-card' }, h('p', { class: 'muted' }, w.empty));
   const max = Math.max(1, ...r.series.map((p) => Math.max(p.views, p.visitors ?? 0)));
   const W = n * 10;
-  const svg = s('svg', { class: 'chart', viewBox: `0 0 ${W} 100`, preserveAspectRatio: 'none', role: 'img', 'aria-label': `Просмотры по ${hourly ? 'часам' : 'дням'}` });
+  const svg = s('svg', { class: 'chart', viewBox: `0 0 ${W} 100`, preserveAspectRatio: 'none', role: 'img', 'aria-label': `${w.views} по ${hourly ? 'часам' : 'дням'}` });
   for (const y of [25, 50, 75]) svg.append(s('line', { x1: 0, x2: W, y1: y, y2: y }));
   const at = (i: number) => (hourly ? hourLabel(r.series[i]!.at) : dayLabel(r.series[i]!.at));
   r.series.forEach((p, i) => {
     const hgt = (p.views / max) * 96;
-    const tip = `${at(i)}: ${num(p.views)} просмотров${p.visitors !== undefined ? `, ${num(p.visitors)} посетителей` : ''}, ${num(p.bots)} ботов`;
+    const tip = `${at(i)}: ${num(p.views)} ${w.ofViews}${p.visitors !== undefined ? `, ${num(p.visitors)} посетителей` : ''}, ${num(p.bots)} ботов`;
     svg.append(s('rect', { x: i * 10 + 1.5, width: 7, y: 100 - hgt, height: Math.max(hgt, 0) }, s('title', {}, document.createTextNode(tip))));
   });
   if (!hourly) svg.append(s('polyline', { points: r.series.map((p, i) => `${i * 10 + 5},${100 - ((p.visitors ?? 0) / max) * 96}`).join(' ') }));
@@ -76,7 +86,7 @@ function chart(r: Report): HTMLElement {
   return h(
     'div',
     { class: 'card chart-card' },
-    h('div', { class: 'legend' }, h('span', { class: 'l-views' }, hourly ? 'Просмотры по часам' : 'Просмотры'), hourly ? null : h('span', { class: 'l-visitors' }, 'Посетители'), h('span', { class: 'muted' }, `макс. ${num(max)}`)),
+    h('div', { class: 'legend' }, h('span', { class: 'l-views' }, hourly ? `${w.views} по часам` : w.views), hourly ? null : h('span', { class: 'l-visitors' }, 'Посетители'), h('span', { class: 'muted' }, `макс. ${num(max)}`)),
     svg,
     axis,
   );
@@ -97,41 +107,54 @@ function breakdown(title: string, dim: string, rows: Top, total: number): HTMLEl
   return h('section', { class: 'card breakdown' }, h('h3', {}, title), rows.length ? list : h('p', { class: 'empty' }, 'Нет данных за период'));
 }
 
-export async function reportPage(id: string, period: string): Promise<HTMLElement> {
+/** The report of a site or of a link: the same shape; a link has no pages and its today is live. */
+export async function reportPage(kind: 'sites' | 'links', id: string, period: string): Promise<HTMLElement> {
   const p = PERIODS.some(([k]) => k === period) ? period : 'today';
-  const [{ site }, { report: r }] = await Promise.all([call<{ site: Site }>('GET', `/v1/sites/${id}`), call<{ report: Report }>('GET', `/v1/sites/${id}/report?period=${p}&breakdowns=1`)]);
+  const [subject, { report: r }] = await Promise.all([
+    kind === 'sites' ? call<{ site: Site }>('GET', `/v1/sites/${id}`).then(({ site }) => site.host) : call<{ link: Link }>('GET', `/v1/links/${id}`).then(({ link }) => link.short_url ?? link.code),
+    call<{ report: Report }>('GET', `/v1/${kind}/${id}/report?period=${p}&breakdowns=1`),
+  ]);
   const t = r.totals;
   const span = r.period === 'today' ? `${r.to}, UTC` : `${r.from} — ${r.to}, UTC`;
   const b = r.breakdowns;
   const dims: [keyof NonNullable<Report['breakdowns']>, string][] = [
-    ['pages', 'Страницы'],
+    ...(kind === 'sites' ? [['pages', 'Страницы'] as [keyof NonNullable<Report['breakdowns']>, string]] : []),
     ['sources', 'Источники'],
     ['countries', 'Страны'],
     ['devices', 'Устройства'],
     ['browsers', 'Браузеры'],
     ['os', 'Системы'],
   ];
+  const w = kind === 'links' ? LINK_WORDS : SITE_WORDS;
+  const asOf =
+    kind === 'links'
+      ? r.as_of
+        ? `Клики считаются сразу — по состоянию на ${when(r.as_of)}.`
+        : `Сегодняшние клики сейчас недоступны: ${UNAVAILABLE[r.unavailable ?? 'cloudflare']}`
+      : r.as_of
+        ? `По состоянию на ${when(r.as_of)} — часы приходят с задержкой до часа.`
+        : 'Сегодняшних часов ещё нет.';
   return h(
     'div',
     { class: 'stack stack--md' },
-    h('p', {}, h('a', { href: `#/sites/${site.id}` }, `← ${site.host}`)),
+    h('p', {}, h('a', { href: `#/${kind}/${id}` }, `← ${subject}`)),
     h(
       'div',
       { class: 'page-head' },
-      h('h2', {}, `Отчёт: ${site.host}`),
-      h('div', { class: 'btn-chip-group', role: 'group' }, ...PERIODS.map(([k, text]) => h('a', { class: 'btn btn-chip btn-chip--sm', href: `#/sites/${site.id}/report?p=${k}`, 'aria-pressed': String(k === r.period) }, text))),
+      h('h2', {}, `Отчёт: ${subject}`),
+      h('div', { class: 'btn-chip-group', role: 'group' }, ...PERIODS.map(([k, text]) => h('a', { class: 'btn btn-chip btn-chip--sm', href: `#/${kind}/${id}/report?p=${k}`, 'aria-pressed': String(k === r.period) }, text))),
     ),
-    h('p', { class: 'muted text-sm' }, `${span}. ${r.as_of ? `По состоянию на ${when(r.as_of)} — часы приходят с задержкой до часа.` : 'Сегодняшних часов ещё нет.'}`),
+    h('p', { class: 'muted text-sm' }, `${span}. ${asOf}`),
     r.incomplete ? h('div', { class: 'banner banner--warning' }, 'Сегодняшние часы неполные: аккаунт превысил дневной бюджет записей на clx.cx. Итоги дня останутся точными.') : null,
     h(
       'div',
       { class: 'stats-grid' },
       statCard('Посетители', num(t.visitors), 'сумма дневных уникальных'),
-      statCard('Просмотры', num(t.views)),
-      statCard('Просмотров на посетителя', t.visitors ? (t.views / t.visitors).toFixed(1).replace('.', ',') : '—'),
+      statCard(w.views, num(t.views)),
+      statCard(`${w.views} на посетителя`, t.visitors ? (t.views / t.visitors).toFixed(1).replace('.', ',') : '—'),
       statCard('Доля ботов', pct(t.bots, t.bots + t.views), `заходов ботов: ${num(t.bots)}`),
     ),
-    chart(r),
+    chart(r, w),
     b
       ? h('div', { class: 'breakdowns' }, ...dims.map(([d, title]) => breakdown(title, d, b[d], t.views)), breakdown('Боты', 'bots', b.bots, t.bots))
       : h('div', { class: 'card' }, h('p', {}, UNAVAILABLE[r.unavailable ?? 'cloudflare'])),

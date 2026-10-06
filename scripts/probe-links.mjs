@@ -8,7 +8,8 @@
 //   2. that host becomes the link host (the route made with the working token); a link with a rule
 //      by country and device;
 //   3. clicks: 302 with no-store and no body, the rules by the visitor's country and device, `?q` as
-//      source qr, a plain 404 for anything else; the clicks in the account's own D1;
+//      source qr, a plain 404 for anything else; the clicks in the account's own D1 and in the
+//      link's report (stage 5b: today live, breakdowns in the same read);
 //   4. a change of the URL reaches the worker, a delete makes it a 404;
 //   5. disconnect (the link host route goes with it), the DNS record deleted, cleanup.
 // A few minutes; no cron is waited for. Write the output to a file, never through `| head` — a cut
@@ -145,6 +146,15 @@ try {
   const totals = await until(() => q(`SELECT views, bots FROM totals WHERE target = '${target}'`), (r) => r?.[0]?.views >= 3, 1);
   const detail = await q(`SELECT source, device, country, views FROM views_hourly WHERE target = '${target}' ORDER BY source, device`);
   step('the clicks counted in the account: 3 views, one from the QR, one from a phone', totals?.[0]?.views === 3 && detail.some((r) => r.source === 'qr') && detail.some((r) => r.device === 'mobile' && r.country === loc), JSON.stringify(detail));
+
+  // The link's report: today live from the account's D1, totals and breakdowns in one statement.
+  const rep = (await clx('GET', `/v1/links/${linkId}/report?period=today&breakdowns=1`, key)).body.report;
+  const sumOf = (dim) => (rep?.breakdowns?.[dim] ?? []).reduce((n, r) => n + r.n, 0);
+  step(
+    "the link's report: today live, totals and breakdowns of one read",
+    rep?.totals?.views === 3 && rep?.as_of && sumOf('devices') === 3 && sumOf('sources') === 3 && rep.breakdowns.sources.some((r) => r.key === 'qr'),
+    JSON.stringify({ totals: rep?.totals, sources: rep?.breakdowns?.sources, devices: rep?.breakdowns?.devices, unavailable: rep?.unavailable }),
+  );
 
   // The worker caches a link for 60 s: a change shows within that.
   const changed = await clx('PATCH', `/v1/links/${linkId}`, key, { url: 'https://example.com/b' }, `probe-patch-${run}`);

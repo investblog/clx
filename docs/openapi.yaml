@@ -161,6 +161,7 @@ components:
         rules: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Rule' }, description: 'the first match wins' }
         state: { type: string, enum: [active, deleted] }
         config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the link yet' }
+        clicks_7d: { type: integer, description: 'clicks of the last 7 closed UTC days (GET /v1/links only, and only with the reports scope)' }
         created_at: { type: string, format: date-time }
     Site:
       type: object
@@ -221,7 +222,7 @@ components:
         unavailable:
           type: string
           enum: [not_installed, cloudflare, rate_limited]
-          description: 'why breakdowns is null: the worker is not installed or the token is gone; Cloudflare failed or took over 5 s; over 30 breakdown requests a minute'
+          description: 'why breakdowns (and a link''s today) are not there: the worker is not installed or the token is gone; Cloudflare failed or took over 5 s; over 30 requests to the account''s database a minute'
   responses:
     Error:
       description: An error
@@ -479,6 +480,22 @@ paths:
       parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses:
         '200': { description: Deleted, content: { application/json: { schema: { type: object, properties: { link: { $ref: '#/components/schemas/Link' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/links/{id}/report:
+    get:
+      summary: Clicks of the link (scope reports); with breakdowns=1 also sources, countries, devices, browsers, OS and bots
+      description: |
+        Closed days come from clx.cx; today (and any day the worker has not sent yet) is read live
+        from the account's own database in one read with the breakdowns — `as_of` is the moment of
+        that read (cached up to 5 minutes, so it can be that much older than the answer). When that database
+        cannot be read, the totals hold clx.cx's days only, the series of `today` is empty and
+        `unavailable` says why. `incomplete` is always false: a link's days are never refused.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: period, in: query, schema: { type: string, enum: [today, 7d, 30d], default: today } }
+        - { name: breakdowns, in: query, schema: { type: string, enum: ['1'] } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { report: { $ref: '#/components/schemas/Report' } } } } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/sites/{id}/rotate:
     post:

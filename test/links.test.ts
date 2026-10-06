@@ -8,6 +8,7 @@ import { runLinkHosts } from '../src/cf/links';
 import { runSites } from '../src/cf/sites';
 import { app } from '../src/index';
 import { receive } from '../src/push';
+import { clearReportCache, linkReport } from '../src/report';
 import type { Env } from '../src/types';
 import { d1 } from './d1';
 import { fakeCtx, testEnv } from './env';
@@ -284,6 +285,98 @@ describe('links', () => {
       .bind(accountId, JSON.stringify(Array.from({ length: 200 }, (_, i) => i)))
       .run();
     expect((await addLink({ url: 'https://example.org/' })).body.error).toMatchObject({ code: 'limit_reached', details: { limit: 200 } });
+  });
+});
+
+describe('the report of a link', () => {
+  beforeEach(async () => {
+    clearReportCache();
+    await setHost('go.example.com');
+  });
+
+  it('today live from the account: clicks by hour, the open hour included; with breakdowns', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
+    await visit('https://go.example.com/promo?q');
+    await visit('https://go.example.com/promo', { 'user-agent': IPHONE, 'cf-connecting-ip': '198.51.100.8' });
+    const r = (await call('GET', `/v1/links/${id}/report?period=today&breakdowns=1`)).body.report;
+    expect(r).toMatchObject({ period: 'today', totals: { views: 2, bots: 0, visitors: 2 }, incomplete: false });
+    expect(r.as_of).not.toBeNull();
+    expect(r.series).toHaveLength(new Date().getUTCHours() + 1);
+    expect(r.series.at(-1)).toMatchObject({ views: 2 });
+    expect(r.breakdowns.sources).toEqual([
+      { key: '', n: 1 },
+      { key: 'qr', n: 1 },
+    ]);
+    expect(r.breakdowns.devices).toEqual([
+      { key: 'desktop', n: 1 },
+      { key: 'mobile', n: 1 },
+    ]);
+  });
+
+  it('closed days from clx.cx, today from the account; the 7 days add up', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
+    const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
+    const day = Math.floor(Date.now() / 86_400_000);
+    await env.DB.prepare('INSERT INTO daily (account_id, target, day, as_of_hour, final, views, bots, visitors) VALUES (?1, ?2, ?3, ?3 * 24 + 23, 1, 7, 2, 5)').bind(accountId, t, day - 2).run();
+    await visit('https://go.example.com/promo');
+    const r = (await call('GET', `/v1/links/${id}/report?period=7d`)).body.report;
+    expect(r.totals).toEqual({ views: 8, bots: 2, visitors: 6 });
+    expect(r.series.map((p: { views: number }) => p.views)).toEqual([0, 0, 0, 0, 7, 0, 1]);
+    // The list shows the clicks of the last 7 closed days.
+    expect((await call('GET', '/v1/links')).body.links[0].clicks_7d).toBe(7);
+  });
+
+  it('a day closed in the account but not sent yet: read live, its visitors from final_days', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
+    const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
+    const day = Math.floor(Date.now() / 86_400_000);
+    userDb().prepare('INSERT INTO totals (target, day, views, bots) VALUES (?, ?, 4, 1)').run(t, day - 1);
+    userDb().prepare('INSERT INTO final_days (target, day, views, bots, visitors) VALUES (?, ?, 4, 1, 3)').run(t, day - 1);
+    const r = (await call('GET', `/v1/links/${id}/report?period=7d`)).body.report;
+    expect(r.totals).toEqual({ views: 4, bots: 1, visitors: 3 });
+  });
+
+  it('a cached read is as old as it is: as_of does not move with the request', async () => {
+    await addLink({ code: 'promo', url: 'https://example.org/' });
+    const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
+    const edge = (await env.DB.prepare('SELECT * FROM edge_accounts').first<EdgeAccount>())!;
+    const now = Date.now();
+    const first = await linkReport(env, { id: 1, plan: 'free' }, edge, t, 'today', false, now);
+    const later = await linkReport(env, { id: 1, plan: 'free' }, edge, t, 'today', false, now + 60_000);
+    expect(later.as_of).toBe(first.as_of);
+    expect(first.as_of).toBe(new Date(now).toISOString());
+  });
+
+  it('totals and breakdowns of one answer are of the same moment, whatever was cached before', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
+    await visit('https://go.example.com/promo');
+    expect((await call('GET', `/v1/links/${id}/report?period=today`)).body.report.totals.views).toBe(1);
+    await visit('https://go.example.com/promo', { 'cf-connecting-ip': '198.51.100.9' });
+    const r = (await call('GET', `/v1/links/${id}/report?period=today&breakdowns=1`)).body.report;
+    expect(r.totals.views).toBe(2);
+    expect(r.breakdowns.devices.reduce((n: number, d: { n: number }) => n + d.n, 0)).toBe(2);
+  });
+
+  it('a key without the reports scope lists links without their clicks', async () => {
+    await env.DB.prepare("UPDATE users SET plan = 'api' WHERE id = 1").run();
+    await addLink({ code: 'promo', url: 'https://example.org/' });
+    const issued = await call('POST', '/v1/keys', { body: { scopes: ['links'] } });
+    const res = await app.request('https://clx.cx/v1/links', { headers: { authorization: `Bearer ${issued.body.key}`, 'cf-connecting-ip': '10.4.1.1' } }, env);
+    const links = ((await res.json()) as { links: Record<string, unknown>[] }).links;
+    expect(links).toHaveLength(1);
+    expect(links[0]).not.toHaveProperty('clicks_7d');
+    expect((await call('GET', '/v1/links')).body.links[0]).toHaveProperty('clicks_7d', 0);
+  });
+
+  it("the account's database unreachable: clx.cx's days, today unavailable with the reason", async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
+    const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
+    const day = Math.floor(Date.now() / 86_400_000);
+    await env.DB.prepare('INSERT INTO daily (account_id, target, day, as_of_hour, final, views, bots, visitors) VALUES (?1, ?2, ?3, ?3 * 24 + 23, 1, 3, 0, 3)').bind(accountId, t, day - 1).run();
+    fakeCf.failSql = /FROM totals t/u;
+    const r = (await call('GET', `/v1/links/${id}/report?period=7d&breakdowns=1`)).body.report;
+    expect(r).toMatchObject({ totals: { views: 3 }, as_of: null, breakdowns: null, unavailable: 'cloudflare' });
+    expect((await call('GET', `/v1/links/${id}/report?period=today`)).body.report).toMatchObject({ series: [], unavailable: 'cloudflare' });
   });
 });
 

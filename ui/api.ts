@@ -98,7 +98,15 @@ export interface Account {
   push: { at: string; bundle: string; schema: number | null; queue: number; error: string | null; dropped: Record<string, number> } | null;
   advice: { level: string; metric: string | null; metrics: Record<string, MetricAdvice>; unavailable?: string[]; suggest?: string; at: string } | null;
   operation?: { kind: string; state: string; step: string; error: { code?: string; message?: string } | null; updated_at: string } | null;
+  /** GET /v1/accounts/{id} only */
+  link_host?: LinkHost | null;
   created_at: string;
+}
+export interface LinkHost {
+  host: string;
+  state: string;
+  config: 'pending' | 'synced';
+  error: { code?: string; [k: string]: unknown } | null;
 }
 export interface Key {
   id: string;

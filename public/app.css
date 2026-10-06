@@ -25,7 +25,7 @@ main{max-width:1200px;margin:0 auto;padding:var(--space-4) var(--gutter) var(--s
 .narrow{max-width:640px}
 main .card{padding:var(--card-pad-y) var(--card-pad-x)}
 main .card h3{margin:0}
-.account-row{flex-direction:row;align-items:center;flex-wrap:wrap;gap:var(--space-3);color:var(--text)}
+.account-row{display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:var(--space-3);color:var(--text)}
 main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
 .account-row strong{margin-right:auto}
 .steps{padding-left:var(--space-5);margin:0 0 var(--space-4)}
@@ -70,3 +70,8 @@ main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
 .masked{-webkit-text-security:disc}
 .secret-card{align-items:flex-start}
 code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radius:var(--radius-xs);background:var(--bg-soft);overflow-wrap:anywhere;user-select:all}
+
+/* Pages of stage 5b: links. */
+.truncate{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rule-row{display:grid;grid-template-columns:minmax(90px,1fr) minmax(140px,auto) minmax(180px,2fr) auto;gap:var(--space-2);align-items:center}
+@media (max-width:560px){.rule-row{grid-template-columns:1fr}}

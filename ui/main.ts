@@ -2,6 +2,7 @@
 import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
 import { get, login, logout, refresh, SignedOut, type Me } from './api';
 import { h } from './dom';
+import { linkPage, linksBlock, newLinkPage } from './links';
 import { reportPage } from './report';
 import { newSitePage, sitePage, sitesBlock } from './sites';
 
@@ -32,7 +33,8 @@ const go = (hash: string) => {
   else location.hash = hash;
 };
 
-/** The page for the address: #/ accounts and sites, #/connect, #/accounts/<id>, #/keys, #/sites/new, #/sites/<id>. */
+/** The page for the address: #/ accounts, sites and links, #/connect, #/accounts/<id>, #/keys,
+ *  #/sites/new, #/sites/<id>, #/links/new, #/links/<id>, and the reports …/<id>/report. */
 async function page(path: string, mine: number): Promise<[HTMLElement, string]> {
   const live = () => mine === seq;
   const redraw = (message?: string) => {
@@ -44,12 +46,15 @@ async function page(path: string, mine: number): Promise<[HTMLElement, string]> 
   if (account) return [await accountPage(account[1]!, live, redraw), 'Аккаунт'];
   if (path === '/keys') return [await keysPage(me!, redraw), 'Ключи API'];
   if (path === '/sites/new') return [await newSitePage(me!, go), 'Добавить сайт'];
-  const report = path.match(/^\/sites\/([\w-]+)\/report(?:\?p=([\w]+))?$/u);
-  if (report) return [await reportPage(report[1]!, report[2] ?? 'today'), 'Отчёт'];
+  const report = path.match(/^\/(sites|links)\/([\w-]+)\/report(?:\?p=([\w]+))?$/u);
+  if (report) return [await reportPage(report[1] as 'sites' | 'links', report[2]!, report[3] ?? 'today'), 'Отчёт'];
   const site = path.match(/^\/sites\/([\w-]+)$/u);
   if (site) return [await sitePage(site[1]!, live, redraw), 'Сайт'];
-  const [accounts, sites] = await Promise.all([accountsPage(me!), sitesBlock()]);
-  return [h('div', {}, accounts, sites), 'Главная'];
+  if (path === '/links/new') return [await newLinkPage(me!, go), 'Новая ссылка'];
+  const link = path.match(/^\/links\/([\w-]+)$/u);
+  if (link) return [await linkPage(link[1]!, live, redraw), 'Ссылка'];
+  const [accounts, sites, links] = await Promise.all([accountsPage(me!), sitesBlock(), linksBlock(() => redraw())]);
+  return [h('div', {}, accounts, sites, links), 'Главная'];
 }
 
 async function route(): Promise<void> {

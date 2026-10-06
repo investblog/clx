@@ -44,6 +44,8 @@ const ERROR: Record<string, string> = {
   not_configured: 'Сервис ещё не настроен.',
   zone_not_found: 'В аккаунте нет зоны для этого хоста.',
   site_exists: 'Такой сайт уже добавлен.',
+  link_host_required: 'Сначала задайте хост ссылок этого аккаунта.',
+  link_exists: 'Такой код уже занят другой ссылкой этого аккаунта.',
   route_conflict: 'На этом пути уже стоит другой воркер.',
   site_not_active: 'Сайт ещё не активен.',
   route_not_ours: 'Маршрут clx изменили вне clx — он оставлен как есть.',

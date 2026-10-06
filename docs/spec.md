@@ -479,7 +479,10 @@ Why:
   - everything is **as of** the end of the latest closed hour the worker sent today (`as_of`; the
     start of today when nothing came yet): the series stops there and the breakdowns read the
     user's D1 up to the same hour, so the open hour — counted there, not yet sent — never shows
-    in one part of the report and not in another;
+    in one part of the report and not in another. A link's report has no hour waiting to be sent:
+    its days not final on clx.cx (today, or any the worker has not sent yet) and its breakdowns are
+    read live, open hour included, in one statement (so its totals and breakdowns are of one
+    moment), and it is as of that read;
   - closed days come from the daily detail, days not closed yet (today, or days a stalled worker
     has not reached) from the hourly detail — never both;
   - one `/query` call — one statement, since D1 takes one statement with params

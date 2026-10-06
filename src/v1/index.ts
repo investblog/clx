@@ -9,7 +9,7 @@ import { addLink, deleteLink, linkHostView, linkView, liveLinkHost, patchLink, s
 import { addSite, deleteSite, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { sha256 } from '../lib/crypto';
 import { LIMITS, planOf, SCOPES } from '../limits';
-import { PERIODS, siteReport, type Period } from '../report';
+import { linkReport, PERIODS, siteReport, type Period } from '../report';
 import type { Env, Principal } from '../types';
 import { KEY_PREFIX, mayTouch, principalOf, requireScope, requireSession } from './auth';
 import { ApiError, errorBody, fail, newId } from './http';
@@ -379,7 +379,30 @@ v1.get(
         .bind(p.userId, accountId)
         .all<LinkRow & { cf_account_id: string; synced_revision: number; link_host: string | null }>()
     ).results;
-    return { status: 200, body: { links: rows.filter((r) => mayTouch(p, r.cf_account_id)).map((r) => linkView(r, r.link_host, r.synced_revision)) } };
+    const mine = rows.filter((r) => mayTouch(p, r.cf_account_id));
+    // Totals are the `reports` scope's (§15): a key with `links` alone sees the links, not their clicks.
+    if (!p.scopes.has('reports')) return { status: 200, body: { links: mine.map((r) => linkView(r, r.link_host, r.synced_revision)) } };
+    // Clicks of the last 7 closed days, from clx.cx's own totals (§10): today is in the report.
+    const day = Math.floor(Date.now() / 86_400_000);
+    const clicks = new Map(
+      (
+        await c.env.DB.prepare('SELECT d.target, sum(d.views) AS n FROM daily d JOIN links l ON l.account_id = d.account_id AND l.target = d.target WHERE l.user_id = ?1 AND d.day >= ?2 AND d.day < ?3 GROUP BY d.target')
+          .bind(p.userId, day - 7, day)
+          .all<{ target: string; n: number }>()
+      ).results.map((r) => [r.target, r.n]),
+    );
+    return { status: 200, body: { links: mine.map((r) => ({ ...linkView(r, r.link_host, r.synced_revision), clicks_7d: clicks.get(r.target) ?? 0 })) } };
+  }),
+);
+
+v1.get(
+  '/links/:id/report',
+  handle({ scope: 'reports' }, async (c, p) => {
+    const { link, edge } = await linkOf(c, p);
+    const period = c.req.query('period') ?? 'today';
+    if (!Object.hasOwn(PERIODS, period)) fail(400, 'invalid_request', `"period" must be one of ${Object.keys(PERIODS).join(', ')}.`, { field: 'period' });
+    const report = await linkReport(c.env, { id: p.userId, plan: p.plan }, edge, link.target, period as Period, c.req.query('breakdowns') === '1');
+    return { status: 200, body: { report } };
   }),
 );
 
