@@ -21,7 +21,7 @@ useFakeCloudflare();
 
 beforeEach(async () => {
   for (const t of ['cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
-  await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, plan, admin) VALUES (1, 'free@example.com', 'x', 0, 'free', 1), (2, 'api@example.com', 'x', 0, 'api', 0)").run();
+  await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, email_confirmed_at, plan, admin) VALUES (1, 'free@example.com', 'x', 0, 0, 'free', 1), (2, 'api@example.com', 'x', 0, 0, 'api', 0)").run();
   fakeCf.reset();
 });
 

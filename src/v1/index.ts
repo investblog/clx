@@ -83,7 +83,8 @@ v1.onError((e, c) => {
 v1.get(
   '/me',
   handle({}, async (c, p) => {
-    const user = (await c.env.DB.prepare('SELECT id, email FROM users WHERE id = ?').bind(p.userId).first<{ id: number; email: string }>())!;
+    const row = (await c.env.DB.prepare('SELECT id, email, email_confirmed_at FROM users WHERE id = ?').bind(p.userId).first<{ id: number; email: string; email_confirmed_at: number | null }>())!;
+    const user = { id: row.id, email: row.email, email_confirmed: row.email_confirmed_at !== null };
     const use = await c.env.DB.prepare(
       "SELECT (SELECT count(*) FROM edge_accounts WHERE user_id = ?1 AND state != 'pending') AS cf_accounts, (SELECT count(*) FROM api_keys WHERE user_id = ?1 AND revoked_at IS NULL) AS api_keys",
     )
@@ -187,6 +188,9 @@ v1.post(
     if (!/^[0-9a-f]{32}$/u.test(cfAccountId)) fail(400, 'invalid_request', '"cf_account_id" must be 32 hex characters.', { field: 'cf_account_id' });
     if (!BOOTSTRAP.test(bootstrap)) fail(400, 'invalid_request', '"bootstrap_token" is missing or malformed.', { field: 'bootstrap_token' });
     if (!mayTouch(p, cfAccountId)) fail(403, 'scope_required', 'This key may not touch that Cloudflare account.');
+    // Before the address is confirmed the user can sign in but not connect an account (§9).
+    if (!(await c.env.DB.prepare('SELECT email_confirmed_at IS NOT NULL AS ok FROM users WHERE id = ?').bind(p.userId).first<number>('ok')))
+      fail(403, 'email_unconfirmed', 'Confirm your e-mail address first: the link is in the e-mail clx sent at sign-up.');
     // 202: a connected account goes on to the install (§4); the caller polls GET for its state.
     const edge = await connect(c.env, p, cfAccountId, bootstrap);
     return { status: 202, body: { account: accountView(edge.state === 'connected' ? await install(c, p, edge) : edge) } };

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../src/index';
-import { signAccess, verifyAccess } from '../src/auth/jwt';
+import { accessOf, signAccess } from '../src/auth/jwt';
 import { hashPassword } from '../src/auth/password';
 import type { Env } from '../src/types';
 import { testEnv } from './env';
@@ -31,7 +31,7 @@ describe('sign-in', () => {
     const res = await login('Owner@Example.com', 'Right-pass-1');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { access_token: string };
-    expect(await verifyAccess('test-jwt-secret', body.access_token, Date.now())).toBe(1);
+    expect((await accessOf('test-jwt-secret', body.access_token, Date.now()))?.sub).toBe(1);
     const cookie = res.headers.get('set-cookie')!;
     expect(cookie).toMatch(/HttpOnly/iu);
     expect(cookie).toMatch(/SameSite=Strict/iu);

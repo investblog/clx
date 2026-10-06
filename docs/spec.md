@@ -652,10 +652,19 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   15-minute JWT (`src/auth/jwt.ts`), a 7-day refresh session in KV `SESSIONS`
   (`src/auth/routes.ts`).
 - New:
-  - `POST /auth/signup {email, password}` → a confirmation e-mail (24 h); before confirming the user
-    can sign in but cannot connect a Cloudflare account;
-  - `POST /auth/reset` + `POST /auth/reset/confirm` — password reset by e-mail (1 h); a reset ends all
-    sessions;
+  - `POST /auth/signup {email, password, turnstile}` → a confirmation e-mail (24 h) with a link
+    `/#/confirm?t=<token>` (in the fragment, so the token reaches no server log or `Referer`);
+    `POST /auth/confirm {token}`; a signed-in unconfirmed user can ask again
+    (`POST /auth/confirm/resend`, the new link replaces the old one). Before confirming the user
+    can sign in but cannot connect a Cloudflare account (`email_unconfirmed`). Passwords: 10–256
+    characters. Users made by `scripts/user.mjs` are confirmed;
+  - `POST /auth/reset {email, turnstile}` + `POST /auth/reset/confirm {token, password}` — password
+    reset by e-mail (1 h, `/#/reset?t=<token>`); a reset ends all sessions: every refresh session and
+    access token carries the user's session version, a reset bumps it (`users.session_version`), so
+    all issued before are refused at once; it confirms the address too. What tells a known address
+    from an unknown one — a token, an e-mail through Cloudflare — is done after the answer, and the
+    e-mail limit is taken for any address; a new link replaces the old one only when its e-mail
+    goes;
   - one-time e-mail tokens: 32 random bytes, D1 keeps only the SHA-256 and the expiry; consumed by
     one `DELETE … RETURNING`, so a second use fails;
   - sign-up and reset answer the same for a known and an unknown e-mail ("if the address exists, the
@@ -665,9 +674,12 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
     rate limiting binding);
   - Turnstile on sign-up and reset;
   - IP floods — the rate limiting binding (60 s window, per location — a first line, not exact);
-  - e-mail — Cloudflare Email Sending from `no-reply@clx.cx`; until clx.cx is onboarded as a sending
-    domain, e-mail reaches only the account's verified addresses (`email-service/platform/limits`,
-    04.10.2026) — onboarding the sending domain is part of stage 6;
+  - e-mail — Cloudflare Email Sending from `no-reply@clx.cx` (the `send_email` binding `EMAIL`,
+    `env.EMAIL.send({to, from, subject, text})`; beta, Workers Paid only — docs, 07.10.2026); until
+    clx.cx is onboarded as a sending domain, e-mail reaches only the account's verified addresses
+    (`email-service/platform/limits`). Onboarding (dashboard, Email Sending → Onboard Domain) adds
+    MX on `cf-bounce`, SPF, DKIM and DMARC records to the zone — the owner's step, part of stage 6.
+    New accounts start with a daily quota Cloudflare does not publish;
   - deleting an account — disconnecting clx (§4) + deleting the user and the totals.
 - Pages `/privacy`, `/terms`, `/abuse`.
 
@@ -850,7 +862,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `plan_required`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_required`, `link_exists`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_required`, `link_exists`, `email_unconfirmed`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.

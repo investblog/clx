@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { admin } from './admin';
 import { runAdvice } from './advice';
 import { auth } from './auth/routes';
+import { signup } from './auth/signup';
 import { checkTokens } from './cf/connect';
 import { runOperations } from './cf/deploy';
 import { runLinkHosts } from './cf/links';
@@ -36,6 +37,7 @@ for (const path of ['/auth/*', '/v1/*', '/admin/*', '/hook/*']) {
   });
 }
 app.route('/auth', auth);
+app.route('/auth', signup);
 app.route('/v1', v1);
 app.route('/admin', admin);
 app.route('/hook', hook);

@@ -2,7 +2,7 @@
 // or `Bearer clx_…` — an API key, looked up by its SHA-256. Checking a key writes at most once a
 // day per key (last_used_day), never per call.
 import type { Context } from 'hono';
-import { verifyAccess } from '../auth/jwt';
+import { accessOf } from '../auth/jwt';
 import { sha256 } from '../lib/crypto';
 import { SCOPES } from '../limits';
 import type { Env, Principal } from '../types';
@@ -26,10 +26,12 @@ export async function principalOf(c: Context<{ Bindings: Env }>): Promise<Princi
   const token = c.req.header('authorization')?.match(/^Bearer (.+)$/u)?.[1];
   if (!token) return fail(401, 'unauthorized', 'An access token or an API key is required.');
   if (!token.startsWith(KEY_PREFIX)) {
-    const userId = await verifyAccess(c.env.JWT_SECRET, token, Date.now());
-    if (!userId) return fail(401, 'unauthorized', 'The access token is invalid or expired.');
-    const user = await c.env.DB.prepare('SELECT plan FROM users WHERE id = ?').bind(userId).first<{ plan: string }>();
-    if (!user) return fail(401, 'unauthorized', 'The access token is invalid or expired.');
+    const access = await accessOf(c.env.JWT_SECRET, token, Date.now());
+    if (!access) return fail(401, 'unauthorized', 'The access token is invalid or expired.');
+    const userId = access.sub;
+    const user = await c.env.DB.prepare('SELECT plan, session_version FROM users WHERE id = ?').bind(userId).first<{ plan: string; session_version: number }>();
+    // A token of an older session version — a password reset ended it — is no longer good.
+    if (!user || access.ver !== user.session_version) return fail(401, 'unauthorized', 'The access token is invalid or expired.');
     return { id: `u:${userId}`, userId, plan: user.plan, via: 'session', scopes: new Set(SCOPES), allowAccounts: null };
   }
   const key = await c.env.DB.prepare(

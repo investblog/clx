@@ -52,6 +52,7 @@ components:
                 credentials_missing, credentials_unreadable (clx cannot open the stored token),
                 cloudflare_error. Sites: zone_not_found, site_exists, route_conflict, site_not_active,
                 route_not_ours (a route clx made was changed outside clx and left in place).
+                Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed).
                 Links: link_host_required (set the account's link host first), link_exists (the
                 code is taken in that account).
             message: { type: string }
@@ -233,8 +234,23 @@ paths:
   /v1/me:
     get:
       summary: The caller — user, plan, limits, current use
+      description: |
+        Sign-up, e-mail confirmation and password reset are not part of /v1: they live under /auth
+        with the page session (docs/spec.md §9). Until `email_confirmed`, POST /v1/accounts answers
+        `email_unconfirmed`.
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { type: object, properties: { id: { type: integer }, email: { type: string }, email_confirmed: { type: boolean } } }
+                  plan: { type: string, enum: [free, api] }
+                  limits: { type: object }
+                  use: { type: object }
+                  via: { type: string, enum: [session, key] }
         default: { $ref: '#/components/responses/Error' }
   /v1/keys:
     get:

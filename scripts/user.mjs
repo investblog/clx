@@ -87,7 +87,7 @@ const { stored, out } = newPassword(email);
 try {
   write(
     cmd === 'add'
-      ? `INSERT INTO users (email, password_hash, created_at) VALUES (${sq(email)}, ${sq(stored)}, ${Date.now()});`
+      ? `INSERT INTO users (email, password_hash, created_at, email_confirmed_at) VALUES (${sq(email)}, ${sq(stored)}, ${Date.now()}, ${Date.now()});`
       : `UPDATE users SET password_hash = ${sq(stored)} WHERE email = ${sq(email)};`,
   );
 } catch (e) {

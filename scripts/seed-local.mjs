@@ -8,7 +8,7 @@ import fs from 'node:fs';
 const sq = (s) => `'${String(s).replace(/'/gu, "''")}'`;
 const salt = crypto.randomBytes(16);
 const hash = `${salt.toString('base64')}:${crypto.pbkdf2Sync('Dev-pass-1', salt, 100_000, 32, 'sha256').toString('base64')}`;
-const sql = ['DELETE FROM users;', `INSERT INTO users (id, email, password_hash, created_at) VALUES (1, 'dev@clx.local', ${sq(hash)}, ${Date.now()});`];
+const sql = ['DELETE FROM users;', `INSERT INTO users (id, email, password_hash, created_at, email_confirmed_at) VALUES (1, 'dev@clx.local', ${sq(hash)}, ${Date.now()}, ${Date.now()});`];
 
 fs.mkdirSync('temp', { recursive: true });
 fs.writeFileSync('temp/seed.sql', sql.join('\n'));

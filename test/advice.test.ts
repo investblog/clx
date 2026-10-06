@@ -79,7 +79,7 @@ describe('the hourly job', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     at(D0 + 9 * H);
     for (const t of ['sites', 'cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
-    await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, plan) VALUES (1, 'free@example.com', 'x', 0, 'free')").run();
+    await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, email_confirmed_at, plan) VALUES (1, 'free@example.com', 'x', 0, 0, 'free')").run();
     fakeCf.reset();
     accountId = (await call('POST', '/v1/accounts', { cf_account_id: ACC, bootstrap_token: BOOT })).account.id;
     expect((await account()).edge).not.toBeNull();

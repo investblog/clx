@@ -6,7 +6,7 @@
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { Env } from '../types';
-import { ACCESS_TTL, signAccess, verifyAccess } from './jwt';
+import { accessOf, ACCESS_TTL, signAccess } from './jwt';
 import { verifyPassword } from './password';
 import { LIMITS, overLimit } from './ratelimit';
 
@@ -17,22 +17,30 @@ interface Session {
   user_id: number;
   ua: string;
   created_at: number;
+  /** users.session_version when it was opened; a session from before versions counts as 0 */
+  ver?: number;
 }
 
 const ipOf = (c: Context): string => c.req.header('cf-connecting-ip') ?? 'unknown';
 const uaOf = (c: Context): string => c.req.header('user-agent') ?? '';
 const tooMany = (c: Context, wait: number) => c.json({ error: 'rate_limit_exceeded', retryAfter: wait }, 429, { 'Retry-After': String(wait) });
 
-async function openSession(c: Context<{ Bindings: Env }>, userId: number): Promise<void> {
+/** A new refresh session and its access token, both under the user's current session version. */
+async function openSession(c: Context<{ Bindings: Env }>, userId: number, ver: number, now: number): Promise<Response> {
   const id = crypto.randomUUID();
-  await c.env.SESSIONS.put(`refresh:${id}`, JSON.stringify({ user_id: userId, ua: uaOf(c), created_at: Date.now() } satisfies Session), { expirationTtl: REFRESH_TTL });
+  await c.env.SESSIONS.put(`refresh:${id}`, JSON.stringify({ user_id: userId, ua: uaOf(c), created_at: now, ver } satisfies Session), { expirationTtl: REFRESH_TTL });
   setCookie(c, COOKIE, id, { httpOnly: true, secure: true, sameSite: 'Strict', path: '/auth', maxAge: REFRESH_TTL });
+  return c.json({ ok: true, access_token: await signAccess(c.env.JWT_SECRET, userId, now, ver), expires_in: ACCESS_TTL });
 }
 
-/** The signed-in user from `Authorization: Bearer <access token>`, or null. */
+/** The signed-in user from `Authorization: Bearer <access token>`, or null — also when the token is
+ *  of an older session version (a password reset ended it). */
 export async function userOf(c: Context<{ Bindings: Env }>): Promise<number | null> {
   const token = c.req.header('authorization')?.match(/^Bearer (.+)$/u)?.[1];
-  return token ? verifyAccess(c.env.JWT_SECRET, token, Date.now()) : null;
+  const access = token ? await accessOf(c.env.JWT_SECRET, token, Date.now()) : null;
+  if (!access) return null;
+  const ver = await c.env.DB.prepare('SELECT session_version FROM users WHERE id = ?').bind(access.sub).first<number>('session_version');
+  return ver === access.ver ? access.sub : null;
 }
 
 export const auth = new Hono<{ Bindings: Env }>();
@@ -58,11 +66,10 @@ auth.post('/login', async (c) => {
   const now = Date.now();
   const wait = (await overLimit(c.env, `login:ip:${ipOf(c)}`, LIMITS.loginByIp, now)) ?? (await overLimit(c.env, `login:email:${email}`, LIMITS.loginByEmail, now));
   if (wait) return tooMany(c, wait);
-  const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?').bind(email).first<{ id: number; password_hash: string }>();
+  const user = await c.env.DB.prepare('SELECT id, password_hash, session_version FROM users WHERE email = ?').bind(email).first<{ id: number; password_hash: string; session_version: number }>();
   if (!(await verifyPassword(password, user?.password_hash ?? null)) || !user) return c.json({ error: 'invalid_login' }, 401);
   await c.env.DB.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').bind(now, user.id).run();
-  await openSession(c, user.id);
-  return c.json({ ok: true, access_token: await signAccess(c.env.JWT_SECRET, user.id, now), expires_in: ACCESS_TTL });
+  return openSession(c, user.id, user.session_version, now);
 });
 
 auth.post('/refresh', async (c) => {
@@ -77,10 +84,13 @@ auth.post('/refresh', async (c) => {
     deleteCookie(c, COOKIE, { path: '/auth' });
     return c.json({ error: 'invalid_refresh' }, 401);
   }
-  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(session.user_id).first<{ id: number }>();
-  if (!user) return c.json({ error: 'invalid_refresh' }, 401);
-  await openSession(c, user.id);
-  return c.json({ ok: true, access_token: await signAccess(c.env.JWT_SECRET, user.id, Date.now()), expires_in: ACCESS_TTL });
+  const user = await c.env.DB.prepare('SELECT id, session_version FROM users WHERE id = ?').bind(session.user_id).first<{ id: number; session_version: number }>();
+  // A session of an older version — a password reset came after it — is over.
+  if (!user || (session.ver ?? 0) !== user.session_version) {
+    deleteCookie(c, COOKIE, { path: '/auth' });
+    return c.json({ error: 'invalid_refresh' }, 401);
+  }
+  return openSession(c, user.id, user.session_version, Date.now());
 });
 
 auth.post('/logout', async (c) => {

@@ -23,15 +23,20 @@
   "kv_namespaces": [
     { "binding": "SESSIONS", "id": "00000000000000000000000000000000" }
   ],
-  // Requests per API key (§15); breakdown reports per user (§7).
+  // Requests per API key (§15); breakdown reports per user (§7); sign-up and reset per IP (§9).
   "ratelimits": [
     { "name": "API_LIMIT", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
-    { "name": "REPORT_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+    { "name": "REPORT_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+    { "name": "SIGNUP_LIMIT", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } }
   ],
   // Every minute: install operations (docs/spec.md §4); at :20 the hourly jobs — a slice of the
   // token check (§3), expired idempotency and call-log rows.
   "triggers": { "crons": ["* * * * *"] },
-  // Where clx-edge workers report: this deployment's own origin + /hook.
-  "vars": { "HOOK_URL": "https://clx.example.com/hook" },
+  // Where clx-edge workers report: this deployment's own origin + /hook. Turnstile's site key for
+  // sign-up and reset (its secret is the Worker secret TURNSTILE_SECRET).
+  "vars": { "HOOK_URL": "https://clx.example.com/hook", "TURNSTILE_SITE_KEY": "" },
+  // E-mail from no-reply@<your host> (Cloudflare Email Sending, Workers Paid; onboard the domain in
+  // the dashboard first, until then mail reaches only the account's verified addresses).
+  "send_email": [{ "name": "EMAIL" }],
   "observability": { "enabled": true }
 }

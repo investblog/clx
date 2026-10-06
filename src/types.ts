@@ -1,3 +1,5 @@
+import type { Mailer } from './mail';
+
 export interface Env {
   DB: D1Database;
   SESSIONS: KVNamespace;
@@ -10,6 +12,13 @@ export interface Env {
   MASTER_KEYS: string;
   /** Where clx-edge workers report (`https://clx.cx/hook`), a var in wrangler.jsonc. */
   HOOK_URL: string;
+  /** Cloudflare Email Sending (§9); absent where it is not set up — nothing is sent then. */
+  EMAIL?: Mailer;
+  /** Turnstile (§9): the widget's site key (a var) and its secret (a Worker secret). */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
+  /** Sign-up and reset requests per IP (§9): a first line against floods, per location. */
+  SIGNUP_LIMIT: RateLimit;
 }
 
 /** Who makes a /v1 call: a page session (all scopes) or an API key. */
