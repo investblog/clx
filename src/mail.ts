@@ -1,5 +1,5 @@
 // E-mail from clx.cx (docs/spec.md §9): Cloudflare Email Sending through the `EMAIL` binding, from
-// no-reply@<this host>. At most one e-mail per address per 10 minutes and 5 per UTC day, counted in
+// no-reply@<this host>. At most one e-mail per address per 10 minutes (sign-up, reset) and 5 per UTC day, counted in
 // D1 — global, unlike the rate limiting binding; over it nothing is sent and the caller answers the
 // same, so the limit tells nothing about the address either.
 import type { Env } from './types';
@@ -20,14 +20,14 @@ export const appOrigin = (env: Env) => new URL(env.HOOK_URL).origin;
  * statement, so two requests at once cannot both pass. Taken for any address — known or not — so
  * the limit says nothing about whether it has an account.
  */
-export async function reserveMail(env: Env, to: string, now = Date.now()): Promise<boolean> {
+export async function reserveMail(env: Env, to: string, now = Date.now(), gap = GAP): Promise<boolean> {
   const day = Math.floor(now / 86_400_000);
   const taken = await env.DB.prepare(
     `INSERT INTO email_sends (email, day, count, last_at) VALUES (?1, ?2, 1, ?3)
      ON CONFLICT (email) DO UPDATE SET count = CASE WHEN day = ?2 THEN count + 1 ELSE 1 END, day = ?2, last_at = ?3
-     WHERE last_at <= ?3 - ${GAP} AND (day != ?2 OR count < ${PER_DAY})`,
+     WHERE last_at <= ?3 - ?4 AND (day != ?2 OR count < ${PER_DAY})`,
   )
-    .bind(to, day, now)
+    .bind(to, day, now, gap)
     .run();
   return Boolean(taken.meta.changes);
 }
@@ -49,3 +49,7 @@ export async function deliverMail(env: Env, to: string, subject: string, text: s
 
 /** Both: an e-mail to `to` if its address is under the limits; returns whether it went. */
 export const sendMail = async (env: Env, to: string, subject: string, text: string, now = Date.now()) => (await reserveMail(env, to, now)) && deliverMail(env, to, subject, text);
+
+/** A notice about the user's own account (the advice, a silent worker): clx sends it, nobody can
+ *  make it send one, so only the daily cap applies — two notices of one hourly run both go. */
+export const sendNotice = async (env: Env, to: string, subject: string, text: string, now = Date.now()) => (await reserveMail(env, to, now, 0)) && deliverMail(env, to, subject, text);

@@ -10,6 +10,7 @@
 import { EDGE_SHA256 } from '../../edge/bundle.gen';
 import { open, seal, type Sealed } from '../lib/crypto';
 import { FREE_ACCOUNTS_CAP, LIMITS, planOf } from '../limits';
+import { appOrigin, sendNotice } from '../mail';
 import type { Env, Principal } from '../types';
 import { ApiError, fail, newId } from '../v1/http';
 import { cf, CfError, cfGraphql, type CallLog } from './api';
@@ -98,6 +99,8 @@ export interface EdgeAccount {
   budget_used: number;
   advice: string | null;
   advice_at: number;
+  advice_mailed_level: string | null;
+  advice_mailed_at: number;
 }
 
 /** AAD: the ciphertext belongs to this record and this Cloudflare account only (§3 item 5). */
@@ -510,11 +513,26 @@ export async function checkTokens(env: Env, now = Date.now()): Promise<{ checked
     }
     // Only if the token checked is still the account's and no operation holds it: a renewal that
     // swapped tokens meanwhile is not taken for a revocation of the new one.
-    await env.DB.prepare(
+    const done = await env.DB.prepare(
       'UPDATE edge_accounts SET state = coalesce(?1, state), error = coalesce(?2, error), token_checked_at = ?3 WHERE id = ?4 AND token_id IS ?5 AND (lease_until IS NULL OR lease_until < ?6)',
     )
       .bind(state, error, checkedAt, edge.id, edge.token_id, Date.now())
       .run();
+    // The user hears of a revoked token once, when it is found (§3 item 6).
+    if (state === 'revoked' && done.meta.changes) await mailRevoked(env, edge, now).catch((e: unknown) => console.error('revoked mail', edge.id, e instanceof Error ? e.message : e));
   }
   return { checked: rows.length, revoked, lost: lost.meta.changes ?? 0 };
+}
+
+async function mailRevoked(env: Env, edge: EdgeAccount, now: number): Promise<void> {
+  const user = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(edge.user_id).first<{ email: string }>();
+  if (!user) return;
+  const name = edge.cf_account_name ?? edge.cf_account_id;
+  await sendNotice(
+    env,
+    user.email,
+    `clx: токен для «${name}» больше не работает`,
+    `Здравствуйте!\n\nCloudflare больше не принимает токен, которым clx работал в аккаунте «${name}»: его отозвали или он истёк. Счётчик и ссылки в аккаунте продолжают работать, но clx не может обновлять воркер, добавлять сайты и ссылки и читать разбивки отчётов.\nЧтобы вернуть связь, создайте новый bootstrap-токен и вставьте его на странице аккаунта: ${appOrigin(env)}/#/accounts/${edge.id}\n`,
+    now,
+  );
 }

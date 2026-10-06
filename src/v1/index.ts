@@ -7,6 +7,7 @@ import { accountView, connect, type EdgeAccount } from '../cf/connect';
 import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
 import { addLink, deleteLink, linkHostView, linkView, liveLinkHost, patchLink, setLinkHost, type LinkRow } from '../cf/links';
 import { addSite, deleteSite, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
+import { verifyPassword } from '../auth/password';
 import { sha256 } from '../lib/crypto';
 import { generateMatrix, renderSvg } from '../qr';
 import { LIMITS, planOf, SCOPES } from '../limits';
@@ -91,6 +92,69 @@ v1.get(
       .bind(p.userId)
       .first<{ cf_accounts: number; api_keys: number }>();
     return { status: 200, body: { user, plan: planOf(p.plan), limits: LIMITS[planOf(p.plan)], use, via: p.via } };
+  }),
+);
+
+/**
+ * Delete the account (§9), from a page session with the password: every Cloudflare account is
+ * disconnected first (§4 — clx-edge, its database and routes removed where the token still can),
+ * then the totals go at once instead of after 30 days, then the user with everything of theirs.
+ */
+v1.delete(
+  '/me',
+  handle({ session: true }, async (c, p, body) => {
+    const db = c.env.DB;
+    const user = await db.prepare('SELECT password_hash FROM users WHERE id = ?').bind(p.userId).first<{ password_hash: string }>();
+    if (!(await verifyPassword(typeof body.password === 'string' ? body.password.slice(0, 256) : '', user?.password_hash ?? null))) fail(403, 'invalid_password', 'The password is wrong.', { field: 'password' });
+    // An operation running on an account (an install, a renewal) would refuse the disconnect halfway:
+    // refused here, before anything is ended.
+    if (await db.prepare('SELECT 1 FROM edge_accounts WHERE user_id = ? AND lease_until > ?').bind(p.userId, Date.now()).first())
+      fail(409, 'operation_in_progress', 'An operation on one of your Cloudflare accounts is running; retry in a minute.');
+    // The fence first: every session and API key of the user ends, so nothing of theirs can start a
+    // new connect while the accounts are being disconnected (this call runs on).
+    await db.batch([
+      db.prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?').bind(p.userId),
+      db.prepare('UPDATE api_keys SET revoked_at = coalesce(revoked_at, ?) WHERE user_id = ?').bind(Date.now(), p.userId),
+    ]);
+    const keys = (await db.prepare('SELECT id FROM api_keys WHERE user_id = ?').bind(p.userId).all<{ id: string }>()).results.map((k) => `k:${k.id}`);
+    const left: string[] = [];
+    const revoke: string[] = [];
+    const ids: string[] = [];
+    // Again until none is left: a connect that began before the fence may add one meanwhile.
+    for (let round = 0; round < 3; round++) {
+      const accounts = (await db.prepare('SELECT * FROM edge_accounts WHERE user_id = ?').bind(p.userId).all<EdgeAccount>()).results;
+      if (!accounts.length) break;
+      for (const a of accounts) {
+        const r = await disconnect(c.env, p.id, a);
+        ids.push(a.id);
+        left.push(...r.left);
+        if (r.revoke_token) revoke.push(r.revoke_token);
+      }
+    }
+    // An account still there — a connect that began before the fence and is still running — is
+    // never deleted by the cascade behind its back (its token would be left in Cloudflare): the
+    // delete stops here; signed in again, the user repeats it once that connect is over.
+    // What was disconnected goes at once either way — a repeat would not find these accounts again.
+    const accountIds = JSON.stringify(ids);
+    const disconnected = [
+      ...['hourly', 'daily', 'departed'].map((t) => db.prepare(`DELETE FROM ${t} WHERE account_id IN (SELECT value FROM json_each(?))`).bind(accountIds)),
+      db.prepare('DELETE FROM cf_calls WHERE edge_account_id IN (SELECT value FROM json_each(?))').bind(accountIds),
+    ];
+    if (await db.prepare('SELECT 1 FROM edge_accounts WHERE user_id = ?').bind(p.userId).first()) {
+      await db.batch(disconnected);
+      fail(409, 'operation_in_progress', 'A Cloudflare account was being connected meanwhile; sign in again and repeat the delete in a minute.', { left, revoke_tokens: revoke });
+    }
+    const email = await db.prepare('SELECT email FROM users WHERE id = ?').bind(p.userId).first<string>('email');
+    await db.batch([
+      ...disconnected,
+      // The keys' idempotency records; the session's own go after this answer is stored, within 24 hours.
+      db.prepare('DELETE FROM idempotency WHERE principal IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
+      db.prepare('DELETE FROM email_sends WHERE email = ?').bind(email),
+      // Keys, sites, links, link hosts, e-mail tokens and what is left of the accounts go with the
+      // user (ON DELETE CASCADE).
+      db.prepare('DELETE FROM users WHERE id = ?').bind(p.userId),
+    ]);
+    return { status: 200, body: { ok: true, left, revoke_tokens: revoke } };
   }),
 );
 

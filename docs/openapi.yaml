@@ -52,7 +52,8 @@ components:
                 credentials_missing, credentials_unreadable (clx cannot open the stored token),
                 cloudflare_error. Sites: zone_not_found, site_exists, route_conflict, site_not_active,
                 route_not_ours (a route clx made was changed outside clx and left in place).
-                Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed).
+                Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
+                invalid_password (DELETE /v1/me).
                 Links: link_host_required (set the account's link host first), link_exists (the
                 code is taken in that account).
             message: { type: string }
@@ -251,6 +252,30 @@ paths:
                   limits: { type: object }
                   use: { type: object }
                   via: { type: string, enum: [session, key] }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Delete the account (page session only, with the password)
+      description: |
+        Every connected Cloudflare account is disconnected first (clx-edge, its database and routes
+        removed where the token still can — what could not be is listed in `left`, the working tokens
+        to revoke in `revoke_tokens`); then the totals go at once, and the user with the keys, sites
+        and links.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [password], properties: { password: { type: string } } }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  left: { type: array, items: { type: string } }
+                  revoke_tokens: { type: array, items: { type: string } }
         default: { $ref: '#/components/responses/Error' }
   /v1/keys:
     get:

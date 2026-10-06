@@ -1,5 +1,5 @@
 // The page's entry: sign-in, the hash router over the pages, the theme.
-import { accountPage, accountsPage, action, connectPage, failure, keysPage } from './accounts';
+import { accountPage, accountsPage, action, confirmAction, connectPage, failure, keysPage } from './accounts';
 import { call, get, login, logout, refresh, SignedOut, type Me } from './api';
 import { h } from './dom';
 import { linkPage, linksBlock, newLinkPage } from './links';
@@ -46,6 +46,29 @@ function unconfirmedBanner(): HTMLElement {
   );
 }
 
+/** Deleting the account (§9): with the password; the answer names what clx could not remove. */
+function accountCard(): HTMLElement {
+  const password = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', 'aria-label': 'Пароль' });
+  return h(
+    'section',
+    { class: 'card stack stack--sm' },
+    h('h3', { class: 'h4' }, 'Учётная запись'),
+    h('p', { class: 'muted text-sm' }, `${me!.user.email}. Удаление отключит все аккаунты Cloudflare (воркер, база и маршруты clx удаляются из них), сотрёт итоги, ключи, сайты и ссылки — сразу и без возврата.`),
+    h(
+      'div',
+      { class: 'actions' },
+      password,
+      confirmAction('Удалить учётную запись', 'Да, удалить всё', async (key) => {
+        const r = await call<{ left: string[]; revoke_tokens: string[] }>('DELETE', '/v1/me', { password: password.value }, key);
+        await logout();
+        location.hash = '#/';
+        const rest = [...r.revoke_tokens.map((t) => `токен ${t}`), ...r.left];
+        showLogin(rest.length ? `Учётная запись удалена. Удалите в Cloudflare вручную: ${rest.join(', ')}.` : 'Учётная запись удалена.');
+      }),
+    ),
+  );
+}
+
 const go = (hash: string) => {
   if (location.hash === hash) void route();
   else location.hash = hash;
@@ -72,7 +95,7 @@ async function page(path: string, mine: number): Promise<[HTMLElement, string]> 
   const link = path.match(/^\/links\/([\w-]+)$/u);
   if (link) return [await linkPage(link[1]!, live, redraw), 'Ссылка'];
   const [accounts, sites, links] = await Promise.all([accountsPage(me!), sitesBlock(), linksBlock(() => redraw())]);
-  return [h('div', {}, me!.user.email_confirmed ? null : unconfirmedBanner(), accounts, sites, links), 'Главная'];
+  return [h('div', {}, me!.user.email_confirmed ? null : unconfirmedBanner(), accounts, sites, links, accountCard()), 'Главная'];
 }
 
 /** The pages a signed-out visitor opens (§9): sign-up, the confirmation link, the password reset. */

@@ -204,9 +204,9 @@ Why:
 - **Liveness:** a heartbeat in every push (§7): bundle sha256, `schema`, last error, queue
   depth, the latest config commit, the counters of dropped items. Every hourly run pushes at least
   once — with nothing to send, an empty push — so silence means the worker is not running. 26
-  hours of silence — "no connection" in the UI and an e-mail to the user (the e-mail comes with
-  e-mail sending, stage 6). A push ends it; an account with no connection still takes new sites,
-  but a rollout skips it (its update would wait for a `setup_ok` that will not come).
+  hours of silence — "no connection" in the UI and one e-mail to the user when it begins. A push
+  ends it; an account with no connection still takes new sites, but a rollout skips it (its update
+  would wait for a `setup_ok` that will not come).
 - **Disconnecting clx** by the user: the working token removes the recorded routes, deletes the
   recorded worker (if its code is a clx bundle) and database; we delete the ciphertext. What could
   not be deleted — the token is revoked or lacks a right, the worker was changed — is listed in the
@@ -680,7 +680,12 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
     (`email-service/platform/limits`). Onboarding (dashboard, Email Sending → Onboard Domain) adds
     MX on `cf-bounce`, SPF, DKIM and DMARC records to the zone — the owner's step, part of stage 6.
     New accounts start with a daily quota Cloudflare does not publish;
-  - deleting an account — disconnecting clx (§4) + deleting the user and the totals.
+  - deleting an account (`DELETE /v1/me` with the password, page session only): first every session
+    and API key of the user ends (a fence — nothing of theirs can start a new connect meanwhile),
+    then every Cloudflare account is disconnected (§4), then its totals, call log, e-mail counters
+    and the user with keys, sites and links go at once. Refused while an operation runs on one of
+    its accounts. Refresh sessions in KV are not indexed by user: they stop working at once and
+    expire within 7 days;
 - Pages `/privacy`, `/terms`, `/abuse`.
 
 ## 10. Reports on clx.cx
@@ -862,7 +867,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `plan_required`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_required`, `link_exists`, `email_unconfirmed`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_required`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.
@@ -874,7 +879,8 @@ that adds a site and embeds its counter at build time.
 
 | Method and path | What it does |
 |---|---|
-| `GET /v1/me` | plan, limits, current use |
+| `GET /v1/me` | plan, limits, current use, whether the address is confirmed |
+| `DELETE /v1/me` `{password}` | delete the account (page session only, §9) |
 | `POST /v1/keys`, `GET /v1/keys`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
 | `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `bootstrap_lost`, `connected` — token ready, not yet installed, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), last push, versions, **upgrade advice** (§8) |

@@ -10,19 +10,16 @@ v2 stages — [`docs/spec.md`](./spec.md) §14.
 - [ ] Open questions of spec §13, on a test Cloudflare account: rights for Workers Custom Domains.
       (A route on a Pages host — verified 05.10, §13 item 9; an ignored `INSERT OR IGNORE` writes
       0 rows — verified 05.10, `cloudflare-facts.md`.)
-- [ ] The "renew the connection" e-mail 30 days before a working token expires (§3 item 6) — with
-      e-mail sending, stage 6.
 - [ ] `MASTER_KEYS` rotation tool (a new key in front, re-encrypt, drop the old one) — before the
       first key needs replacing.
 - [ ] Sign-out: the page shows the sign-in form even when `/auth/logout` failed, so the refresh
       cookie may stay valid — show the error or retry (stage 6, with sign-up).
 - [ ] Proxy mode for the counter (a site not on Cloudflare) — after v2, if needed.
-- [ ] Upgrade advice e-mails (§8: `over` at once, `upgrade_soon` at most weekly) — with e-mail
-      sending, stage 6; the banner — with the pages (4e). Also `over` from "pushes reporting write
-      failures": the heartbeat carries the worker's error text only, with no clean sign of a failed
-      D1 write — add one to the push body when it is needed.
-- [ ] The 26-hour silence e-mail (§4) — with e-mail sending, stage 6. (The `no_connection` state
-      itself — done in stage 4c.)
+- [ ] `over` from "pushes reporting write failures" (§8): the heartbeat carries the worker's error
+      text only, with no clean sign of a failed D1 write — add one to the push body when it is
+      needed. (The advice e-mails, the silence, renew and revoked e-mails — done in stage 6c.)
+- [ ] Account e-mails are not retried: a notice whose send fails (no `EMAIL`, Email Sending down)
+      is lost — the state it reports is still on the account's page.
 - [ ] The API's share of the per-account write budget (§8): idempotency rows and changes made
       through `/v1` are not counted yet — only the receiver's writes are (stage 4c).
 - [ ] Flaky tests — **cause found 06.10.2026: Windows runs out of outgoing ports.** Every D1 call

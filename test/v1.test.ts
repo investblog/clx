@@ -182,7 +182,10 @@ describe('connecting a Cloudflare account', () => {
     const { body } = await connectAs(await session(1));
     clxTokens()[0]!.status = 'disabled';
     expect((await checkTokens(env)).checked).toBe(0); // just checked by the connect itself
-    expect(await checkTokens(env, Date.now() + 21 * 3_600_000)).toMatchObject({ checked: 1, revoked: 1 });
+    const mail: { to: string; subject: string }[] = [];
+    expect(await checkTokens({ ...env, EMAIL: { send: async (m) => (mail.push(m), {}) } }, Date.now() + 21 * 3_600_000)).toMatchObject({ checked: 1, revoked: 1 });
+    // The user hears of it once, by e-mail.
+    expect(mail).toEqual([expect.objectContaining({ to: 'free@example.com', subject: expect.stringContaining('больше не работает') })]);
     expect((await call('GET', `/v1/accounts/${body.account.id}`, { auth: await session(1) })).body.account.state).toBe('revoked');
     const gone = await call('DELETE', `/v1/accounts/${body.account.id}`, { auth: await session(1), key: 'd1' });
     // A revoked token deletes nothing: what clx put there is listed for the user.

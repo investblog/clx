@@ -232,10 +232,13 @@ describe('the worker side', () => {
   it('a worker silent for 26 hours is "no connection" until it pushes again; its sites still work', async () => {
     await hourly(D0 + 11 * H + 300_000);
     at(D0 + 38 * H);
+    const mail: { to: string; subject: string }[] = [];
     const { ctx, settle } = fakeCtx();
-    await worker.scheduled({ scheduledTime: D0 + 38 * H + 20 * 60_000, cron: '* * * * *' } as ScheduledController, env, ctx);
+    await worker.scheduled({ scheduledTime: D0 + 38 * H + 20 * 60_000, cron: '* * * * *' } as ScheduledController, { ...env, EMAIL: { send: async (m) => (mail.push(m), {}) } }, ctx);
     await settle();
     expect((await account()).state).toBe('no_connection');
+    // The user hears of it once, by e-mail (§4).
+    expect(mail).toEqual([expect.objectContaining({ to: 'free@example.com', subject: expect.stringContaining('нет связи') })]);
     expect((await call('POST', '/v1/sites', { account_id: accountId, host: 'blog.example.com' })).status).toBe(202);
     await hourly(D0 + 39 * H + 300_000);
     expect((await account()).state).toBe('ready');

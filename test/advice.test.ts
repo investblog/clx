@@ -78,7 +78,7 @@ describe('the hourly job', () => {
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     at(D0 + 9 * H);
-    for (const t of ['sites', 'cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
+    for (const t of ['sites', 'cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'email_sends', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
     await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, email_confirmed_at, plan) VALUES (1, 'free@example.com', 'x', 0, 0, 'free')").run();
     fakeCf.reset();
     accountId = (await call('POST', '/v1/accounts', { cf_account_id: ACC, bootstrap_token: BOOT })).account.id;
@@ -102,6 +102,61 @@ describe('the hourly job', () => {
     // A revoked account is not measured any more: its last advice is not shown.
     await env.DB.prepare("UPDATE edge_accounts SET state = 'revoked' WHERE id = ?").bind(accountId).run();
     expect((await account()).advice).toBeNull();
+  });
+
+  it('e-mails: upgrade_soon once a week at most, over at once, quiet again once back to ok', async () => {
+    const mail: { to: string; subject: string }[] = [];
+    const real = env;
+    env = { ...env, EMAIL: { send: async (m) => (mail.push(m), {}) } };
+    try {
+      fakeCf.analytics = { [day(3)]: { requests: 1, writes: 84_000, reads: 1 } };
+      await job(D0 + 10 * H + 20 * 60_000);
+      expect(mail).toEqual([expect.objectContaining({ to: 'free@example.com', subject: expect.stringContaining('скоро упрётся') })]);
+      // The next day, the same level: no e-mail within the week.
+      await job(D0 + 34 * H + 20 * 60_000);
+      expect((await account()).advice.level).toBe('upgrade_soon');
+      expect(mail).toHaveLength(1);
+      // A higher level goes at once.
+      fakeCf.analytics = { [day(3)]: { requests: 1, writes: 84_000, reads: 1 }, [day(-1)]: { requests: 1, writes: 100_000, reads: 1 } };
+      await job(D0 + 58 * H + 20 * 60_000);
+      expect((await account()).advice.level).toBe('over');
+      const advice = () => mail.filter((m) => m.subject.includes('лимит'));
+      expect(advice().at(-1)!.subject).toContain('упёрся');
+      // Back to ok: the last level is cleared, so a new rise is written about at once.
+      fakeCf.analytics = {};
+      await job(D0 + 82 * H + 20 * 60_000);
+      expect(await env.DB.prepare('SELECT advice_mailed_level FROM edge_accounts').first('advice_mailed_level')).toBeNull();
+      expect(advice()).toHaveLength(2);
+    } finally {
+      env = real;
+    }
+  });
+
+  it('"renew the connection" 30 days before the token expires, once per token', async () => {
+    const mail: { subject: string }[] = [];
+    const real = env;
+    env = { ...env, EMAIL: { send: async (m) => (mail.push(m), {}) } };
+    const renew = () => mail.filter((m) => m.subject.includes('продлите'));
+    try {
+      await env.DB.prepare('UPDATE edge_accounts SET token_expires_at = ?').bind(D0 + 40 * D).run();
+      await job(D0 + 10 * H + 20 * 60_000);
+      expect(renew()).toHaveLength(0);
+      await env.DB.prepare('UPDATE edge_accounts SET token_expires_at = ?').bind(D0 + 20 * D).run();
+      // A send that fails is tried again the next hour.
+      const send = env.EMAIL!.send;
+      env.EMAIL!.send = () => Promise.reject(new Error('down'));
+      await job(D0 + 11 * H + 20 * 60_000);
+      env.EMAIL!.send = send;
+      expect(renew()).toHaveLength(0);
+      await job(D0 + 12 * H + 20 * 60_000);
+      expect(renew()).toHaveLength(1);
+      // A renewed token expires a year later and is written about again then.
+      await env.DB.prepare('UPDATE edge_accounts SET token_expires_at = ?').bind(D0 + 13 * H + 20 * D + 365 * D).run();
+      await job(D0 + 13 * H + 20 * 60_000);
+      expect(renew()).toHaveLength(1);
+    } finally {
+      env = real;
+    }
   });
 
   it('analytics refused (403): the advice says so and still judges the size', async () => {

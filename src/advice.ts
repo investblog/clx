@@ -7,6 +7,7 @@ import { FULL_BYTES } from '../edge/contract';
 import { CfError, cf, cfGraphql } from './cf/api';
 import { workingToken, type EdgeAccount } from './cf/connect';
 import { CF_FREE } from './limits';
+import { appOrigin, sendNotice } from './mail';
 import type { Env } from './types';
 
 const D = 86_400_000;
@@ -160,7 +161,38 @@ export async function runAdvice(env: Env, now = Date.now()): Promise<{ advised: 
     await env.DB.prepare('UPDATE edge_accounts SET advice = coalesce(?1, advice), advice_at = ?2, token_checked_at = CASE WHEN ?4 THEN 0 ELSE token_checked_at END WHERE id = ?3')
       .bind(advice ? JSON.stringify(advice) : null, next, edge.id, revoked ? 1 : 0)
       .run();
-    if (advice) advised++;
+    if (advice) {
+      advised++;
+      await mailAdvice(env, edge, advice, now).catch((e: unknown) => console.error('advice mail', edge.id, e instanceof Error ? e.message : e));
+    }
   }
   return { advised };
+}
+
+const WEEK = 7 * D;
+const METRIC_TEXT: Record<Metric, string> = { requests: 'запросы к воркерам за сутки', writes: 'записи D1 за сутки', reads: 'чтения D1 за сутки', size: 'размер базы clx-edge' };
+
+/**
+ * The advice by e-mail (§8): `over` at once, `upgrade_soon` at most weekly — a level higher than the
+ * last one written about goes at once, the same level again after a week; back to `ok` or `watch`,
+ * the last level is cleared, so a new rise is written about at once.
+ */
+async function mailAdvice(env: Env, edge: EdgeAccount, advice: Advice, now: number): Promise<void> {
+  const rank = (l: string | null) => (l ? LEVELS.indexOf(l as Level) : -1);
+  if (rank(advice.level) < rank('upgrade_soon')) {
+    if (edge.advice_mailed_level) await env.DB.prepare('UPDATE edge_accounts SET advice_mailed_level = NULL WHERE id = ?').bind(edge.id).run();
+    return;
+  }
+  if (rank(advice.level) <= rank(edge.advice_mailed_level) && edge.advice_mailed_at > now - WEEK) return;
+  const user = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(edge.user_id).first<{ email: string }>();
+  if (!user) return;
+  const m = advice.metric ? advice.metrics[advice.metric] : undefined;
+  const what = advice.metric ? `${METRIC_TEXT[advice.metric]}: ${m?.busiest.value.toLocaleString('ru-RU')} из ${m?.limit.toLocaleString('ru-RU')}${m?.forecast ? `, к пределу — около ${m.forecast}` : ''}` : '';
+  const name = edge.cf_account_name ?? edge.cf_account_id;
+  const text =
+    advice.level === 'over'
+      ? `Здравствуйте!\n\nАккаунт Cloudflare «${name}» упёрся в лимит бесплатного тарифа Workers — ${what}.\nСверх лимита Cloudflare отказывает в работе воркерам: счётчик и ссылки могут не отвечать до конца суток (UTC).\n${advice.suggest ? 'Дело в размере базы: помогло бы хранить почасовые детали короче.\n' : 'Переход этого аккаунта на Workers Paid ($5 в месяц) снимает лимит.\n'}\nПодробности: ${appOrigin(env)}/#/accounts/${edge.id}\n`
+      : `Здравствуйте!\n\nАккаунт Cloudflare «${name}» скоро упрётся в лимит бесплатного тарифа Workers — ${what}.\n${advice.suggest ? 'Дело в размере базы: помогло бы хранить почасовые детали короче.\n' : 'Стоит заранее перевести его на Workers Paid ($5 в месяц).\n'}\nПодробности: ${appOrigin(env)}/#/accounts/${edge.id}\n`;
+  if (await sendNotice(env, user.email, advice.level === 'over' ? `clx: «${name}» упёрся в лимит Cloudflare` : `clx: «${name}» скоро упрётся в лимит Cloudflare`, text, now))
+    await env.DB.prepare('UPDATE edge_accounts SET advice_mailed_level = ?, advice_mailed_at = ? WHERE id = ?').bind(advice.level, now, edge.id).run();
 }
