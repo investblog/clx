@@ -2,6 +2,8 @@
 import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
 import { get, login, logout, refresh, SignedOut, type Me } from './api';
 import { h } from './dom';
+import { reportPage } from './report';
+import { newSitePage, sitePage, sitesBlock } from './sites';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const loginBox = $('login');
@@ -30,7 +32,7 @@ const go = (hash: string) => {
   else location.hash = hash;
 };
 
-/** The page for the address: #/ accounts, #/connect, #/accounts/<id>, #/keys. */
+/** The page for the address: #/ accounts and sites, #/connect, #/accounts/<id>, #/keys, #/sites/new, #/sites/<id>. */
 async function page(path: string, mine: number): Promise<[HTMLElement, string]> {
   const live = () => mine === seq;
   const redraw = (message?: string) => {
@@ -41,7 +43,13 @@ async function page(path: string, mine: number): Promise<[HTMLElement, string]> 
   if (path === '/connect') return [connectPage(go), 'Подключить аккаунт'];
   if (account) return [await accountPage(account[1]!, live, redraw), 'Аккаунт'];
   if (path === '/keys') return [await keysPage(me!, redraw), 'Ключи API'];
-  return [await accountsPage(me!), 'Аккаунты'];
+  if (path === '/sites/new') return [await newSitePage(me!, go), 'Добавить сайт'];
+  const report = path.match(/^\/sites\/([\w-]+)\/report(?:\?p=([\w]+))?$/u);
+  if (report) return [await reportPage(report[1]!, report[2] ?? 'today'), 'Отчёт'];
+  const site = path.match(/^\/sites\/([\w-]+)$/u);
+  if (site) return [await sitePage(site[1]!, live, redraw), 'Сайт'];
+  const [accounts, sites] = await Promise.all([accountsPage(me!), sitesBlock()]);
+  return [h('div', {}, accounts, sites), 'clx'];
 }
 
 async function route(): Promise<void> {

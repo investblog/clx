@@ -44,6 +44,28 @@ main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
 .action .btn{white-space:normal;max-width:100%}
 .action-status{color:var(--danger);font-size:var(--fs-sm)}
 .check{display:inline-flex;align-items:center;gap:var(--space-2);margin-right:var(--space-4)}
+/* The report (stage 4e-3): the chart and the breakdown lists, from the v1 report. */
+.stats-grid{margin:0}
+.chart-card{gap:var(--space-2)}
+.chart{width:100%;height:220px;display:block}
+.chart rect{fill:color-mix(in srgb,var(--primary) 70%,transparent)}
+.chart rect:hover{fill:var(--primary)}
+.chart polyline{fill:none;stroke:var(--success);stroke-width:2;vector-effect:non-scaling-stroke}
+.chart line{stroke:var(--border-subtle);stroke-width:1;vector-effect:non-scaling-stroke}
+.chart-axis{display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--text-muted)}
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-4);font-size:var(--fs-sm)}
+.legend .l-views::before,.legend .l-visitors::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:var(--space-2);background:var(--primary)}
+.legend .l-visitors::before{background:var(--success)}
+.breakdowns{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--space-4)}
+.breakdown h3{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-muted)}
+.breakdown ol{list-style:none;margin:0;padding:0}
+.breakdown li{position:relative;display:flex;justify-content:space-between;gap:var(--space-3);padding:var(--space-1) var(--space-2);border-radius:var(--radius);font-size:var(--fs-sm);z-index:0}
+.breakdown li .bar{position:absolute;inset:0 auto 0 0;background:color-mix(in srgb,var(--primary) 18%,transparent);border-radius:var(--radius);z-index:-1}
+.breakdown li .k{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.breakdown li .v{font-variant-numeric:tabular-nums;flex:none}
+.breakdown .empty{font-size:var(--fs-sm);color:var(--text-muted)}
+@media (max-width:480px){.breakdowns{grid-template-columns:minmax(0,1fr)}}
+
 /* A token field is a text field (a password field makes browsers autofill the sign-in password). */
 .masked{-webkit-text-security:disc}
 .secret-card{align-items:flex-start}

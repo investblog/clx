@@ -14,7 +14,7 @@ export const when = (iso: string | null | undefined) => (iso ? `${new Date(iso).
 export const num = (n: number) => n.toLocaleString('ru-RU');
 const badge = ([text, tone]: [string, string]) => h('span', { class: `badge badge--${tone}` }, text);
 const stateBadge = (s: string) => badge(ACCOUNT_STATE[s] ?? [s, 'neutral']);
-const notice = (text: string, tone: 'error' | 'success' | 'loading' | 'idle' = 'error') => h('div', { class: 'auth-status', 'data-type': tone, role: 'status' }, text);
+export const notice = (text: string, tone: 'error' | 'success' | 'loading' | 'idle' = 'error') => h('div', { class: 'auth-status', 'data-type': tone, role: 'status' }, text);
 export function failure(e: unknown): string {
   if (e instanceof ApiError) return errorText(e.code, e.message);
   // The session ended mid-action: the router finds that out again and shows the sign-in form.
@@ -44,7 +44,7 @@ function once(): { key: () => string; answered: (e?: unknown) => void } {
 }
 
 /** A button that runs `work`, shows its error next to it and stays disabled while it runs. */
-function action(label: string, cls: string, work: (key: string) => Promise<void>): HTMLElement {
+export function action(label: string, cls: string, work: (key: string) => Promise<void>): HTMLElement {
   const out = h('span', { class: 'action-status' });
   const button = h('button', { type: 'button', class: `btn ${cls}` }, label);
   const idem = once();
@@ -300,7 +300,7 @@ export async function accountPage(id: string, live: Live, redraw: () => void): P
 }
 
 /** A destructive action asks once more in the page itself (no browser dialogs). */
-function confirmAction(label: string, confirmLabel: string, work: (key: string) => Promise<void>): HTMLElement {
+export function confirmAction(label: string, confirmLabel: string, work: (key: string) => Promise<void>): HTMLElement {
   const box = h('span', { class: 'action' });
   const first = h('button', { type: 'button', class: 'btn btn--danger' }, label);
   first.addEventListener('click', () => {
