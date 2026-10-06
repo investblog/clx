@@ -7,13 +7,16 @@ updated: 2026-10-06
 
 v2 stages — [`docs/spec.md`](./spec.md) §14.
 
-Owner's steps (stages 5–7 are built; these open them to real users):
-- [ ] Turnstile: a widget for clx.cx (dashboard → Turnstile); its site key goes to
-      `TURNSTILE_SITE_KEY` in `wrangler.jsonc`, its secret to the Worker secret `TURNSTILE_SECRET`.
-      Until then sign-up and reset say they do not work yet.
+Owner's steps (stages 5–7 are built; these open them to real users), in this order — Turnstile
+last, or sign-ups would make users whose confirmation e-mail never comes:
 - [ ] Email Sending: onboard clx.cx (dashboard → Email Sending → Onboard Domain; adds MX on
       `cf-bounce`, SPF, DKIM, DMARC). Until then e-mail reaches only the account's verified addresses.
 - [ ] `abuse@clx.cx` (the /abuse page names it): an Email Routing rule to a real mailbox.
+- [ ] Turnstile: a widget for clx.cx (dashboard → Turnstile); its site key goes to
+      `TURNSTILE_SITE_KEY` in `wrangler.jsonc`, its secret to the Worker secret `TURNSTILE_SECRET`.
+      Until then sign-up and reset say they do not work yet.
+- [ ] Then the live check of stage 6: a real sign-up to the owner's address, the confirmation link,
+      a reset; a used link refused.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
 - [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published

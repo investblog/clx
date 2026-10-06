@@ -48,7 +48,9 @@ function unconfirmedBanner(): HTMLElement {
 
 /** Deleting the account (§9): with the password; the answer names what clx could not remove. */
 function accountCard(): HTMLElement {
-  const password = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', 'aria-label': 'Пароль' });
+  // Not type=password: the browser would fill the saved clx.cx password into it on every load,
+  // one confirmation away from a delete (the trick of the token fields, ui/accounts.ts).
+  const password = h('input', { class: 'input masked', type: 'text', autocomplete: 'off', spellcheck: 'false', 'data-1p-ignore': '', 'data-lpignore': 'true', 'aria-label': 'Пароль для удаления', placeholder: 'пароль' });
   return h(
     'section',
     { class: 'card stack stack--sm' },
