@@ -138,6 +138,16 @@ async function migrate(r: Run): Promise<number> {
   return at;
 }
 
+/** The cron triggers other scripts of the account hold (only a `scheduled` handler can hold one). */
+async function cronHolders(r: Run, scripts: Script[]): Promise<{ script: string; crons: number }[]> {
+  const holders: { script: string; crons: number }[] = [];
+  for (const s of scripts.filter((x) => x.id !== SCRIPT && x.handlers?.includes('scheduled'))) {
+    const n = (await cf<{ schedules: unknown[] }>(r.token, 'GET', `${acc(r)}/workers/scripts/${s.id}/schedules`)).schedules.length;
+    if (n) holders.push({ script: s.id, crons: n });
+  }
+  return holders;
+}
+
 /** One step forward from `at`; returns the step reached. */
 async function advance(r: Run, at: string): Promise<string> {
   const { data } = r;
@@ -155,11 +165,7 @@ async function advance(r: Run, at: string): Promise<string> {
       } else if (r.kind === 'update') fail(409, 'resource_drift', 'The clx-edge worker is gone from this account; reinstall it.', { resource: 'worker', missing: true });
       data.script_created = !there;
       if (r.kind === 'install') {
-        const holders: { script: string; crons: number }[] = [];
-        for (const s of scripts.filter((x) => x.id !== SCRIPT && x.handlers?.includes('scheduled'))) {
-          const n = (await cf<{ schedules: unknown[] }>(r.token, 'GET', `${acc(r)}/workers/scripts/${s.id}/schedules`)).schedules.length;
-          if (n) holders.push({ script: s.id, crons: n });
-        }
+        const holders = await cronHolders(r, scripts);
         if (holders.reduce((sum, h) => sum + h.crons, 0) >= CRON_LIMIT) fail(409, 'cron_limit', `This account already uses all ${CRON_LIMIT} cron triggers of Workers Free; clx-edge needs one.`, { holders });
       }
       const found = await databaseNamed(r);
@@ -227,8 +233,16 @@ async function advance(r: Run, at: string): Promise<string> {
       await record(r, 'uploaded');
       return 'uploaded';
     }
-    case 'uploaded':
-      await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, [{ cron: SELF_CHECK_CRON }], r.log);
+    case 'uploaded': {
+      // A new script's cron change takes effect up to ~1.5 h late (measured 06.10.2026), so the
+      // working cron is set now, not when the self-check is confirmed: the first push comes at
+      // the next :05 the crons start firing, not hours later. Confirmation only drops the self-check.
+      // Counted right before the write: other scripts' crons may have changed since `reserved`.
+      const holders = await cronHolders(r, await cf<Script[]>(r.token, 'GET', `${acc(r)}/workers/scripts`));
+      const used = holders.reduce((sum, h) => sum + h.crons, 0);
+      if (r.kind === 'install' && used >= CRON_LIMIT) fail(409, 'cron_limit', `This account already uses all ${CRON_LIMIT} cron triggers of Workers Free; clx-edge needs one.`, { holders });
+      const crons = used + 2 <= CRON_LIMIT ? [{ cron: SELF_CHECK_CRON }, { cron: WORKING_CRON }] : [{ cron: SELF_CHECK_CRON }];
+      await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, crons, r.log);
       data.deadline = Date.now() + SELF_CHECK_TIMEOUT;
       // An install is in service from here: serving the script and the collector needs no cron,
       // and a new script's first cron can be late by a quarter of an hour or more (measured
@@ -236,6 +250,7 @@ async function advance(r: Run, at: string): Promise<string> {
       if (r.kind === 'install') await ownedUpdate(r, "state = 'ready', bundle = ?, version_id = ?, schema = ?, installed_at = ?, error = NULL", data.bundle, data.version_id ?? null, data.schema ?? 0, Date.now());
       await record(r, 'selfcheck');
       return 'selfcheck';
+    }
   }
   return fail(500, 'internal', `Unknown step ${at}.`);
 }
@@ -395,7 +410,7 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
 
 /**
  * `setup_ok` from a worker (§4): the deployment, bundle and schema must all be the ones the waiting
- * operation uploaded. Then the working cron replaces the self-check and the account is ready.
+ * operation uploaded. Then the working cron alone stays (the self-check goes) and the account is ready.
  */
 export async function confirmSetup(env: Env, edge: EdgeAccount, report: { deployment_id: string; bundle: string; schema: number | null }): Promise<'ok' | 'mismatch' | 'busy'> {
   const db = env.DB;

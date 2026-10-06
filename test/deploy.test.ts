@@ -74,7 +74,7 @@ describe('the bundle', () => {
 });
 
 describe('install', () => {
-  it('a connect goes on to the install: database, schema, worker with its key, the self-check cron', async () => {
+  it('a connect goes on to the install: database, schema, worker with its key, the self-check and working crons', async () => {
     const { status, body } = await connect();
     expect(status).toBe(202);
     expect(body.account.state).toBe('installing');
@@ -85,7 +85,7 @@ describe('install', () => {
     expect(edge()!.bindings.find((b) => b.name === 'DB')?.id).toBe(db![0]);
     expect(binding('BUNDLE')).toBe(EDGE_SHA256);
     expect(binding('HOOK_URL')).toBe(env.HOOK_URL);
-    expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
     const row = (await env.DB.prepare('SELECT * FROM edge_accounts').first<Record<string, unknown>>())!;
     expect(row).toMatchObject({ d1_id: db![0], script_owned: 1, edge_key_hash: await sha256(edge()!.secrets.get('EDGE_KEY')!), deployment_id: binding('DEPLOYMENT_ID') });
     expect((await account(body.account.id)).operation).toMatchObject({ kind: 'install', state: 'running', step: 'selfcheck' });
@@ -100,7 +100,7 @@ describe('install', () => {
     expect(await setupOk({ extra: 1 })).toMatchObject({ status: 400 });
     // In service already, still waiting for its confirmation.
     expect(await account(body.account.id)).toMatchObject({ state: 'ready', operation: { state: 'running', step: 'selfcheck' } });
-    expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
     expect(await setupOk()).toMatchObject({ status: 200 });
     expect(edge()!.crons).toEqual([WORKING_CRON]);
     expect(await account(body.account.id)).toMatchObject({ state: 'ready', edge: { bundle: EDGE_SHA256, up_to_date: true, schema: SCHEMA }, operation: { state: 'done' } });
@@ -152,6 +152,35 @@ describe('install', () => {
     const { body } = await connect();
     expect(await account(body.account.id)).toMatchObject({ state: 'connected', error: { code: 'cron_limit', holders: [{ script: 'a', crons: 3 }, { script: 'b', crons: 2 }] } });
     expect(fakeCf.dbs.size).toBe(0);
+  });
+
+  it('one cron trigger left: the install sets the self-check alone, and the working cron on confirmation', async () => {
+    fakeCf.foreignScript('a', 'x', ['fetch', 'scheduled'], ['1 * * * *', '2 * * * *', '3 * * * *', '4 * * * *']);
+    const { body } = await connect();
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
+    expect(await setupOk()).toMatchObject({ status: 200 });
+    expect(edge()!.crons).toEqual([WORKING_CRON]);
+    expect((await account(body.account.id)).state).toBe('ready');
+  });
+
+  it('crons that appear after the start are counted right before the cron triggers are set', async () => {
+    fakeCf.failOnce.add(`/accounts/${ACC}/workers/scripts/clx-edge`);
+    const { body } = await connect();
+    expect((await account(body.account.id)).operation).toMatchObject({ state: 'running', step: 'uploading' });
+    fakeCf.foreignScript('a', 'x', ['fetch', 'scheduled'], ['1 * * * *', '2 * * * *', '3 * * * *', '4 * * * *']);
+    await env.DB.prepare('UPDATE operations SET updated_at = 0').run();
+    await runOperations(env);
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
+  });
+
+  it('all cron triggers taken while the install runs: cron_limit before the crons, the worker undone', async () => {
+    fakeCf.failOnce.add(`/accounts/${ACC}/workers/scripts/clx-edge`);
+    const { body } = await connect();
+    fakeCf.foreignScript('a', 'x', ['fetch', 'scheduled'], ['1 * * * *', '2 * * * *', '3 * * * *', '4 * * * *', '5 * * * *']);
+    await env.DB.prepare('UPDATE operations SET updated_at = 0').run();
+    await runOperations(env);
+    expect(fakeCf.scripts.has('clx-edge')).toBe(false);
+    expect(await account(body.account.id)).toMatchObject({ state: 'connected', error: { code: 'cron_limit', step: 'uploaded', holders: [{ script: 'a', crons: 5 }] } });
   });
 
   it('a passing failure leaves the operation to the cron, which finishes it from its step', async () => {
@@ -244,9 +273,18 @@ describe('update (rollout)', () => {
     expect(r.status).toBe(202);
     expect(edge()!.live).not.toBe(before);
     expect(edge()!.secrets.get('EDGE_KEY')).toBe(key);
-    expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
     expect(await setupOk({}, key)).toMatchObject({ status: 200 });
     expect(await account(id)).toMatchObject({ state: 'ready', operation: { kind: 'update', state: 'done' } });
+    expect(edge()!.crons).toEqual([WORKING_CRON]);
+  });
+
+  it('an update with no room for a second cron keeps to the self-check alone until confirmed', async () => {
+    await ready();
+    fakeCf.foreignScript('a', 'x', ['fetch', 'scheduled'], ['1 * * * *', '2 * * * *', '3 * * * *', '4 * * * *']);
+    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
+    expect(await setupOk()).toMatchObject({ status: 200 });
     expect(edge()!.crons).toEqual([WORKING_CRON]);
   });
 

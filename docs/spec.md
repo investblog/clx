@@ -158,18 +158,23 @@ Why:
   is retried by the cron, at most 10 runs; any other failure undoes the operation at once.
 - **Install** (every step is checked):
   1. what is there: the account's scripts and their cron triggers (only scripts with a `scheduled`
-     handler can hold one; 5 in use → `cron_limit`), and `clx-edge` by name → `name_taken`;
+     handler can hold one; 5 in use → `cron_limit`; 4 in use → only the self-check cron at step 4),
+     and `clx-edge` by name → `name_taken`;
   2. D1 `clx-edge` (or the recorded one, if it is still there) + migrations; the step is recorded
      before the create call, so a resumed step adopts a database it finds by name;
   3. the worker key: 32 random bytes, we keep only its SHA-256; on reinstall the previous hash is
      accepted for one more day;
   4. upload the script (`PUT …/workers/scripts/clx-edge`, `compatibility_date` fixed in the bundle)
      with the key as a `secret_text` binding in the same upload — one call, no separate secrets
-     step — then an **every-minute** cron;
+     step — then the cron triggers: the **every-minute** self-check and the working `5 * * * *`
+     together. Changing a new script's crons takes effect up to ~1.5 hours late (measured
+     06.10.2026), so the working cron is not left for after the self-check —
+     [ADR 0007](./decisions/0007-both-crons-at-upload.md);
   5. self-check: within the next minute the worker sends `setup_ok {deployment_id, bundle, schema}`
      to `HOOK_URL/setup` with `Bearer EDGE_KEY`; `deployment_id` is single-use and passed as a
      binding of this deployment, so an old or delayed `setup_ok` cannot count for another
-     deployment. When all three fields match, clx.cx sets the working cron `5 * * * *`. One
+     deployment. When all three fields match, clx.cx drops the self-check and keeps the working
+     cron `5 * * * *` alone. One
      cron run must be enough: while clx.cx answers `503` (the run has not recorded its step yet,
      or holds the lease) or fails, the worker asks again every 5 s for up to 50 s; `401` or `409`
      ends the run.
@@ -178,7 +183,7 @@ Why:
   only confirms it. The cron of a *new* script is unreliable at first (measured 05.10.2026 on five
   installs: first run after ~4.5, ~5.5 and ~6.5 minutes; once at once and then not for 14 minutes;
   once not at all within 15 minutes), so an install with no `setup_ok` within 15 minutes is **not**
-  undone: clx.cx sets the working cron anyway and marks the account `not_confirmed`; whether the
+  undone: clx.cx drops the self-check cron anyway and marks the account `not_confirmed`; whether the
   cron runs is then shown by the heartbeat of the pushes (§7, "no connection" after 26 hours) —
   [ADR 0003](./decisions/0003-install-without-cron.md).
   A failure in steps 1–4 deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
@@ -186,8 +191,8 @@ Why:
   previous version as an update does.
 - **Update** — still undone without its `setup_ok` (the cron of an existing script fired after
   40–49 s each time measured): drift check → migrations → upload the new script with a new `deployment_id`, keeping
-  the key (`keep_bindings: ["secret_text"]`) → the every-minute cron → self-check (as step 5) → the
-  working cron. Before the upload clx.cx records the version serving now (`GET …/deployments`); if
+  the key (`keep_bindings: ["secret_text"]`) → the self-check and working crons (as step 4) →
+  self-check (as step 5) → the working cron alone. Before the upload clx.cx records the version serving now (`GET …/deployments`); if
   the cron or the self-check fail, that version is deployed again at 100%
   (`POST …/workers/scripts/clx-edge/deployments`) and the `5 * * * *` cron restored — no old bundle
   has to be kept. Checked on a Free account 05.10.2026 with the working token's rights: versions,
@@ -209,7 +214,8 @@ Why:
   Tokens Edit right and never will) — the user revokes it in Cloudflare from a link, or pastes a new
   bootstrap token and clx deletes the working one with it. Totals on clx.cx are deleted after 30
   days (or at once, by a button).
-- **Worker cron:** one, `5 * * * *` (Free allows 5 crons per account). The `workers.dev` address
+- **Worker cron:** one, `5 * * * *` (Free allows 5 crons per account); while an install or update
+  is checked, the every-minute self-check runs next to it. The `workers.dev` address
   of a script uploaded through the API is off by default (checked 05.10.2026); the worker answers
   `404` there anyway, so a pass-through never loops.
 
@@ -335,7 +341,8 @@ Why:
   fake D1 counts statements per run.
 - **Cron triggers.** Free allows 5 per account. Before the install (§4) clx.cx counts the cron
   triggers of the account's scripts; with 5 in use the install stops with `cron_limit` and says
-  which scripts hold them. clx needs one.
+  which scripts hold them. clx needs one, and a second one while an install or update is checked;
+  with only one free the self-check goes alone and the working cron follows its confirmation.
 
 ## 6. Short links, QR, rules
 
