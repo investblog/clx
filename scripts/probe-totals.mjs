@@ -5,8 +5,8 @@
 // Pages host of `probe-pages.mjs up`, on the throwaway account of .secrets/test-cloudflare.env, as
 // .secrets/user-probe@clx.cx.txt:
 //   1. connect, install, add the site, send two views of one visitor and a bot;
-//   2. wait for the worker's hourly run (its working cron, at :05, set once the install is
-//      confirmed or after 15 minutes) — up to ~80 minutes;
+//   2. wait for the worker's hourly run (its working cron, at :05, set at upload — ADR 0007) after
+//      the beacons' hour closes — up to ~80 minutes; the line says how long it took;
 //   3. clx.cx has the closed hour and the running day of the site (read from its D1 through
 //      wrangler), the account shows the worker's heartbeat;
 //   4. disconnect, and clean up.
