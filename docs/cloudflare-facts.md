@@ -76,6 +76,7 @@ to the token clx actually holds.
 | Fact | Checked | Used in |
 |---|---|---|
 | GraphQL Analytics on Free answers `workersInvocationsAdaptive`, `d1AnalyticsAdaptiveGroups`, `d1StorageAdaptiveGroups` with Account Analytics Read. | 05.10.2026 | upgrade advice (§8) |
+| On Free the three datasets keep **90 days** (`settings { … notOlderThan }` = 7,776,000 s) and one query spans at most **32 days** (`maxDuration` = 2,764,800 s; a wider range is refused: "cannot request a time range wider than 4w4d"); `maxPageSize` 10,000. | 06.10.2026, the dataset `settings` node | §8: 7 days of history are always there |
 | D1 rows appear ~15 minutes after the writes; a script made minutes earlier is counted under `__unknown__`. | 05.10.2026 | §8: account-wide sums only |
 | `workersInvocationsAdaptive` by `datetimeMinute` and `scriptName` shows when a script ran and how many subrequests it made — the way to see whether a user-side worker ran at all when there are no logs. | 05.10.2026 | diagnosing the self-check |
 | Workers Observability (`…/workers/observability/telemetry/query`) is refused (`403`) to the clx.cx deploy token — it holds no Observability right. | 05.10.2026 | — |

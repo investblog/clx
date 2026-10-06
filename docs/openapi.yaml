@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: clx management API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
     Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
@@ -98,6 +98,25 @@ components:
             queue: { type: integer, description: queue parts and final days waiting to be sent }
             error: { type: [string, 'null'], description: the worker's last error }
             dropped: { type: object, additionalProperties: { type: integer }, description: 'items dropped unsent, by reason: budget, invalid, unknown_target, too_old, busy, expired' }
+        advice:
+          type: [object, 'null']
+          description: 'When to move this Cloudflare account to Workers Paid, from its measured use over the last 7 complete UTC days; recomputed daily, null until first computed'
+          properties:
+            level: { type: string, enum: [ok, watch, upgrade_soon, over], description: 'the worst metric: over — a limit was reached (or the database is at backpressure, 400 MB); upgrade_soon — busiest day ≥ 80% or the limit within 7 days; watch — ≥ 60% or within 30 days' }
+            metric: { type: [string, 'null'], enum: [requests, writes, reads, size, null] }
+            metrics:
+              type: object
+              description: 'requests, writes, reads — per day for the whole account, against 100,000 / 100,000 / 5,000,000; size — clx-edge now, against 500 MB'
+              additionalProperties:
+                type: object
+                properties:
+                  level: { type: string, enum: [ok, watch, upgrade_soon, over] }
+                  limit: { type: integer }
+                  busiest: { type: object, properties: { day: { type: [string, 'null'], format: date }, value: { type: integer } } }
+                  forecast: { type: [string, 'null'], format: date, description: 'the day the trend reaches the limit, when within 30 days' }
+            unavailable: { type: array, items: { type: string, enum: [analytics, size] }, description: 'what could not be read — not guessed' }
+            suggest: { type: string, enum: [shorter_hourly_retention], description: 'size alone is the problem' }
+            at: { type: string, format: date-time }
         operation:
           type: [object, 'null']
           description: The latest operation on the account (GET /v1/accounts/{id} only)

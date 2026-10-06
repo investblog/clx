@@ -561,7 +561,7 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
     `workersInvocationsAdaptive`, `d1AnalyticsAdaptiveGroups` and `d1StorageAdaptiveGroups` answer;
     D1 rows appeared about 15 minutes after the writes; invocations of a script made minutes earlier
     were still counted under `__unknown__` after 20 minutes — so the advice uses account-wide sums,
-    never per-script ones. How many days the datasets keep is still to be seen;
+    never per-script ones. On Free they keep 90 days and one query spans at most 32 days (checked 06.10.2026);
   - the D1 REST API (`GET /accounts/{id}/d1/database/{db}`, D1 Read): the size of `clx-edge`;
   - without the Analytics datasets the request, write and read metrics are **unavailable**, not
     guessed: the advice then shows only size and the backpressure state, and says why;
@@ -569,10 +569,14 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   D1 reads/day (5M), `clx-edge` size (500 MB);
 - **data**: the last 7 complete UTC days (today is never used); the trend is a least-squares line
   through them, used only when there are at least 4 days and the slope is positive — otherwise
-  "no forecast";
+  "no forecast"; the days count from the first day with use, so a new account gets no forecast
+  until it has 4; size is judged by its current value, without a trend (it grows slowly);
+- **backpressure** is not reported by the worker separately: it is on exactly when the database
+  is at 400 MB (`FULL_BYTES`), so the advice reads it from the size — 400 MB is `over`;
 - **levels** — the highest one that applies, per metric; the account shows its worst metric:
   - `over` — a limit was reached on any of the 7 days (requests, writes or reads at the limit,
-    size ≥ 500 MB, backpressure on, or pushes reporting write failures): e-mail at once, with what
+    size ≥ 500 MB, backpressure on, or pushes reporting write failures — the last not yet read,
+    `docs/TODO.md`): e-mail at once, with what
     stopped working (the list above);
   - `upgrade_soon` — the busiest day ≥ 80%, or the forecast reaches 100% within 7 days: e-mail
     (at most once a week per account) and a banner;

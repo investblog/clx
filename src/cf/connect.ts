@@ -96,6 +96,8 @@ export interface EdgeAccount {
   push_dropped: string | null;
   budget_day: number;
   budget_used: number;
+  advice: string | null;
+  advice_at: number;
 }
 
 /** AAD: the ciphertext belongs to this record and this Cloudflare account only (§3 item 5). */
@@ -115,6 +117,9 @@ export function accountView(a: EdgeAccount) {
     push: a.last_push_at
       ? { at: new Date(a.last_push_at).toISOString(), bundle: a.push_bundle, schema: a.push_schema, queue: a.push_queue, error: a.push_error, dropped: a.push_dropped ? JSON.parse(a.push_dropped) : {} }
       : null,
+    // When to move the Cloudflare account to Workers Paid (§8), recomputed daily; an account out of
+    // service (revoked, no rights) is not measured any more, so its last advice is not shown.
+    advice: a.advice && inService(a) ? JSON.parse(a.advice) : null,
     created_at: new Date(a.created_at).toISOString(),
   };
 }

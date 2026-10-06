@@ -138,6 +138,12 @@ try {
   step('… the country is known (cf.country)', (b?.countries ?? []).some((r) => /^[A-Z]{2}$/u.test(r.key)), JSON.stringify(b?.countries));
   step('… the bot is in its category', n('bots') >= 1, JSON.stringify(b?.bots));
 
+  // The upgrade advice (§8): the clx.cx hourly job at :20 reads the account's analytics and the
+  // database size with the working token — proof that the token has the rights it needs.
+  const advised = await until(async () => (await clx('GET', `/v1/accounts/${accountId}`, key)).body.account, (a) => a?.advice, 25, 60_000);
+  const adv = advised?.advice;
+  step('the upgrade advice: analytics and size read with the working token', Boolean(adv) && !adv.unavailable && adv.metrics?.requests && adv.metrics?.size?.busiest?.value > 0, JSON.stringify(adv));
+
   const gone = await clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-disconnect-${run}`);
   step('disconnect', gone.status === 200 && gone.body.left?.length === 0, JSON.stringify(gone.body.left ?? gone.body.error));
   accountId = null;

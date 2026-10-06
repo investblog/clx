@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { admin } from './admin';
+import { runAdvice } from './advice';
 import { auth } from './auth/routes';
 import { checkTokens } from './cf/connect';
 import { runOperations } from './cf/deploy';
@@ -43,7 +44,7 @@ export default {
   // Every minute: install and update operations — resumed if stalled, ended if the worker's
   // setup_ok is overdue (§4). Hourly: a slice of the token check (§3 item 6), lost connects,
   // expired idempotency records (§15), API call log rows (90 days, §13 item 1) and totals (§7), and
-  // workers gone silent.
+  // workers gone silent, and a slice of the upgrade advice (§8).
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       (async () => {
@@ -70,6 +71,8 @@ export default {
         if (silent?.meta.changes) console.log(`no connection: ${silent.meta.changes} accounts`);
         const r = await checkTokens(env, now);
         console.log(`tokens checked ${r.checked}, revoked ${r.revoked}, connects lost ${r.lost}`);
+        const a = await runAdvice(env, now);
+        if (a.advised) console.log(`advice: ${a.advised} accounts`);
       })(),
     );
   },

@@ -14,11 +14,13 @@ v2 stages — [`docs/spec.md`](./spec.md) §14.
       e-mail sending, stage 6.
 - [ ] `MASTER_KEYS` rotation tool (a new key in front, re-encrypt, drop the old one) — before the
       first key needs replacing.
-- [ ] How many days the GraphQL Analytics datasets keep on Free (§8) — check before the upgrade
-      advice (stage 4).
 - [ ] Sign-out: the page shows the sign-in form even when `/auth/logout` failed, so the refresh
       cookie may stay valid — show the error or retry (stage 6, with sign-up).
 - [ ] Proxy mode for the counter (a site not on Cloudflare) — after v2, if needed.
+- [ ] Upgrade advice e-mails (§8: `over` at once, `upgrade_soon` at most weekly) — with e-mail
+      sending, stage 6; the banner — with the pages (4e). Also `over` from "pushes reporting write
+      failures": the heartbeat carries the worker's error text only, with no clean sign of a failed
+      D1 write — add one to the push body when it is needed.
 - [ ] The 26-hour silence e-mail (§4) — with e-mail sending, stage 6. (The `no_connection` state
       itself — done in stage 4c.)
 - [ ] The API's share of the per-account write budget (§8): idempotency rows and changes made

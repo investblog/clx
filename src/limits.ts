@@ -13,6 +13,9 @@ export const planOf = (plan: string): Plan => (plan === 'api' ? 'api' : 'free');
  *  days are taken. Links are not counted until they exist (stage 5). */
 export const writeBudget = (plan: Plan, sites: number, links = 0) => 3000 + (plan === 'api' ? 110 * sites + 3 * links : 0);
 
+/** Workers Free, per Cloudflare account and UTC day (§8) — what the upgrade advice measures against. */
+export const CF_FREE = { requests: 100_000, writes: 100_000, reads: 5_000_000, size: 500 * 1024 * 1024 } as const;
+
 /** Connected `free` accounts the service takes before the waiting list (§8). */
 export const FREE_ACCOUNTS_CAP = 500;
 

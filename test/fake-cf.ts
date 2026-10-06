@@ -35,6 +35,10 @@ export const fakeCf = {
   takenHosts: new Set<string>(),
   /** D1 queries whose SQL matches answer 503 */
   failSql: null as RegExp | null,
+  /** the account's use per UTC day (`YYYY-MM-DD`), as GraphQL Analytics answers it */
+  analytics: {} as Record<string, { requests: number; writes: number; reads: number }>,
+  /** what a database's `file_size` says */
+  dbSize: 1_000_000,
   /** called when a route is made, before the answer: a concurrent change lands here */
   onRoutePost: null as null | (() => Promise<void>),
   scripts: new Map<string, Script>(),
@@ -54,6 +58,8 @@ export const fakeCf = {
     this.refuse.clear();
     this.takenHosts.clear();
     this.failSql = null;
+    this.analytics = {};
+    this.dbSize = 1_000_000;
     this.onRoutePost = null;
     this.scripts.clear();
     for (const d of this.dbs.values()) d.db.close();
@@ -177,7 +183,7 @@ function d1(path: string, method: string, init: RequestInit, url: URL): Response
     fakeCf.dbs.delete(m[1]!);
     return ok(null);
   }
-  if (!m[2] && method === 'GET') return ok({ uuid: m[1], name: d.name });
+  if (!m[2] && method === 'GET') return ok({ uuid: m[1], name: d.name, file_size: fakeCf.dbSize });
   if (m[2] && method === 'POST') {
     const { sql, params } = JSON.parse(String(init.body)) as { sql: string; params?: (string | number)[] };
     if (fakeCf.failSql && fakeCf.failSql.test(sql)) return no(503);
@@ -263,7 +269,24 @@ async function cloudflare(url: URL, init: RequestInit): Promise<Response> {
     return no(403, 9109);
   }
   if ([...fakeCf.refuse].some((f) => `${method} ${path}`.includes(f))) return no(400, 10021);
-  if (path === '/graphql') return Response.json({ data: { viewer: { accounts: [{ workersInvocationsAdaptive: [] }] } }, errors: null });
+  if (path === '/graphql') {
+    // The account's use per day (the advice reads it under the aliases inv and d1).
+    const days = Object.entries(fakeCf.analytics);
+    return Response.json({
+      data: {
+        viewer: {
+          accounts: [
+            {
+              workersInvocationsAdaptive: [],
+              inv: days.map(([date, u]) => ({ sum: { requests: u.requests }, dimensions: { date } })),
+              d1: days.map(([date, u]) => ({ sum: { rowsWritten: u.writes, rowsRead: u.reads }, dimensions: { date } })),
+            },
+          ],
+        },
+      },
+      errors: null,
+    });
+  }
   if (!path.startsWith(`/accounts/${ACC}`) && !path.startsWith('/zones')) return no(403);
   if (path.endsWith('/tokens/verify')) return ok({ id: caller.id, status: 'active', expires_on: new Date(Date.now() + 86_400_000).toISOString() });
   if (path === `/accounts/${ACC}`) return ok({ id: ACC, name: 'Test account' });
