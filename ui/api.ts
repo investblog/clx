@@ -93,7 +93,7 @@ export async function text(path: string): Promise<string> {
 
 // The answer of /v1/me (src/v1/index.ts).
 export interface Me {
-  user: { id: number; email: string };
+  user: { id: number; email: string; email_confirmed: boolean };
   plan: 'free' | 'api';
   limits: { cfAccounts: number; sites: number; links: number; apiKeys: number };
   use: { cf_accounts: number; api_keys: number };

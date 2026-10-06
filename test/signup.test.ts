@@ -50,6 +50,11 @@ async function login(email: string, password: string) {
 const me = (token: string) => app.request('https://clx.cx/v1/me', { headers: { authorization: `Bearer ${token}` } }, env);
 
 describe('sign-up', () => {
+  it("the page's config: Turnstile's site key and the password minimum", async () => {
+    const res = await app.request('https://clx.cx/auth/config', {}, { ...env, TURNSTILE_SITE_KEY: '0x4AAA-site' });
+    expect(await res.json()).toEqual({ turnstile_site_key: '0x4AAA-site', password_min: 10 });
+  });
+
   it('a new address: an unconfirmed user, a confirmation e-mail; signed in, it cannot connect an account until confirmed', async () => {
     const r = await json(await post('/auth/signup', { email: 'New@Example.com', password: 'a-long-password', turnstile: 'human' }));
     expect(r).toMatchObject({ status: 202, body: { ok: true } });

@@ -108,6 +108,9 @@ async function mailToken(env: Env, userId: number, email: string, kind: 'confirm
 
 export const signup = new Hono<{ Bindings: Env }>();
 
+/** What the sign-up and reset pages need before they ask anything: Turnstile's site key. */
+signup.get('/config', (c) => c.json({ turnstile_site_key: c.env.TURNSTILE_SITE_KEY || null, password_min: PASSWORD_MIN }));
+
 signup.post('/signup', async (c) => {
   const body = await gate(c);
   if (body instanceof Response) return body;

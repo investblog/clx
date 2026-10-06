@@ -1,9 +1,10 @@
 // The page's entry: sign-in, the hash router over the pages, the theme.
-import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
-import { get, login, logout, refresh, SignedOut, type Me } from './api';
+import { accountPage, accountsPage, action, connectPage, failure, keysPage } from './accounts';
+import { call, get, login, logout, refresh, SignedOut, type Me } from './api';
 import { h } from './dom';
 import { linkPage, linksBlock, newLinkPage } from './links';
 import { reportPage } from './report';
+import { confirmPage, resetPage, signupPage } from './signup';
 import { newSitePage, sitePage, sitesBlock } from './sites';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -26,6 +27,23 @@ function showLogin(message = ''): void {
   status.dataset.type = message ? 'error' : 'idle';
   status.textContent = message;
   $<HTMLInputElement>('email').focus();
+}
+
+/** Until the address is confirmed no Cloudflare account can be connected (§9): say so, offer the e-mail again. */
+function unconfirmedBanner(): HTMLElement {
+  return h(
+    'div',
+    { class: 'banner banner--warning stack stack--sm' },
+    h('p', {}, `Подтвердите адрес ${me!.user.email}: ссылка в письме, которое clx отправил при регистрации. До этого аккаунт Cloudflare подключить нельзя.`),
+    h(
+      'div',
+      { class: 'actions' },
+      action('Прислать письмо ещё раз', 'btn--ghost btn--sm', async () => {
+        await call('POST', '/auth/confirm/resend');
+        flash = '';
+      }),
+    ),
+  );
 }
 
 const go = (hash: string) => {
@@ -54,11 +72,32 @@ async function page(path: string, mine: number): Promise<[HTMLElement, string]> 
   const link = path.match(/^\/links\/([\w-]+)$/u);
   if (link) return [await linkPage(link[1]!, live, redraw), 'Ссылка'];
   const [accounts, sites, links] = await Promise.all([accountsPage(me!), sitesBlock(), linksBlock(() => redraw())]);
-  return [h('div', {}, accounts, sites, links), 'Главная'];
+  return [h('div', {}, me!.user.email_confirmed ? null : unconfirmedBanner(), accounts, sites, links), 'Главная'];
+}
+
+/** The pages a signed-out visitor opens (§9): sign-up, the confirmation link, the password reset. */
+async function publicPage(path: string): Promise<[HTMLElement, string] | null> {
+  const token = path.match(/[?&]t=([A-Za-z0-9_-]{43})/u)?.[1] ?? null;
+  if (path === '/signup') return [await signupPage(), 'Регистрация'];
+  if (path.startsWith('/confirm')) return [await confirmPage(token ?? ''), 'Подтверждение адреса'];
+  if (path === '/reset' || path.startsWith('/reset?')) return [await resetPage(token), token ? 'Новый пароль' : 'Сброс пароля'];
+  return null;
 }
 
 async function route(): Promise<void> {
   const mine = ++seq;
+  const open = await publicPage(location.hash.replace(/^#/u, ''));
+  if (open) {
+    if (mine !== seq) return;
+    // Nothing of a signed-in page stays around a public one.
+    loginBox.hidden = true;
+    out.hidden = true;
+    who.textContent = '';
+    app.replaceChildren(open[0]);
+    document.title = `${open[1]} — clx`;
+    app.hidden = false;
+    return;
+  }
   try {
     // Fresh each time: the plan's use (accounts, keys) changes with what the pages do.
     me = await get<Me>('/v1/me');
@@ -125,4 +164,6 @@ $('theme').addEventListener('click', () => {
 });
 
 window.addEventListener('hashchange', () => void route());
-void refresh().then((ok) => (ok ? route() : showLogin()));
+// A public page (an e-mail's link) opens signed out too; any other page without a session shows
+// the sign-in form — route() finds that out itself.
+void refresh().then(() => route());
