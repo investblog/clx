@@ -72,6 +72,8 @@ to the token clx actually holds.
 | `GET /zones?account.id=&name=` matches the zone name exactly: `sub.example.com` finds nothing — try the host's suffixes. | 05.10.2026 | `zoneFor()` |
 | `POST /zones/{zone}/workers/routes {pattern, script}` with the working token creates a route; the same pattern again → `409` code `10020`, the message names the worker that holds it; a route to a script that does not exist → `400` code `10019`; deleting a route twice → `404` code `10009`. | 05.10.2026 | `src/cf/sites.ts` |
 | A worker route `<host>/<path>/*` runs on a host served by a Pages custom domain; `fetch(request)` from the worker reaches the Pages project (its own 404 / 405, same headers). No Pages right needed. | 05.10.2026 (`scripts/probe-pages.mjs`) | §5, §13 item 9 |
+| A link host with no origin: a proxied `AAAA <host> 100::` record (made seconds before) plus the route `<host>/*` → the worker, made with the working token — the worker answers every request there at once (302 / 404 within a second of the sync); Universal SSL covers a new one-level subdomain right away. The answer carries only Cloudflare's own headers besides the worker's (`cf-ray`, `server`, `alt-svc`, `nel`, `report-to`). | 06.10.2026 (`scripts/probe-links.mjs`) | §6, §13 item 2 |
+| `https://<host>/cdn-cgi/trace` shows `loc=` — the country `request.cf.country` gives that client — a way for a probe to know which country rule must match. | 06.10.2026 | `scripts/probe-links.mjs` |
 | Through the worker on HTTP/1.1 header names change case and order (`CF-Cache-Status` → `cf-cache-status`); on HTTP/2 all are lower case anyway. | 05.10.2026 | §5 footprint notes |
 
 ## Analytics (stage 2–3)
