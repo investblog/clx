@@ -23,7 +23,9 @@ main{max-width:1200px;margin:0 auto;padding:var(--space-4) var(--gutter) var(--s
 .page-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);margin:var(--space-5) 0 var(--space-3)}
 .page-head h2{margin:0;margin-right:auto}
 .narrow{max-width:640px}
-.account-row{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);color:var(--text)}
+main .card{padding:var(--card-pad-y) var(--card-pad-x)}
+main .card h3{margin:0}
+.account-row{flex-direction:row;align-items:center;flex-wrap:wrap;gap:var(--space-3);color:var(--text)}
 main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
 .account-row strong{margin-right:auto}
 .steps{padding-left:var(--space-5);margin:0 0 var(--space-4)}
@@ -42,4 +44,7 @@ main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
 .action .btn{white-space:normal;max-width:100%}
 .action-status{color:var(--danger);font-size:var(--fs-sm)}
 .check{display:inline-flex;align-items:center;gap:var(--space-2);margin-right:var(--space-4)}
-code.secret{display:block;padding:var(--space-2);border-radius:var(--radius-xs);background:var(--bg-soft);overflow-wrap:anywhere;user-select:all}
+/* A token field is a text field (a password field makes browsers autofill the sign-in password). */
+.masked{-webkit-text-security:disc}
+.secret-card{align-items:flex-start}
+code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radius:var(--radius-xs);background:var(--bg-soft);overflow-wrap:anywhere;user-select:all}

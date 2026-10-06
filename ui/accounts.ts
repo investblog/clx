@@ -103,7 +103,7 @@ export async function accountsPage(me: Me): Promise<HTMLElement> {
 
 export function connectPage(go: (hash: string) => void): HTMLElement {
   const account = h('input', { class: 'input', id: 'cf-account', required: '', pattern: '[0-9a-f]{32}', placeholder: '32 символа: 0–9, a–f', autocomplete: 'off', spellcheck: 'false' });
-  const token = h('input', { class: 'input', id: 'cf-bootstrap', required: '', type: 'password', autocomplete: 'off', spellcheck: 'false' });
+  const token = h('input', { class: 'input masked', id: 'cf-bootstrap', required: '', type: 'text', autocomplete: 'off', spellcheck: 'false', 'data-1p-ignore': '', 'data-lpignore': 'true' });
   const status = notice('', 'idle');
   const submit = h('button', { type: 'submit', class: 'btn btn--primary' }, 'Подключить и установить');
   const form = h(
@@ -160,7 +160,7 @@ function adviceCard(a: Account): HTMLElement | null {
       'tbody',
       {},
       ...Object.entries(adv.metrics).map(([k, m]) => {
-        const mb = (n: number) => `${Math.round(n / 1024 / 1024)} МБ`;
+        const mb = (n: number) => (n < 1024 * 1024 ? 'меньше 1 МБ' : `${Math.round(n / 1024 / 1024)} МБ`);
         const value = k === 'size' ? mb(m.busiest.value) : `${num(m.busiest.value)}${m.busiest.day ? ` (${m.busiest.day})` : ''}`;
         return h('tr', {}, h('td', {}, METRIC[k] ?? k), h('td', {}, value), h('td', {}, k === 'size' ? mb(m.limit) : num(m.limit)), h('td', {}, m.forecast ? `лимит около ${m.forecast}` : '—'), h('td', {}, badge(ADVICE_LEVEL[m.level] ?? [m.level, 'neutral'])));
       }),
@@ -206,16 +206,24 @@ function operationCard(a: Account): HTMLElement | null {
 
 export async function accountPage(id: string, live: Live, redraw: () => void): Promise<HTMLElement> {
   const { account: a } = await call<{ account: Account }>('GET', `/v1/accounts/${id}`);
-  // While an operation runs the page asks again every few seconds.
-  if (a.operation?.state === 'running' || a.state === 'installing' || a.state === 'pending')
-    setTimeout(() => {
-      if (live()) redraw();
-    }, 3000);
+  // While an operation runs the page asks again — every few seconds, every 30 s while it only waits
+  // for the worker's self-check (up to 15 minutes) — and redraws only when the account changed, so
+  // what the reader is typing (a new bootstrap token) is not wiped.
+  const seen = JSON.stringify(a);
+  const poll = (ms: number) =>
+    setTimeout(async () => {
+      if (!live()) return;
+      const next = await call<{ account: Account }>('GET', `/v1/accounts/${id}`).catch(() => null);
+      if (!live()) return;
+      if (next && JSON.stringify(next.account) !== seen) redraw();
+      else poll(ms);
+    }, ms);
+  if (a.operation?.state === 'running' || a.state === 'installing' || a.state === 'pending') poll(a.operation?.step === 'selfcheck' ? 30_000 : 3000);
 
   const warnings = a.error?.warnings ?? [];
   const errorCode = a.error?.code;
   const disconnectOut = h('div', {});
-  const renew = h('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: 'новый bootstrap-токен' });
+  const renew = h('input', { class: 'input masked', type: 'text', autocomplete: 'off', spellcheck: 'false', 'data-1p-ignore': '', 'data-lpignore': 'true', placeholder: 'новый bootstrap-токен' });
   return h(
     'div',
     { class: 'stack stack--md' },
@@ -320,41 +328,38 @@ export async function keysPage(me: Me, redraw: (message?: string) => void): Prom
     return { el: h('label', { class: 'check' }, box, ` ${a.name ?? a.cf_account_id}`), box };
   });
   const ips = h('input', { class: 'input', placeholder: 'например 203.0.113.7, 2001:db8::1', autocomplete: 'off' });
-  const table = h(
-    'table',
-    { class: 'table' },
-    h('thead', {}, h('tr', {}, h('th', {}, 'Ключ'), h('th', {}, 'Права'), h('th', {}, 'Аккаунты'), h('th', {}, 'IP'), h('th', {}, 'Выпущен'), h('th', {}, 'Использован'), h('th', {}, ''))),
+  const row = (k: Key) =>
     h(
-      'tbody',
+      'tr',
       {},
-      ...keys.map((k) =>
-        h(
-          'tr',
-          {},
-          h('td', {}, h('code', {}, `${k.prefix}…`)),
-          h('td', {}, k.scopes.map((s) => SCOPE[s] ?? s).join(', ')),
-          h('td', {}, k.allow_accounts?.map((id) => accounts.find((a) => a.cf_account_id === id)?.name ?? id).join(', ') ?? 'все'),
-          h('td', {}, k.allow_ips?.join(', ') ?? 'любые'),
-          h('td', {}, when(k.created_at)),
-          h('td', {}, k.last_used ?? '—'),
-          h(
-            'td',
-            {},
-            confirmAction('Отозвать', 'Да, отозвать', async (key) => {
-              await call('DELETE', `/v1/keys/${k.id}`, undefined, key);
-              redraw();
-            }),
-          ),
-        ),
+      h('td', {}, h('code', {}, `${k.prefix}…`)),
+      h('td', {}, k.scopes.map((s) => SCOPE[s] ?? s).join(', ')),
+      h('td', {}, k.allow_accounts?.map((id) => accounts.find((a) => a.cf_account_id === id)?.name ?? id).join(', ') ?? 'все'),
+      h('td', {}, k.allow_ips?.join(', ') ?? 'любые'),
+      h('td', {}, when(k.created_at)),
+      h('td', {}, k.last_used ?? '—'),
+      h(
+        'td',
+        {},
+        confirmAction('Отозвать', 'Да, отозвать', async (key) => {
+          await call('DELETE', `/v1/keys/${k.id}`, undefined, key);
+          redraw();
+        }),
       ),
-    ),
+    );
+  const tbody = h('tbody', {}, ...keys.map(row));
+  const tableCard = h(
+    'div',
+    { class: 'card table-scroll' },
+    h('table', { class: 'table' }, h('thead', {}, h('tr', {}, h('th', {}, 'Ключ'), h('th', {}, 'Права'), h('th', {}, 'Аккаунты'), h('th', {}, 'IP'), h('th', {}, 'Выпущен'), h('th', {}, 'Использован'), h('th', {}, ''))), tbody),
   );
+  let list: HTMLElement = keys.length ? tableCard : h('div', { class: 'card empty-state' }, h('p', {}, 'Ключей пока нет.'));
   return h(
     'div',
     { class: 'stack stack--md' },
     h('h2', {}, 'Ключи API'),
     h('p', { class: 'muted' }, `Ключ показывается один раз; на clx.cx хранится только его хеш. До ${me.limits.apiKeys} ключей.`),
-    keys.length ? h('div', { class: 'card table-scroll' }, table) : h('div', { class: 'card empty-state' }, h('p', {}, 'Ключей пока нет.')),
+    list,
     h(
       'section',
       { class: 'card stack stack--sm' },
@@ -378,7 +383,13 @@ export async function keysPage(me: Me, redraw: (message?: string) => void): Prom
           });
           const copy = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Скопировать');
           copy.addEventListener('click', () => void navigator.clipboard?.writeText(issued.key).then(() => (copy.textContent = 'Скопировано')));
-          shown.replaceChildren(h('div', { class: 'card stack stack--sm' }, h('strong', {}, 'Ключ выпущен — сохраните его сейчас, больше он не покажется:'), h('code', { class: 'secret' }, issued.key), copy));
+          shown.replaceChildren(h('div', { class: 'card stack stack--sm secret-card' }, h('strong', {}, 'Ключ выпущен — сохраните его сейчас, больше он не покажется:'), h('code', { class: 'secret' }, issued.key), copy));
+          // The new key joins the list (without its secret), so it can be revoked from here.
+          tbody.append(row(issued));
+          if (list !== tableCard) {
+            list.replaceWith(tableCard);
+            list = tableCard;
+          }
         }),
       ),
       shown,
