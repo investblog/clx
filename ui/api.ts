@@ -73,6 +73,24 @@ export async function call<T>(method: string, path: string, body?: unknown, key?
 
 export const get = <T>(path: string) => call<T>('GET', path);
 
+/** A GET whose answer is not JSON (the QR code's SVG), with the same session and errors as call(). */
+export async function text(path: string): Promise<string> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!token && !(await refresh())) throw new SignedOut();
+    const res = await fetch(path, { headers: { authorization: `Bearer ${token}` } });
+    if (res.status === 401) {
+      token = null;
+      continue;
+    }
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+      throw new ApiError(res.status, json.error?.code, json.error?.message ?? `HTTP ${res.status}`, json.error?.details);
+    }
+    return res.text();
+  }
+  throw new SignedOut();
+}
+
 // The answer of /v1/me (src/v1/index.ts).
 export interface Me {
   user: { id: number; email: string };

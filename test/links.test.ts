@@ -7,6 +7,7 @@ import type { EdgeAccount } from '../src/cf/connect';
 import { runLinkHosts } from '../src/cf/links';
 import { runSites } from '../src/cf/sites';
 import { app } from '../src/index';
+import { generateMatrix, renderSvg } from '../src/qr';
 import { receive } from '../src/push';
 import { clearReportCache, linkReport } from '../src/report';
 import type { Env } from '../src/types';
@@ -276,6 +277,26 @@ describe('links', () => {
     expect(r.body.link).toMatchObject({ url: 'https://example.org/b', rules: [{ countries: ['RS'], url: 'https://example.org/rs' }] });
     expect((await visit('https://go.example.com/promo', {}, 'RS')).headers.get('location')).toBe('https://example.org/rs');
     expect((await visit('https://go.example.com/promo', {}, 'DE')).headers.get('location')).toBe('https://example.org/b');
+  });
+
+  it('the QR code: an SVG of the address with ?q; size on request; none for a deleted link', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
+    const get = async (q = '') => {
+      const res = await app.request(`https://clx.cx/v1/links/${id}/qr.svg${q}`, { headers: { authorization: await session(1), 'cf-connecting-ip': '10.4.2.1' } }, env);
+      return { status: res.status, type: res.headers.get('content-type'), disposition: res.headers.get('content-disposition'), cache: res.headers.get('cache-control'), body: await res.text() };
+    };
+    // A key without the links scope gets no QR code.
+    await env.DB.prepare("UPDATE users SET plan = 'api' WHERE id = 1").run();
+    const issued = await call('POST', '/v1/keys', { body: { scopes: ['reports'] } });
+    const denied = await app.request(`https://clx.cx/v1/links/${id}/qr.svg`, { headers: { authorization: `Bearer ${issued.body.key}`, 'cf-connecting-ip': '10.4.2.2' } }, env);
+    expect(((await denied.json()) as { error: { code: string } }).error.code).toBe('scope_required');
+    const r = await get();
+    expect(r).toMatchObject({ status: 200, type: 'image/svg+xml', disposition: 'inline; filename="promo.svg"', cache: 'no-store' });
+    expect(r.body).toBe(renderSvg(generateMatrix('https://go.example.com/promo?q', { ecc: 'M' })));
+    expect((await get('?size=256')).body).toContain('width="256" height="256"');
+    expect((await get('?size=10')).status).toBe(400);
+    await call('DELETE', `/v1/links/${id}`);
+    expect((await get()).status).toBe(404);
   });
 
   it('the free plan stops at its link limit', async () => {

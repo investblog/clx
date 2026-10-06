@@ -8,6 +8,7 @@ import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
 import { addLink, deleteLink, linkHostView, linkView, liveLinkHost, patchLink, setLinkHost, type LinkRow } from '../cf/links';
 import { addSite, deleteSite, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { sha256 } from '../lib/crypto';
+import { generateMatrix, renderSvg } from '../qr';
 import { LIMITS, planOf, SCOPES } from '../limits';
 import { linkReport, PERIODS, siteReport, type Period } from '../report';
 import type { Env, Principal } from '../types';
@@ -394,6 +395,20 @@ v1.get(
     return { status: 200, body: { links: mine.map((r) => ({ ...linkView(r, r.link_host, r.synced_revision), clicks_7d: clicks.get(r.target) ?? 0 })) } };
   }),
 );
+
+// The QR code of a link (§6): an SVG of its address with `?q`, so scans are counted as source qr.
+// Not JSON, so not through handle(): the same auth and scope, the image as the body.
+v1.get('/links/:id/qr.svg', async (c) => {
+  const p = await principalOf(c);
+  requireScope(p, 'links');
+  const { link, host } = await linkOf(c, p);
+  if (link.state === 'deleted') fail(404, 'not_found', 'No such link.');
+  if (!host) fail(409, 'link_host_required', 'This account has no link host.');
+  const size = c.req.query('size');
+  if (size !== undefined && !/^(6[4-9]|[7-9]\d|[1-9]\d{2,3})$/u.test(size)) fail(400, 'invalid_request', '"size" must be an integer 64–9999 (pixels); without it the SVG scales to its container.', { field: 'size' });
+  const svg = renderSvg(generateMatrix(`https://${host}/${link.code}?q`, { ecc: 'M' }), size ? { size: Number(size) } : {});
+  return c.body(svg, 200, { 'content-type': 'image/svg+xml', 'content-disposition': `inline; filename="${link.code}.svg"` });
+});
 
 v1.get(
   '/links/:id/report',

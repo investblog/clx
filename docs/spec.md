@@ -363,8 +363,10 @@ Why:
   code is a new link; a deleted link frees its code and keeps its totals. A code is unique within
   the account — one link host per account, so the worker looks a link up by its code alone. Config
   keys: `linkhost:<host>` and `link:<code>` ([ADR 0008](./decisions/0008-link-host-and-codes.md)).
-- **QR** — SVG via `@301st/qr-svg` (§11), built on clx.cx (download as SVG). The address in the QR
+- **QR** — SVG via `@301st/qr-svg` (§11), built on clx.cx (download as SVG; `GET
+  /v1/links/{id}/qr.svg`, error correction M, an optional `size` in pixels). The address in the QR
   is `go.example.com/<code>?q`; the worker records `?q` as source `qr` and does not pass it on.
+  Built on clx.cx, not in the browser, so that API clients get it too.
 - **Rules:** `{countries?, devices?, url}` — countries as ISO alpha-2 codes (`cf.country`), devices
   `mobile`/`desktop` (as the collector tells them), at least one of the two; the first match wins,
   otherwise the main target. Up to 10 rules per link.
@@ -694,7 +696,9 @@ Pages:
   `generateMatrix(text, opts)`, `renderSvg(matrix, opts)`, `buildPathData`. Build with tsup → ESM +
   `.d.ts`, `exports`/`files`, `sideEffects: false`, one dependency — `uqr`; tests decode the output
   back with `jsqr`; a README; CI — tests on PRs, publishing on a tag with provenance. Links do not
-  wait for it: until it is published, clx takes it from a local folder (`file:`).
+  wait for it: until it is published, clx keeps **a copy of its source in the repository**
+  (`src/qr/`, with its MIT license and its tests) — a `file:` path would put a private folder into
+  the public `package.json` ([ADR 0009](./decisions/0009-qr-copy-in-repo.md)).
 
 ## 12. What v1 loses
 
@@ -789,8 +793,8 @@ stage.
    with a phone → a click with source `qr`; an interrupted sync leaves the previous links working.
 6. **Sign-up** (§9): e-mails, Turnstile, reset, privacy/terms/abuse. Check: a live e-mail; reusing an
    e-mail token is refused.
-7. **`@301st/qr-svg`** (§11) — in parallel with 2–4. At stage 5 clx takes it from a local folder
-   (`file:`), after publishing — from npm.
+7. **`@301st/qr-svg`** (§11) — in parallel with 2–4. At stage 5 clx keeps a copy of it in the
+   repository (`src/qr/`), after publishing — takes it from npm and drops the copy.
 
 ## 15. Management API
 

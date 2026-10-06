@@ -51,4 +51,5 @@ node scripts/user.mjs admin you@example.com on   # rollouts of clx-edge (docs/sp
 
 ## License
 
-[AGPL-3.0](LICENSE). The QR code library, `@301st/qr-svg`, is a separate MIT package.
+[AGPL-3.0](LICENSE). The QR code library, `@301st/qr-svg`, is a separate MIT package; until it is
+published on npm a copy lives in [`src/qr/`](src/qr/) under its own [MIT license](src/qr/LICENSE).

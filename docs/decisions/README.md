@@ -14,3 +14,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0006](./0006-backups-after-release.md) | Backups of the clx.cx database to R2 — after the release | 06.10.2026 | §13 |
 | [0007](./0007-both-crons-at-upload.md) | The working cron is set at upload, next to the self-check | 06.10.2026 | §4, §5 |
 | [0008](./0008-link-host-and-codes.md) | One link host per account, links keyed by code alone | 06.10.2026 | §6 |
+| [0009](./0009-qr-copy-in-repo.md) | The QR library is copied into the repository until it is on npm | 06.10.2026 | §6, §11, §14 |

@@ -481,6 +481,20 @@ paths:
       responses:
         '200': { description: Deleted, content: { application/json: { schema: { type: object, properties: { link: { $ref: '#/components/schemas/Link' } } } } } }
         default: { $ref: '#/components/responses/Error' }
+  /v1/links/{id}/qr.svg:
+    get:
+      summary: The QR code of the link (scope links) — an SVG of `https://<link host>/<code>?q`
+      description: |
+        The `?q` makes a scan count with source `qr`; the worker does not pass it on. One `<rect>` and
+        one `<path>`, integer coordinates, a quiet zone of 4 modules, error correction M. Without
+        `size` the SVG has no width and height and scales to its container. It follows the link host:
+        a replaced host makes earlier printed codes stop working.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: size, in: query, required: false, schema: { type: integer, minimum: 64, maximum: 9999 }, description: pixels }
+      responses:
+        '200': { description: The SVG, content: { image/svg+xml: { schema: { type: string } } } }
+        default: { $ref: '#/components/responses/Error' }
   /v1/links/{id}/report:
     get:
       summary: Clicks of the link (scope reports); with breakdowns=1 also sources, countries, devices, browsers, OS and bots

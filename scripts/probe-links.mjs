@@ -128,12 +128,19 @@ try {
   const synced = await until(async () => (await clx('GET', `/v1/links/${linkId}`, key)).body.link, (l) => l?.config === 'synced', 2);
   step('a link with rules, synced', made.status === 201 && synced?.config === 'synced', short);
 
+  // The QR code (stage 5c): an SVG built on clx.cx; its decoding is the unit tests' (jsQR).
+  const qrRes = await fetch(`${BASE}/v1/links/${linkId}/qr.svg`, { headers: { authorization: key } });
+  const qrSvg = await qrRes.text();
+  step('the QR code: an SVG of one rect and one path', qrRes.status === 200 && qrRes.headers.get('content-type') === 'image/svg+xml' && /^<svg [^>]*><rect [^>]*\/><path [^>]*\/><\/svg>$/u.test(qrSvg), `${qrRes.status}, ${qrSvg.length} bytes`);
+
   // An isolate that looked before the sync keeps "none" for 5 s: wait for the first redirect.
   const first = await until(() => hit(short), (r) => r.status === 302, 2, 3000);
   step('a click: 302 to the URL, no-store, no body', first.status === 302 && first.location === 'https://example.com/a' && first.cache === 'no-store' && first.body === '', JSON.stringify(first));
-  const phone = await hit(short, IPHONE);
+  // Each request may meet another isolate still holding "none" for up to 5 s (a 404, not counted):
+  // each is repeated until it is redirected — on 06.10 the phone's first try was lost that way.
+  const phone = await until(() => hit(short, IPHONE), (r) => r.status === 302, 0.5, 2000);
   step(`… the rule by country (${loc}) and device`, phone.location === `https://example.com/mobile-${loc}`, phone.location);
-  const qr = await hit(`${short}?q`);
+  const qr = await until(() => hit(`${short}?q`), (r) => r.status === 302, 0.5, 2000);
   step('… the QR address redirects too', qr.status === 302 && qr.location === 'https://example.com/a', qr.location);
   const misses = [await hit(`https://${host}/nope-${run}`), await hit(`https://${host}/`), await hit(short, CHROME, 'POST')];
   step('anything else on the link host: a plain 404', misses.every((r) => r.status === 404 && r.body === ''), misses.map((r) => r.status).join(', '));

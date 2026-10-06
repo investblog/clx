@@ -1,7 +1,7 @@
-// Pages of stage 5b (docs/spec.md §10): short links — the link host of each account, the list with
-// 7-day clicks, adding a link, and a link's page with its URL, rules and delete. Every action is a
+// Pages of stages 5b–5c (docs/spec.md §10): short links — the link host of each account, the list with
+// 7-day clicks, adding a link, and a link's page with its URL, rules, QR code and delete. Every action is a
 // /v1 call.
-import { ApiError, call, type Account, type LinkHost, type Me } from './api';
+import { ApiError, call, text, type Account, type LinkHost, type Me } from './api';
 import { action, confirmAction, notice, num, when, type Live } from './accounts';
 import { h } from './dom';
 import { errorText } from './text';
@@ -167,8 +167,22 @@ export async function newLinkPage(me: Me, go: (hash: string) => void): Promise<H
   );
 }
 
+/** The QR code: the SVG clx.cx builds, shown and saved as a data: URL (the CSP allows data: images). */
+function qrCard(l: Link, svg: string): HTMLElement {
+  const src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  return h(
+    'section',
+    { class: 'card stack stack--sm qr-card' },
+    h('h3', { class: 'h4' }, 'QR-код'),
+    h('img', { class: 'qr', src, alt: `QR-код ссылки ${l.short_url ?? l.code}`, width: '200', height: '200' }),
+    h('p', { class: 'muted text-sm' }, 'Ведёт на тот же адрес с меткой ?q — переходы по нему видны в отчёте как источник «qr». SVG печатается в любом размере без потери чёткости.'),
+    h('div', { class: 'actions' }, h('a', { class: 'btn btn--ghost btn--sm', href: src, download: `${l.code}.svg` }, 'Скачать SVG')),
+  );
+}
+
 export async function linkPage(id: string, live: Live, redraw: (message?: string) => void): Promise<HTMLElement> {
   const { link: l } = await call<{ link: Link }>('GET', `/v1/links/${id}`);
+  const svg = l.state === 'deleted' || !l.short_url ? null : await text(`/v1/links/${id}/qr.svg`).catch(() => null);
   if (l.config === 'pending') {
     const poll = () =>
       setTimeout(async () => {
@@ -214,5 +228,6 @@ export async function linkPage(id: string, live: Live, redraw: (message?: string
             }),
           ),
         ),
+    svg ? qrCard(l, svg) : null,
   );
 }
