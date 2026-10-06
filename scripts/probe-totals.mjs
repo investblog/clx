@@ -107,7 +107,10 @@ try {
   // Isolates that looked before the sync may hold "no such site" for a few seconds.
   await until(() => send('probe-warmup-bot'), (s) => s === 204, 2, 3000);
   const sentAt = Date.now();
-  const statuses = [await send(CHROME), await send(CHROME), await send('curl/8.5.0')];
+  // Each beacon until the worker takes it: another isolate may still hold "no such site" for 5 s and
+  // pass the request to Pages (405) — on 06.10 the first view of a run was lost that way.
+  const sure = (ua) => until(() => send(ua), (s) => s === 204, 0.5, 2000);
+  const statuses = [await sure(CHROME), await sure(CHROME), await sure('curl/8.5.0')];
   step('two views and a bot sent', statuses.every((s) => s === 204), statuses.join(', '));
   const hour = Math.floor(sentAt / 3_600_000);
   const day = Math.floor(sentAt / 86_400_000);

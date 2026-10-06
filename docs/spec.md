@@ -653,12 +653,17 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
 The page stack stays (`ui/*`, CSP without `unsafe-inline`); every page action is a `/v1` call (§15).
 Pages:
 - **Connection:** a "bootstrap token → check → install" wizard with step status.
-- **Sites:** add a site (a zone from the account, a host), the snippet, excluded paths, route status.
+- **Sites:** add a site by its host — clx.cx finds the zone in the account itself, as the API does
+  (no zone picker, no zones endpoint) — the snippet, excluded paths, rotate, delete, route status.
 - **Links:** the link host, a list of links with 7-day clicks, create and edit, rules, QR (SVG).
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
   "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques".
-- **Status:** last push, bundle and schema version, queue depth, last error, rejected rows, a
-  "reinstall" button.
+- **Status:** last push, bundle and schema version, queue depth, last error, rejected rows, the
+  upgrade advice (a banner at `upgrade_soon` and `over`, §8), "reinstall", "renew the token" and
+  "disconnect" — the last shows what could not be removed and the link to revoke the working
+  token in Cloudflare (§4).
+- **API keys** (plan `api`): issue with scopes and allow lists, the key shown once, revoke — keys
+  are issued only from a page session (§15), so without this page an `api` user cannot get one.
 
 ## 11. Open source
 

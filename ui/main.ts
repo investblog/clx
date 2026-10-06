@@ -1,4 +1,5 @@
-// The page's entry: sign-in, the signed-in page, the theme.
+// The page's entry: sign-in, the hash router over the pages, the theme.
+import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
 import { get, login, logout, refresh, SignedOut, type Me } from './api';
 import { h } from './dom';
 
@@ -9,6 +10,7 @@ const who = $('who');
 const out = $('logout');
 let me: Me | null = null;
 let seq = 0; // a newer route wins: an older answer that arrives late is dropped
+let flash = '';
 
 function showLogin(message = ''): void {
   me = null;
@@ -23,21 +25,44 @@ function showLogin(message = ''): void {
   $<HTMLInputElement>('email').focus();
 }
 
+const go = (hash: string) => {
+  if (location.hash === hash) void route();
+  else location.hash = hash;
+};
+
+/** The page for the address: #/ accounts, #/connect, #/accounts/<id>, #/keys. */
+async function page(path: string, mine: number): Promise<[HTMLElement, string]> {
+  const live = () => mine === seq;
+  const redraw = (message?: string) => {
+    flash = message ?? '';
+    void route();
+  };
+  const account = path.match(/^\/accounts\/([\w-]+)$/u);
+  if (path === '/connect') return [connectPage(go), 'Подключить аккаунт'];
+  if (account) return [await accountPage(account[1]!, live, redraw), 'Аккаунт'];
+  if (path === '/keys') return [await keysPage(me!, redraw), 'Ключи API'];
+  return [await accountsPage(me!), 'Аккаунты'];
+}
+
 async function route(): Promise<void> {
   const mine = ++seq;
   try {
-    me ??= await get<Me>('/auth/me');
+    // Fresh each time: the plan's use (accounts, keys) changes with what the pages do.
+    me = await get<Me>('/v1/me');
+    const [el, title] = await page(location.hash.replace(/^#/u, '') || '/', mine);
+    if (mine !== seq) return;
     loginBox.hidden = true;
     out.hidden = false;
     who.textContent = me.user.email;
-    // Sites, links and reports come with v2 (docs/spec.md §14, stages 2–5).
-    app.replaceChildren(h('div', { class: 'card' }, h('p', {}, 'Здесь появятся ваши сайты и ссылки — clx v2 в разработке.')));
-    document.title = 'clx';
+    // A message a page left for its next drawing, shown once above it.
+    app.replaceChildren(...(flash ? [h('div', { class: 'auth-status', 'data-type': 'error', role: 'alert' }, flash)] : []), el);
+    flash = '';
+    document.title = `${title} — clx`;
     app.hidden = false;
   } catch (e) {
     if (mine !== seq) return;
     if (e instanceof SignedOut) return showLogin();
-    app.replaceChildren(h('div', { class: 'card' }, h('p', {}, 'Не удалось загрузить данные. Обновите страницу.')));
+    app.replaceChildren(h('div', { class: 'card' }, h('p', {}, failure(e)), h('p', {}, h('a', { href: '#/' }, '← На главную'))));
     app.hidden = false;
   }
 }

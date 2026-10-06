@@ -18,3 +18,28 @@ main{max-width:1200px;margin:0 auto;padding:var(--space-4) var(--gutter) var(--s
 
 .login{max-width:420px;margin:var(--space-6) auto}
 .login h1{margin:0 0 var(--space-4)}
+
+/* Pages of stage 4e: accounts, status, keys. */
+.page-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);margin:var(--space-5) 0 var(--space-3)}
+.page-head h2{margin:0;margin-right:auto}
+.narrow{max-width:640px}
+.account-row{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);color:var(--text)}
+main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
+.account-row strong{margin-right:auto}
+.steps{padding-left:var(--space-5);margin:0 0 var(--space-4)}
+.steps li{margin-bottom:var(--space-2)}
+.kv{display:grid;grid-template-columns:minmax(140px,max-content) 1fr;gap:var(--space-2) var(--space-4);margin:0}
+.kv dt{color:var(--text-muted)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+@media (max-width:560px){.kv{grid-template-columns:1fr}.kv dd{margin-bottom:var(--space-2)}}
+.banner{padding:var(--space-3) var(--space-4);border-radius:var(--radius);border:1px solid}
+.banner--warning{border-color:var(--warning);color:var(--text)}
+.banner--danger{border-color:var(--danger);background:var(--bg-danger);color:var(--text)}
+.warnings{margin:0;padding-left:var(--space-5);color:var(--warning)}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.actions .input{max-width:320px}
+.action{display:inline-flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);max-width:100%}
+.action .btn{white-space:normal;max-width:100%}
+.action-status{color:var(--danger);font-size:var(--fs-sm)}
+.check{display:inline-flex;align-items:center;gap:var(--space-2);margin-right:var(--space-4)}
+code.secret{display:block;padding:var(--space-2);border-radius:var(--radius-xs);background:var(--bg-soft);overflow-wrap:anywhere;user-select:all}

@@ -35,21 +35,77 @@ export async function logout(): Promise<void> {
   await fetch('/auth/logout', { method: 'POST' }).catch(() => undefined);
 }
 
-export async function get<T>(path: string): Promise<T> {
+/** An error answer of /v1: `{error: {code, message, details}}`. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string | undefined,
+    message: string,
+    readonly details: Record<string, unknown> = {},
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * One call to the API with the page session. A mutation carries an Idempotency-Key — the caller's,
+ * kept across the user's retries of one action (see `once` in accounts.ts), or one made for this
+ * call — so a retry after a lost answer or a refresh is the same request, not a second one.
+ */
+export async function call<T>(method: string, path: string, body?: unknown, key?: string): Promise<T> {
+  const idem = method === 'GET' ? null : (key ?? crypto.randomUUID());
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!token && !(await refresh())) throw new SignedOut();
-    const res = await fetch(path, { headers: { authorization: `Bearer ${token}` } });
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    if (idem) headers['idempotency-key'] = idem;
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     if (res.status === 401) {
       token = null;
       continue;
     }
-    if (!res.ok) throw new Error(`${res.status}`);
-    return (await res.json()) as T;
+    const json = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+    if (!res.ok) throw new ApiError(res.status, json.error?.code, json.error?.message ?? `HTTP ${res.status}`, json.error?.details);
+    return json as T;
   }
   throw new SignedOut();
 }
 
-// The answer of /auth/me (src/auth/routes.ts).
+export const get = <T>(path: string) => call<T>('GET', path);
+
+// The answer of /v1/me (src/v1/index.ts).
 export interface Me {
   user: { id: number; email: string };
+  plan: 'free' | 'api';
+  limits: { cfAccounts: number; sites: number; links: number; apiKeys: number };
+  use: { cf_accounts: number; api_keys: number };
+}
+
+export interface MetricAdvice {
+  level: string;
+  limit: number;
+  busiest: { day: string | null; value: number };
+  forecast: string | null;
+}
+export interface Account {
+  id: string;
+  cf_account_id: string;
+  name: string | null;
+  state: string;
+  token: { name: string; expires_at: string | null } | null;
+  error: { code?: string; warnings?: string[]; [k: string]: unknown } | null;
+  edge: { bundle: string; up_to_date: boolean; schema: number | null; installed_at: string | null } | null;
+  push: { at: string; bundle: string; schema: number | null; queue: number; error: string | null; dropped: Record<string, number> } | null;
+  advice: { level: string; metric: string | null; metrics: Record<string, MetricAdvice>; unavailable?: string[]; suggest?: string; at: string } | null;
+  operation?: { kind: string; state: string; step: string; error: { code?: string; message?: string } | null; updated_at: string } | null;
+  created_at: string;
+}
+export interface Key {
+  id: string;
+  prefix: string;
+  scopes: string[];
+  allow_accounts: string[] | null;
+  allow_ips: string[] | null;
+  created_at: string;
+  last_used: string | null;
 }
