@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: clx management API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
     Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
@@ -52,6 +52,8 @@ components:
                 credentials_missing, credentials_unreadable (clx cannot open the stored token),
                 cloudflare_error. Sites: zone_not_found, site_exists, route_conflict, site_not_active,
                 route_not_ours (a route clx made was changed outside clx and left in place).
+                Links: link_host_required (set the account's link host first), link_exists (the
+                code is taken in that account).
             message: { type: string }
             details: { type: object }
     Key:
@@ -126,6 +128,39 @@ components:
             step: { type: string }
             error: { type: [object, 'null'] }
             updated_at: { type: string, format: date-time }
+        link_host:
+          oneOf: [{ $ref: '#/components/schemas/LinkHost' }, { type: 'null' }]
+          description: The account's link host (GET /v1/accounts/{id} only)
+        created_at: { type: string, format: date-time }
+    LinkHost:
+      type: object
+      properties:
+        host: { type: string }
+        state:
+          type: string
+          enum: [route_pending, active, route_conflict]
+          description: 'route_pending — the route `<host>/*` is still to be made (the cron retries); route_conflict — another worker holds it, see error'
+        config: { type: string, enum: [pending, synced] }
+        error: { type: [object, 'null'] }
+    Rule:
+      type: object
+      required: [url]
+      description: 'matches when the visitor''s country is in countries (if given) and their device in devices (if given)'
+      properties:
+        countries: { type: array, items: { type: string, pattern: '^[A-Z]{2}$' } }
+        devices: { type: array, items: { type: string, enum: [mobile, desktop] } }
+        url: { type: string, format: uri, description: 'https:// only, up to 2048 characters, not on the link host' }
+    Link:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        code: { type: string }
+        short_url: { type: [string, 'null'], description: 'https://<link host>/<code>' }
+        url: { type: string, description: 'where it leads when no rule matches' }
+        rules: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Rule' }, description: 'the first match wins' }
+        state: { type: string, enum: [active, deleted] }
+        config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the link yet' }
         created_at: { type: string, format: date-time }
     Site:
       type: object
@@ -294,6 +329,25 @@ paths:
       responses:
         '202': { description: Started, content: { application/json: { schema: { type: object, properties: { account: { $ref: '#/components/schemas/Account' } } } } } }
         default: { $ref: '#/components/responses/Error' }
+  /v1/accounts/{id}/link-host:
+    put:
+      summary: Set the account's link host (scope sites) — a host in one of its zones, routed whole to clx-edge
+      description: |
+        The account must be `ready`. The host needs a proxied DNS record — clx does not create it
+        (§13 item 2): e.g. `AAAA <host> 100::`, proxied. Setting another host replaces this one: its
+        route is deleted and the links move to the new host with their codes.
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host]
+              properties:
+                host: { type: string, description: 'go.example.com — a host of a zone in that account' }
+      responses:
+        '202': { description: Set, content: { application/json: { schema: { type: object, properties: { link_host: { $ref: '#/components/schemas/LinkHost' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
   /v1/accounts/{id}/token:
     post:
       summary: Renew the working token with a new bootstrap token (scope accounts)
@@ -370,6 +424,61 @@ paths:
         - { name: breakdowns, in: query, schema: { type: string, enum: ['1'] }, description: 'read the breakdowns from the account''s database (cached 5 minutes)' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { type: object, properties: { report: { $ref: '#/components/schemas/Report' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/links:
+    get:
+      summary: Links (scope links); `account_id` narrows to one account
+      parameters: [{ name: account_id, in: query, required: false, schema: { type: string } }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { links: { type: array, items: { $ref: '#/components/schemas/Link' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Add a short link (scope links) on the account's link host
+      description: |
+        A click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of
+        the link, with source `qr` when the address carries `?q` (the QR code's). `config` turns
+        `synced` once the worker has the link (seconds).
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, url]
+              properties:
+                account_id: { type: string }
+                code: { type: string, pattern: '^[A-Za-z0-9_-]{3,32}$', description: 'a random 6 characters when not given' }
+                url: { type: string, format: uri, description: 'https:// only, up to 2048 characters, not on the link host' }
+                rules: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Rule' } }
+      responses:
+        '201': { description: Added, content: { application/json: { schema: { type: object, properties: { link: { $ref: '#/components/schemas/Link' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/links/{id}:
+    get:
+      summary: One link (scope links)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { link: { $ref: '#/components/schemas/Link' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Change the URL or the rules (scope links); the code stays
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, format: uri }
+                rules: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Rule' } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { type: object, properties: { link: { $ref: '#/components/schemas/Link' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Remove the link (scope links); its code is freed, the link stays as `deleted` with its totals
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { type: object, properties: { link: { $ref: '#/components/schemas/Link' } } } } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/sites/{id}/rotate:
     post:

@@ -2,7 +2,7 @@
 // day's visitor hash; or, for a bot, its category. Every check here drops browser noise and caps
 // quota use, nothing more: the counter is not fraud-resistant. IP, UA and body are written nowhere.
 import { botCategory, browserOf, osOf } from './bots';
-import { ACCOUNT, ACCOUNT_ROWS, dayOf, FULL_BYTES, HOUR_COLUMNS, hourOf, OTHER, TARGET_ROWS, type SiteConfig } from './contract';
+import { ACCOUNT, ACCOUNT_ROWS, dayOf, deviceOf, FULL_BYTES, HOUR_COLUMNS, hourOf, OTHER, TARGET_ROWS, type LinkConfig, type SiteConfig } from './contract';
 
 /** The beacon's body: its first 2 KB. The stream is read until 2 KB are in — at most one network
  *  chunk past it — then cancelled; nothing beyond 2 KB is kept or parsed. */
@@ -35,6 +35,11 @@ const hostOf = (url: string): string | null => {
   }
 };
 const bare = (host: string) => host.replace(/^www\./u, '');
+/** The visitor's country as Cloudflare sees it (`cf.country`), or '' when unknown. */
+export const countryOf = (request: Request): string => {
+  const c = String((request as { cf?: { country?: unknown } }).cf?.country ?? '');
+  return /^[A-Z]{2}$/u.test(c) ? c : '';
+};
 
 /** A segment that names a person or a record rather than a page. */
 const ID = /@|%40|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^[0-9a-f]{16,}$/iu;
@@ -102,8 +107,26 @@ export async function collect(db: D1Database, request: Request, body: string, ho
   const referer = h.get('referer');
   const pathname = referer && hostOf(referer) === host ? new URL(referer).pathname : '';
   if (pathname && site.excluded.some((p) => pathname.startsWith(p))) return 'dropped';
+  const ref = body.match(/https?:\/\/[^\s"'<>\\]+/u)?.[0];
+  const refHost = ref ? (hostOf(ref) ?? '') : '';
+  return count(db, request, site.t, pageOf(pathname), refHost && bare(refHost) !== bare(host) ? bare(refHost) : '', now);
+}
 
-  const target = site.t;
+/**
+ * Counts a click on a short link (§6) as a view of its target with no page; the source is `qr`
+ * for the QR code's `?q`, else the referring host. A bot's click is counted as a bot.
+ */
+export async function click(db: D1Database, request: Request, link: LinkConfig, host: string, now: number): Promise<'view' | 'bot'> {
+  const url = new URL(request.url);
+  const referer = request.headers.get('referer');
+  const refHost = referer ? (hostOf(referer) ?? '') : '';
+  const source = url.searchParams.has('q') ? 'qr' : refHost && bare(refHost) !== bare(host) ? bare(refHost) : '';
+  return count(db, request, link.t, '', source, now);
+}
+
+/** One view (or bot hit) of `target`: exact totals, a capped detail row, the day's visitor hash. */
+async function count(db: D1Database, request: Request, target: string, page: string, source: string, now: number): Promise<'view' | 'bot'> {
+  const h = request.headers;
   const hour = hourOf(now);
   const day = dayOf(now);
   const ua = (h.get('user-agent') ?? '').slice(0, 512);
@@ -116,13 +139,10 @@ export async function collect(db: D1Database, request: Request, body: string, ho
     return 'bot';
   }
 
-  const ref = body.match(/https?:\/\/[^\s"'<>\\]+/u)?.[0];
-  const refHost = ref ? (hostOf(ref) ?? '') : '';
-  const source = refHost && bare(refHost) !== bare(host) ? bare(refHost) : '';
-  const country = String((request as { cf?: { country?: unknown } }).cf?.country ?? '');
+  const country = countryOf(request);
   const ip = h.get('cf-connecting-ip') ?? '';
   const vhash = (await sha256(`${await saltOf(db, day)}|${target}|${ip}|${ua}`)).slice(0, 32);
-  const dims = [target, hour, pageOf(pathname), source, /^[A-Z]{2}$/u.test(country) ? country : '', /Mobile|Android|iPhone/u.test(ua) ? 'mobile' : 'desktop', browserOf(ua), osOf(ua)];
+  const dims = [target, hour, page, source, country, deviceOf(ua), browserOf(ua), osOf(ua)];
   const column = HOUR_COLUMNS[hour % 24]!;
   const results = await db.batch([
     // Exact, whatever the caps below drop.

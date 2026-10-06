@@ -1,0 +1,313 @@
+// Short links and the link host (docs/spec.md §6), against the fake Cloudflare; the worker itself
+// (edge/worker.ts) redirects and counts from the config clx wrote into the fake account's database.
+import type { DatabaseSync } from 'node:sqlite';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { signAccess } from '../src/auth/jwt';
+import type { EdgeAccount } from '../src/cf/connect';
+import { runLinkHosts } from '../src/cf/links';
+import { runSites } from '../src/cf/sites';
+import { app } from '../src/index';
+import { receive } from '../src/push';
+import type { Env } from '../src/types';
+import { d1 } from './d1';
+import { fakeCtx, testEnv } from './env';
+import { ACC, BOOT, fakeCf, useFakeCloudflare } from './fake-cf';
+
+let env: Env;
+let dispose: () => Promise<void>;
+beforeAll(async () => ({ env, dispose } = await testEnv()));
+afterAll(() => dispose());
+useFakeCloudflare();
+
+let accountId = '';
+beforeEach(async () => {
+  for (const t of ['links', 'link_hosts', 'sites', 'cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
+  await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, plan) VALUES (1, 'free@example.com', 'x', 0, 'free')").run();
+  fakeCf.reset();
+  accountId = await ready();
+});
+
+let ip = 0;
+let idem = 0;
+const session = (user: number) => signAccess('test-jwt-secret', user, Date.now()).then((t) => `Bearer ${t}`);
+async function call(method: string, path: string, opts: { body?: unknown } = {}) {
+  const headers: Record<string, string> = { authorization: await session(1), 'cf-connecting-ip': `10.4.0.${++ip % 250}` };
+  if (opts.body !== undefined) headers['content-type'] = 'application/json';
+  if (method !== 'GET') headers['idempotency-key'] = `l${++idem}`;
+  const { ctx, settle } = fakeCtx();
+  const res = await app.request(`https://clx.cx${path}`, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) }, env, ctx);
+  await settle();
+  return { status: res.status, body: (await res.json()) as Record<string, any> };
+}
+
+/** Connect and confirm the install, as the worker's self-check would. */
+async function ready(): Promise<string> {
+  const { body } = await call('POST', '/v1/accounts', { body: { cf_account_id: ACC, bootstrap_token: BOOT } });
+  const script = fakeCf.scripts.get('clx-edge')!;
+  const text = (n: string) => script.bindings.find((b) => b.name === n)?.text;
+  const db = script.bindings.find((b) => b.name === 'DB')!.id!;
+  const res = await app.request(
+    'https://clx.cx/hook/setup',
+    { method: 'POST', headers: { authorization: `Bearer ${script.secrets.get('EDGE_KEY')}` }, body: JSON.stringify({ deployment_id: text('DEPLOYMENT_ID'), bundle: text('BUNDLE'), schema: fakeCf.schemaOf(db) }) },
+    env,
+  );
+  expect(res.status).toBe(200);
+  return body.account.id;
+}
+
+const setHost = (host: string) => call('PUT', `/v1/accounts/${accountId}/link-host`, { body: { host } });
+const addLink = (body: Record<string, unknown>) => call('POST', '/v1/links', { body: { account_id: accountId, ...body } });
+const routes = () => fakeCf.routes.get('zone1') ?? [];
+const userDb = (): DatabaseSync => {
+  const id = fakeCf.scripts.get('clx-edge')!.bindings.find((b) => b.name === 'DB')!.id!;
+  return fakeCf.dbs.get(id)!.db;
+};
+
+/** A request through the worker, with a fresh isolate (no cached config), a fake origin and the
+ *  visitor's country as Cloudflare would set it; its counting has finished when this returns. */
+async function viaWorker(url: string, init: RequestInit = {}, country = 'RS'): Promise<{ status: number; body: string; headers: Headers; origin: boolean }> {
+  vi.resetModules();
+  const worker = (await import('../edge/worker')).default;
+  let origin = false;
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async () => ((origin = true), new Response('the origin', { status: 404 })));
+  try {
+    const { ctx, settle } = fakeCtx();
+    const request = new Request(url, init);
+    Object.defineProperty(request, 'cf', { value: { country } });
+    const res = await worker.fetch(request, { DB: d1(userDb()) } as never, ctx);
+    await settle();
+    return { status: res.status, body: await res.text(), headers: res.headers, origin };
+  } finally {
+    vi.stubGlobal('fetch', realFetch);
+  }
+}
+const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const visit = (url: string, headers: Record<string, string> = {}, country?: string) => viaWorker(url, { headers: { 'user-agent': CHROME, 'cf-connecting-ip': '198.51.100.7', ...headers } }, country);
+
+describe('the link host', () => {
+  it('routes the whole host to clx-edge and reaches the worker; the account shows it', async () => {
+    const r = await setHost('go.example.com');
+    expect(r.status).toBe(202);
+    expect(r.body.link_host).toMatchObject({ host: 'go.example.com', state: 'active' });
+    expect(routes()).toEqual([expect.objectContaining({ pattern: 'go.example.com/*', script: 'clx-edge' })]);
+    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host).toMatchObject({ host: 'go.example.com', state: 'active', config: 'synced' });
+    // Nothing on it passes through: there is no origin behind a link host.
+    expect(await visit('https://go.example.com/')).toMatchObject({ status: 404, body: '', origin: false });
+    expect(await visit('https://go.example.com/nope')).toMatchObject({ status: 404, body: '', origin: false });
+    // Another host of the zone is not a link host: passed through.
+    expect(await visit('https://example.com/nope')).toMatchObject({ origin: true });
+  });
+
+  it('a host in no zone is refused; the same host again changes nothing', async () => {
+    expect((await setHost('go.nowhere.net')).body.error.code).toBe('zone_not_found');
+    await setHost('go.example.com');
+    expect((await setHost('go.example.com')).status).toBe(202);
+    expect(routes()).toHaveLength(1);
+  });
+
+  it('another host replaces it: the old route goes, the links answer on the new host', async () => {
+    await setHost('go.example.com');
+    await addLink({ code: 'promo', url: 'https://shop.example.org/sale' });
+    const r = await setHost('l.example.com');
+    expect(r.body.link_host).toMatchObject({ host: 'l.example.com', state: 'active' });
+    expect(routes().map((x) => x.pattern)).toEqual(['l.example.com/*']);
+    expect(await visit('https://l.example.com/promo')).toMatchObject({ status: 302 });
+    expect(await visit('https://go.example.com/promo')).toMatchObject({ origin: true });
+    expect((await call('GET', '/v1/links')).body.links[0].short_url).toBe('https://l.example.com/promo');
+  });
+
+  it('a host another worker holds is route_conflict: not a link host for the worker', async () => {
+    fakeCf.takenHosts.add('go.example.com');
+    expect((await setHost('go.example.com')).body.link_host).toMatchObject({ state: 'route_conflict', error: { code: 'route_conflict' } });
+    await runSites(env);
+    expect(await visit('https://go.example.com/x1y2z3')).toMatchObject({ origin: true });
+  });
+
+  it('the same host again after a conflict tries the route once more', async () => {
+    fakeCf.takenHosts.add('go.example.com');
+    expect((await setHost('go.example.com')).body.link_host.state).toBe('route_conflict');
+    fakeCf.takenHosts.clear();
+    fakeCf.routes.clear();
+    expect((await setHost('go.example.com')).body.link_host).toMatchObject({ state: 'active', error: null });
+    await runSites(env);
+    expect(await visit('https://go.example.com/x1y2z3')).toMatchObject({ status: 404, origin: false });
+  });
+
+  it('a site host cannot be the link host, nor the link host a site: one passes through, the other does not', async () => {
+    expect((await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'example.com' } })).status).toBe(202);
+    expect(await setHost('example.com')).toMatchObject({ status: 409, body: { error: { details: { field: 'host' } } } });
+    await setHost('go.example.com');
+    expect(await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'go.example.com' } })).toMatchObject({ status: 409, body: { error: { details: { field: 'host' } } } });
+    expect(await visit('https://example.com/about')).toMatchObject({ origin: true });
+  });
+
+  it('a replacement refused in the batch keeps the current link host', async () => {
+    await setHost('go.example.com');
+    // A site for the new host appears after the check, while the zone is looked up.
+    fakeCf.onZones = async () => {
+      fakeCf.onZones = null;
+      await env.DB.prepare(
+        "INSERT INTO sites (id, account_id, user_id, target, host, zone_id, seed, state, revision, created_at, updated_at) VALUES ('race', ?, 1, 'srace', 'l.example.com', 'zone1', 'seed', 'active', 0, 0, 0)",
+      )
+        .bind(accountId)
+        .run();
+    };
+    expect((await setHost('l.example.com')).status).toBe(409);
+    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host).toMatchObject({ host: 'go.example.com', state: 'active' });
+    expect(routes().map((x) => x.pattern)).toEqual(['go.example.com/*']);
+  });
+
+  it('a route Cloudflare could not make now is made by the cron', async () => {
+    fakeCf.failOnce.add('/workers/routes');
+    expect((await setHost('go.example.com')).body.link_host.state).toBe('route_pending');
+    await env.DB.prepare('UPDATE link_hosts SET updated_at = 0').run();
+    expect(await runLinkHosts(env)).toBe(1);
+    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host.state).toBe('active');
+  });
+
+  it('a host a link points at cannot become the link host', async () => {
+    await setHost('go.example.com');
+    await addLink({ code: 'promo', url: 'https://l.example.com/x' });
+    expect(await setHost('l.example.com')).toMatchObject({ status: 409, body: { error: { details: { field: 'host' } } } });
+    expect(routes().map((x) => x.pattern)).toEqual(['go.example.com/*']);
+  });
+
+  it('disconnect removes the link host route with the rest', async () => {
+    await setHost('go.example.com');
+    const r = await call('DELETE', `/v1/accounts/${accountId}`);
+    expect(r.body.left).toEqual([]);
+    expect(routes()).toEqual([]);
+  });
+});
+
+describe('links', () => {
+  beforeEach(async () => void (await setHost('go.example.com')));
+
+  it('needs a link host first', async () => {
+    await env.DB.prepare('DELETE FROM link_hosts').run();
+    expect((await addLink({ url: 'https://example.org/' })).body.error.code).toBe('link_host_required');
+  });
+
+  it('a click: 302 to the URL, no-store, nothing else; counted as a view of the link', async () => {
+    const r = await addLink({ code: 'promo', url: 'https://shop.example.org/sale?x=1' });
+    expect(r.status).toBe(201);
+    // Answered before the sync, which runs after it.
+    expect(r.body.link).toMatchObject({ code: 'promo', short_url: 'https://go.example.com/promo', url: 'https://shop.example.org/sale?x=1', state: 'active', config: 'pending' });
+    expect((await call('GET', `/v1/links/${r.body.link.id}`)).body.link.config).toBe('synced');
+    const res = await visit('https://go.example.com/promo', { referer: 'https://news.example.net/item' });
+    expect(res).toMatchObject({ status: 302, body: '', origin: false });
+    expect(Object.fromEntries(res.headers)).toEqual({ location: 'https://shop.example.org/sale?x=1', 'cache-control': 'no-store' });
+    const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
+    expect(userDb().prepare('SELECT views FROM totals WHERE target = ?').get(t)).toEqual({ views: 1 });
+    expect(userDb().prepare('SELECT page, source, country, device FROM views_hourly WHERE target = ?').all(t)).toEqual([{ page: '', source: 'news.example.net', country: 'RS', device: 'desktop' }]);
+    expect(userDb().prepare('SELECT count(*) AS n FROM visitors_daily WHERE target = ?').get(t)).toEqual({ n: 1 });
+  });
+
+  it("the QR code's ?q is source qr; a HEAD is redirected but not counted; other methods are 404", async () => {
+    await addLink({ code: 'promo', url: 'https://shop.example.org/' });
+    expect(await visit('https://go.example.com/promo?q')).toMatchObject({ status: 302 });
+    expect((await viaWorker('https://go.example.com/promo', { method: 'HEAD' })).status).toBe(302);
+    expect((await viaWorker('https://go.example.com/promo', { method: 'POST' })).status).toBe(404);
+    expect(userDb().prepare("SELECT source, views FROM views_hourly WHERE target LIKE 'l%'").all()).toEqual([{ source: 'qr', views: 1 }]);
+  });
+
+  it('a bot is redirected too and counted as a bot', async () => {
+    await addLink({ code: 'promo', url: 'https://shop.example.org/' });
+    expect((await visit('https://go.example.com/promo', { 'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)' })).status).toBe(302);
+    expect(userDb().prepare("SELECT views, bots FROM totals WHERE target LIKE 'l%'").get()).toEqual({ views: 0, bots: 1 });
+  });
+
+  it('rules: the first match by country and device wins, else the URL', async () => {
+    await addLink({
+      code: 'app',
+      url: 'https://example.org/',
+      rules: [
+        { countries: ['DE', 'AT'], devices: ['mobile'], url: 'https://example.org/de-mobile' },
+        { countries: ['DE'], url: 'https://example.org/de' },
+        { devices: ['mobile'], url: 'https://example.org/mobile' },
+      ],
+    });
+    const where = async (ua: string, country: string) => (await visit('https://go.example.com/app', { 'user-agent': ua }, country)).headers.get('location');
+    expect(await where(IPHONE, 'AT')).toBe('https://example.org/de-mobile');
+    expect(await where(CHROME, 'DE')).toBe('https://example.org/de');
+    expect(await where(IPHONE, 'RS')).toBe('https://example.org/mobile');
+    expect(await where(CHROME, 'RS')).toBe('https://example.org/');
+  });
+
+  it('a random 6-character code unless chosen; a taken code is link_exists, a deleted one is free again', async () => {
+    const r = await addLink({ url: 'https://example.org/' });
+    expect(r.body.link.code).toMatch(/^[A-Za-z0-9]{6}$/u);
+    await addLink({ code: 'promo', url: 'https://example.org/a' });
+    expect((await addLink({ code: 'promo', url: 'https://example.org/b' })).body.error.code).toBe('link_exists');
+    const id = (await call('GET', '/v1/links')).body.links.find((l: { code: string }) => l.code === 'promo').id;
+    expect((await call('DELETE', `/v1/links/${id}`)).body.link.state).toBe('deleted');
+    expect(await visit('https://go.example.com/promo')).toMatchObject({ status: 404, origin: false });
+    expect((await addLink({ code: 'promo', url: 'https://example.org/c' })).status).toBe(201);
+    expect((await visit('https://go.example.com/promo')).headers.get('location')).toBe('https://example.org/c');
+  });
+
+  it('a code deleted and added again before the sync: one row per key, the live one', async () => {
+    await addLink({ code: 'promo', url: 'https://example.org/a' });
+    fakeCf.failSql = /INSERT INTO cfg/u;
+    const id = (await call('GET', '/v1/links')).body.links[0].id;
+    await call('DELETE', `/v1/links/${id}`);
+    await addLink({ code: 'promo', url: 'https://example.org/b' });
+    fakeCf.failSql = null;
+    expect((await runSites(env)).synced).toBe(1);
+    expect((await visit('https://go.example.com/promo')).headers.get('location')).toBe('https://example.org/b');
+  });
+
+  it('targets: https only, at most 2048 characters, never the link host; rules are checked', async () => {
+    for (const url of ['http://example.org/', 'javascript:alert(1)', `https://example.org/${'x'.repeat(2048)}`, 'https://go.example.com/loop', 'https://user:pw@example.org/'])
+      expect((await addLink({ url })).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'url' } });
+    expect((await addLink({ code: 'a', url: 'https://example.org/' })).body.error.details.field).toBe('code');
+    for (const rules of [[{ url: 'https://example.org/' }], [{ countries: ['de'], url: 'https://example.org/' }], [{ devices: ['tablet'], url: 'https://example.org/' }], [{ countries: ['DE'], url: 'https://go.example.com/x' }]])
+      expect((await addLink({ url: 'https://example.org/', rules })).body.error.code).toBe('invalid_request');
+    expect((await addLink({ url: 'https://example.org/', rules: Array.from({ length: 11 }, () => ({ devices: ['mobile'], url: 'https://example.org/m' })) })).body.error.details.field).toBe('rules');
+  });
+
+  it('a change of URL or rules reaches the worker; the code stays', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/a' })).body.link.id;
+    expect((await call('PATCH', `/v1/links/${id}`, { body: { code: 'other' } })).body.error.details.field).toBe('code');
+    const r = await call('PATCH', `/v1/links/${id}`, { body: { url: 'https://example.org/b', rules: [{ countries: ['RS'], url: 'https://example.org/rs' }] } });
+    expect(r.body.link).toMatchObject({ url: 'https://example.org/b', rules: [{ countries: ['RS'], url: 'https://example.org/rs' }] });
+    expect((await visit('https://go.example.com/promo', {}, 'RS')).headers.get('location')).toBe('https://example.org/rs');
+    expect((await visit('https://go.example.com/promo', {}, 'DE')).headers.get('location')).toBe('https://example.org/b');
+  });
+
+  it('the free plan stops at its link limit', async () => {
+    await env.DB.prepare(
+      "INSERT INTO links (id, account_id, user_id, target, code, url, url_host, state, revision, created_at, updated_at) SELECT 'x' || value, ?1, 1, 'lx' || value, 'c' || value || 'xx', 'https://example.org/', 'example.org', 'active', 0, 0, 0 FROM json_each(?2)",
+    )
+      .bind(accountId, JSON.stringify(Array.from({ length: 200 }, (_, i) => i)))
+      .run();
+    expect((await addLink({ url: 'https://example.org/' })).body.error).toMatchObject({ code: 'limit_reached', details: { limit: 200 } });
+  });
+});
+
+describe('totals of links', () => {
+  it('a link sends only its final days: hours and running snapshots of it are refused', async () => {
+    await setHost('go.example.com');
+    await addLink({ code: 'promo', url: 'https://example.org/' });
+    const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
+    const edge = (await env.DB.prepare('SELECT * FROM edge_accounts').first<EdgeAccount>())!;
+    const now = Date.now();
+    const day = Math.floor(now / 86_400_000);
+    const r = await receive(env.DB, edge, {
+      v: 1,
+      bundle: 'x',
+      schema: 4,
+      queue: 0,
+      revision: 0,
+      items: [
+        { id: 1, target: t, day: day - 1, final: true, views: 5, bots: 1, visitors: 4 },
+        { id: 2, target: t, hour: Math.floor(now / 3_600_000) - 1, views: 1, bots: 0 },
+        { id: 3, target: t, day, as_of_hour: Math.floor(now / 3_600_000) - 1, final: false, views: 1, bots: 0, visitors: 1 },
+      ],
+    } as never, now);
+    expect(r).toEqual({ accepted: [1], rejected: [{ id: 2, reason: 'invalid' }, { id: 3, reason: 'invalid' }] });
+    expect(await env.DB.prepare('SELECT views, visitors, final FROM daily WHERE target = ?').bind(t).first()).toEqual({ views: 5, visitors: 4, final: 1 });
+  });
+});

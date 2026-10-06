@@ -1,10 +1,11 @@
 // clx-edge — the worker clx installs into a user's Cloudflare account (docs/spec.md §4, §5). One
 // bundle for everyone; a deployment's own settings come in bindings, the sites in the synced config
-// (§6). It answers only its own paths — a site's script and collector — and passes every other
-// request through to the origin, so a probe under the path gets the site's own answer. While
+// (§6). It answers only its own paths — a site's script and collector, and the short links of the
+// account's link host — and passes every other request through to the origin, so a probe under a
+// site's path gets the site's own answer. While
 // clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
-import { bodyHead, collect } from './collect';
-import { SELF_CHECK_CRON, siteKey, WORKING_CRON, type SiteConfig } from './contract';
+import { bodyHead, click, collect, countryOf } from './collect';
+import { CODE, deviceOf, linkHostKey, linkKey, SELF_CHECK_CRON, siteKey, WORKING_CRON, type LinkConfig, type SiteConfig } from './contract';
 import { hourly } from './cron';
 
 interface Env {
@@ -19,25 +20,36 @@ interface Env {
   EDGE_KEY: string;
 }
 
-/** Sites by host, for speed only: 60 s in isolate memory (§6). */
-const cache = new Map<string, { at: number; site: SiteConfig | null }>();
+/** Config by key, for speed only: 60 s in isolate memory (§6). */
+const cache = new Map<string, { at: number; value: unknown }>();
 const CACHE_MS = 60_000;
-/** "No such site" is kept only briefly: it happens only before a new site's first sync or after a
- *  delete — and kept for 60 s it can hide a fresh site from an isolate that looked before the sync. */
+/** "None" is kept only briefly: it happens only before a new site's or link's first sync or after a
+ *  delete — and kept for 60 s it can hide a fresh one from an isolate that looked before the sync. */
 const MISS_MS = 5_000;
+/** Keys cached at most: a scan of random link codes must not grow the map without bound. */
+const CACHE_KEYS = 5_000;
 
-/** The committed version of a site's config, or null — one query, one consistent answer (§6). */
-async function siteFor(env: Env, host: string): Promise<SiteConfig | null> {
-  const hit = cache.get(host);
-  if (hit && Date.now() - hit.at < (hit.site ? CACHE_MS : MISS_MS)) return hit.site;
+/** The committed version of one config key, or null — one query, one consistent answer (§6). */
+async function configFor<T>(env: Env, key: string): Promise<T | null> {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < (hit.value ? CACHE_MS : MISS_MS)) return hit.value as T | null;
   const row = await env.DB.prepare(
     'SELECT c.deleted, c.data FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = ? ORDER BY c.revision DESC LIMIT 1',
   )
-    .bind(siteKey(host))
+    .bind(key)
     .first<{ deleted: number; data: string | null }>();
-  const site = row && !row.deleted && row.data ? (JSON.parse(row.data) as SiteConfig) : null;
-  cache.set(host, { at: Date.now(), site });
-  return site;
+  const value = row && !row.deleted && row.data ? (JSON.parse(row.data) as T) : null;
+  if (cache.size >= CACHE_KEYS) cache.clear();
+  cache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+/** Where a link sends this visitor: the first rule matching their country and device, else its URL. */
+function destination(link: LinkConfig, request: Request): string {
+  const country = countryOf(request);
+  const device = deviceOf(request.headers.get('user-agent') ?? '');
+  const rule = link.rules.find((r) => (!r.countries || r.countries.includes(country)) && (!r.devices || r.devices.includes(device)));
+  return rule?.url ?? link.url;
 }
 
 export default {
@@ -46,7 +58,7 @@ export default {
     // Only the user's own routes lead here; the workers.dev address (off by default) would loop.
     if (url.hostname.endsWith('.workers.dev')) return new Response(null, { status: 404 });
     // Unreadable config: behave as if the path were not ours.
-    const site = await siteFor(env, url.hostname).catch(() => null);
+    const site = await configFor<SiteConfig>(env, siteKey(url.hostname)).catch(() => null);
     const now = Date.now();
     for (const p of site?.paths ?? []) {
       if (p.until && now > p.until) continue;
@@ -60,6 +72,22 @@ export default {
         ctx.waitUntil(collect(env.DB, request, body, url.hostname, site!, now).catch(() => undefined));
         return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
       }
+    }
+    // The link host is routed whole and has no origin behind it: nothing there passes through.
+    // Unreadable config: as for a site, behave as if the host were not ours.
+    if (await configFor<object>(env, linkHostKey(url.hostname)).catch(() => null)) {
+      const code = url.pathname.slice(1);
+      if (!CODE.test(code) || (request.method !== 'GET' && request.method !== 'HEAD')) return new Response(null, { status: 404 });
+      const link = await configFor<LinkConfig>(env, linkKey(code)).then(
+        (l) => l ?? false,
+        () => null,
+      );
+      // The link cannot be read now (D1 down, the daily reads used up): try again later (§8).
+      if (link === null) return new Response(null, { status: 503, headers: { 'retry-after': '30' } });
+      if (!link) return new Response(null, { status: 404 });
+      // Every click must reach the worker: no-store, and nothing else — no clx header, no body (§6).
+      if (request.method === 'GET') ctx.waitUntil(click(env.DB, request, link, url.hostname, now).catch(() => undefined));
+      return new Response(null, { status: 302, headers: { location: destination(link, request), 'cache-control': 'no-store' } });
     }
     return fetch(request);
   },

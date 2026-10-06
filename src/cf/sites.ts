@@ -14,6 +14,7 @@ import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
 import { cf, CfError, type CallLog } from './api';
 import { edgeById, held, inService, lease, release, workingToken, type EdgeAccount } from './connect';
+import { linkConfigRows } from './links';
 
 const SCRIPT = 'clx-edge';
 /** After a rotation the old path is served this long: cached pages still carry it (§5). */
@@ -79,7 +80,7 @@ function configOf(s: SiteRow): SiteConfig {
 }
 
 /** The account's zone that holds `host`: the most specific one (names match exactly, so suffixes are tried). */
-async function zoneFor(token: string, cfAccountId: string, host: string): Promise<{ id: string; name: string } | null> {
+export async function zoneFor(token: string, cfAccountId: string, host: string): Promise<{ id: string; name: string } | null> {
   const labels = host.split('.');
   for (let i = 0; i <= labels.length - 2; i++) {
     const name = labels.slice(i).join('.');
@@ -90,7 +91,7 @@ async function zoneFor(token: string, cfAccountId: string, host: string): Promis
 }
 
 /** Create the route, or adopt it if it is clx's from an earlier attempt; someone else's is a conflict. */
-async function ensureRoute(token: string, log: CallLog, zoneId: string, pattern: string): Promise<{ id: string } | { conflict: string }> {
+export async function ensureRoute(token: string, log: CallLog, zoneId: string, pattern: string): Promise<{ id: string } | { conflict: string }> {
   try {
     return { id: (await cf<{ id: string }>(token, 'POST', `/zones/${zoneId}/workers/routes`, { pattern, script: SCRIPT }, log)).id };
   } catch (e) {
@@ -174,6 +175,10 @@ export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: s
   const zone = await zoneFor(token, edge.cf_account_id, host);
   if (!zone) fail(400, 'zone_not_found', `No zone of this Cloudflare account holds ${host}.`, { field: 'host' });
   const db = env.DB;
+  // A link host passes nothing through, a site's host everything outside the counter: one host
+  // cannot be both (src/cf/links.ts).
+  const taken = () => fail(409, 'invalid_request', `${host} is a link host; a site needs a host of its own.`, { field: 'host' });
+  if (await db.prepare("SELECT 1 FROM link_hosts WHERE host = ? AND state != 'deleted'").bind(host).first()) taken();
   const id = newId();
   const seed = newId();
   const target = `s${[...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(36).padStart(2, '0')).join('')}`;
@@ -189,15 +194,17 @@ export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: s
       db
         .prepare(
           `INSERT INTO sites (id, account_id, user_id, target, host, zone_id, seed, excluded, state, revision, created_at, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'route_pending', (SELECT config_revision FROM edge_accounts WHERE id = ?), ?, ? WHERE changes() = 1`,
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'route_pending', (SELECT config_revision FROM edge_accounts WHERE id = ?), ?, ? WHERE changes() = 1
+           AND NOT EXISTS (SELECT 1 FROM link_hosts WHERE host = ? AND state != 'deleted')`,
         )
-        .bind(id, edge.id, p.userId, target, host, zone!.id, seed, JSON.stringify(excluded), edge.id, now, now),
+        .bind(id, edge.id, p.userId, target, host, zone!.id, seed, JSON.stringify(excluded), edge.id, now, now, host),
     ]);
   } catch (e) {
     if (String(e).includes('UNIQUE')) fail(409, 'site_exists', `${host} is already a site.`, { field: 'host' });
     throw e;
   }
   if (!rows[0]!.meta.changes) fail(403, 'limit_reached', `The ${planOf(p.plan)} plan has at most ${limit} sites.`, { limit });
+  if (!rows[1]!.meta.changes) taken();
   await placeRoute(env, edge, (await siteById(db, id))!, p.id);
   return (await siteById(db, id))!;
 }
@@ -269,7 +276,9 @@ function routesOf(s: SiteRow): { zone_id: string; route_id: string; pattern: str
   ];
 }
 
-const lit = (s: string) => `'${s.replace(/'/gu, "''")}'`;
+export const lit = (s: string) => `'${s.replace(/'/gu, "''")}'`;
+/** Every table of config the worker gets: a full rewrite moves all of their rows to one revision. */
+const CONFIG_TABLES = ['sites', 'link_hosts', 'links'] as const;
 
 /**
  * Bring the worker's config up to the account's revision (§6): read the worker's last commit, write
@@ -298,17 +307,22 @@ export async function syncAccount(env: Env, accountId: string, principal = 'cron
       // config cannot be trusted, so every site is written again above its head.
       await db.batch([
         db.prepare('UPDATE edge_accounts SET config_revision = ?, synced_revision = 0 WHERE id = ?').bind(head + 1, edge.id),
-        db.prepare('UPDATE sites SET revision = ? WHERE account_id = ?').bind(head + 1, edge.id),
+        ...CONFIG_TABLES.map((t) => db.prepare(`UPDATE ${t} SET revision = ? WHERE account_id = ?`).bind(head + 1, edge.id)),
       ]);
       return true;
     }
     if (head < target) {
-      const sites = (await db.prepare('SELECT * FROM sites WHERE account_id = ? AND revision > ? AND revision <= ?').bind(edge.id, head, target).all<SiteRow>()).results;
+      const sites = (await db.prepare('SELECT * FROM sites WHERE account_id = ? AND revision > ? AND revision <= ? ORDER BY revision').bind(edge.id, head, target).all<SiteRow>()).results;
       const syncId = newId();
       const now = Date.now();
       // A deleted site, or one whose path another worker holds, is withdrawn from the worker.
       const live = (s: SiteRow) => s.state === 'active' || s.state === 'route_pending';
-      const values = sites.map((s) => `(${lit(siteKey(s.host))}, ${target}, ${lit(syncId)}, ${live(s) ? 0 : 1}, ${live(s) ? lit(JSON.stringify(configOf(s))) : 'NULL'}, ${now})`);
+      // One row per key: a host or code deleted and added again in this range has a withdrawn row
+      // and a live one, and the live one wins.
+      const rows = new Map<string, string | null>();
+      for (const [key, data] of [...sites.map((s): [string, string | null] => [siteKey(s.host), live(s) ? JSON.stringify(configOf(s)) : null]), ...(await linkConfigRows(db, edge.id, head, target))])
+        if (data !== null || !rows.has(key)) rows.set(key, data);
+      const values = [...rows].map(([key, data]) => `(${lit(key)}, ${target}, ${lit(syncId)}, ${data === null ? 1 : 0}, ${data === null ? 'NULL' : lit(data)}, ${now})`);
       const encoder = new TextEncoder();
       for (let i = 0; i < values.length; ) {
         const chunk: string[] = [];
@@ -349,7 +363,7 @@ export async function staleSync(db: D1Database, edge: EdgeAccount, revision: num
   const next = Math.max(edge.config_revision, revision) + 1;
   const [moved] = await db.batch([
     db.prepare('UPDATE edge_accounts SET config_revision = ?1, synced_revision = 0 WHERE id = ?2 AND config_revision = ?3 AND synced_revision = ?3').bind(next, edge.id, edge.config_revision),
-    db.prepare('UPDATE sites SET revision = ?1 WHERE account_id = ?2 AND (SELECT config_revision FROM edge_accounts WHERE id = ?2) = ?1').bind(next, edge.id),
+    ...CONFIG_TABLES.map((t) => db.prepare(`UPDATE ${t} SET revision = ?1 WHERE account_id = ?2 AND (SELECT config_revision FROM edge_accounts WHERE id = ?2) = ?1`).bind(next, edge.id)),
   ]);
   if (moved!.meta.changes) console.log(`sync_stale ${edge.id}: worker at ${revision}, clx.cx at ${edge.synced_revision}`);
   return Boolean(moved!.meta.changes);
@@ -383,9 +397,16 @@ export async function runSites(env: Env, now = Date.now()): Promise<{ synced: nu
 
 /** Every route clx recorded for the account's sites — for disconnect (§4). */
 export async function recordedRoutes(db: D1Database, accountId: string): Promise<{ zone_id: string; route_id: string; pattern: string }[]> {
-  // Deleted sites too: their routes may still be due for removal.
-  const sites = (await db.prepare('SELECT * FROM sites WHERE account_id = ?').bind(accountId).all<SiteRow>()).results;
-  return sites.flatMap(routesOf);
+  // Deleted sites too: their routes may still be due for removal; and the link hosts, replaced ones
+  // included, while their route is recorded.
+  const [sites, hosts] = await db.batch([
+    db.prepare('SELECT * FROM sites WHERE account_id = ?').bind(accountId),
+    db.prepare('SELECT zone_id, route_id, host FROM link_hosts WHERE account_id = ? AND route_id IS NOT NULL').bind(accountId),
+  ]);
+  return [
+    ...(sites!.results as unknown as SiteRow[]).flatMap(routesOf),
+    ...(hosts!.results as { zone_id: string; route_id: string; host: string }[]).map((h) => ({ zone_id: h.zone_id, route_id: h.route_id, pattern: `${h.host}/*` })),
+  ];
 }
 
 export { dropRoute };

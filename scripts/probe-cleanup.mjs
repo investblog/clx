@@ -3,8 +3,8 @@
 //
 // Cleans the test Cloudflare account after a probe that was stopped before its own cleanup (the
 // system kills idle background jobs when memory runs low): disconnects every clx account of the
-// probe user, deletes leftover bootstrap and working tokens, revokes the probe user's API keys,
-// and prints what is left. Same secrets as the probes (.secrets/test-cloudflare.env and the probe
+// probe user, deletes leftover bootstrap and working tokens and the link hosts' DNS records, revokes
+// the probe user's API keys, and prints what is left. Same secrets as the probes (.secrets/test-cloudflare.env and the probe
 // user's file); nothing secret is printed.
 import fs from 'node:fs';
 import { lockSecrets } from './secrets-dir.mjs';
@@ -42,6 +42,11 @@ for (const a of (await clx('GET', '/v1/accounts')).body.accounts ?? []) {
 for (const t of (await cfAdmin('GET', `/accounts/${account}/tokens?per_page=50`)).filter((t) => /^probe-bootstrap-|^clx-[A-Za-z0-9_-]{22}$/u.test(t.name))) {
   await cfAdmin('DELETE', `/accounts/${account}/tokens/${t.id}`);
   console.log('token deleted', t.name.slice(0, 16));
+}
+// The link hosts' DNS records of probe-links.mjs.
+for (const r of (await cfAdmin('GET', `/zones/${env.CF_ZONE_ID}/dns_records?per_page=100`)).filter((r) => /^clx-go-[a-z0-9]+\./u.test(r.name))) {
+  await cfAdmin('DELETE', `/zones/${env.CF_ZONE_ID}/dns_records/${r.id}`);
+  console.log('DNS record deleted', r.name);
 }
 for (const k of (await clx('GET', '/v1/keys')).body.keys ?? []) {
   const r = await clx('DELETE', `/v1/keys/${k.id}`);

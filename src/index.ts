@@ -4,6 +4,7 @@ import { runAdvice } from './advice';
 import { auth } from './auth/routes';
 import { checkTokens } from './cf/connect';
 import { runOperations } from './cf/deploy';
+import { runLinkHosts } from './cf/links';
 import { runSites } from './cf/sites';
 import { hook } from './hook';
 import type { Env } from './types';
@@ -53,6 +54,8 @@ export default {
         if (ops) console.log(`operations run ${ops}`);
         const sites = await runSites(env, now);
         if (sites.synced + sites.routes + sites.retired) console.log(`sites: synced ${sites.synced}, routes ${sites.routes}, retired ${sites.retired}`);
+        const linkHosts = await runLinkHosts(env, now);
+        if (linkHosts) console.log(`link hosts: ${linkHosts}`);
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         const hour = Math.floor(now / 3_600_000);
         const day = Math.floor(now / 86_400_000);

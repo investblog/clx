@@ -1,9 +1,11 @@
 // The management API (docs/spec.md §15). The page is a thin client over the same endpoints.
 // Stage 2: who am I, API keys, connecting Cloudflare accounts. Stage 3: installing clx-edge.
+// Stage 4: sites and their reports. Stage 5: the link host and short links.
 import { Hono, type Context } from 'hono';
 import { CfError } from '../cf/api';
 import { accountView, connect, type EdgeAccount } from '../cf/connect';
 import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
+import { addLink, deleteLink, linkHostView, linkView, liveLinkHost, patchLink, setLinkHost, type LinkRow } from '../cf/links';
 import { addSite, deleteSite, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { sha256 } from '../lib/crypto';
 import { LIMITS, planOf, SCOPES } from '../limits';
@@ -208,7 +210,19 @@ v1.get(
       ? await c.env.DB.prepare('SELECT kind, state, step, data, updated_at FROM operations WHERE id = ?').bind(edge.operation_id).first<{ kind: string; state: string; step: string; data: string; updated_at: number }>()
       : null;
     const operation = op ? { kind: op.kind, state: op.state, step: op.step, error: (JSON.parse(op.data) as { error?: unknown }).error ?? null, updated_at: new Date(op.updated_at).toISOString() } : null;
-    return { status: 200, body: { account: { ...accountView(edge), operation } } };
+    const host = await liveLinkHost(c.env.DB, edge.id);
+    return { status: 200, body: { account: { ...accountView(edge), operation, link_host: host ? linkHostView(host, edge.synced_revision) : null } } };
+  }),
+);
+
+v1.put(
+  '/accounts/:id/link-host',
+  handle({ scope: 'sites' }, async (c, p, body) => {
+    const edge = await accountOf(c, p);
+    const host = typeof body.host === 'string' ? body.host.trim().toLowerCase().replace(/\.$/u, '') : '';
+    const set = await setLinkHost(c.env, p, edge, host);
+    sync(c, p, edge.id);
+    return { status: 202, body: { link_host: linkHostView(set, edge.synced_revision) } };
   }),
 );
 
@@ -329,5 +343,71 @@ v1.delete(
     const deleted = await deleteSite(c.env, p.id, edge, site);
     sync(c, p, edge.id);
     return { status: 200, body: { site: siteView(deleted, edge.synced_revision) } };
+  }),
+);
+
+// ---- Short links (§6) ----
+
+/** A link of the caller, with its account and link host; one outside the key's allow list is not found. */
+async function linkOf(c: C, p: Principal): Promise<{ link: LinkRow; edge: EdgeAccount; host: string | null }> {
+  const link = await c.env.DB.prepare('SELECT * FROM links WHERE id = ? AND user_id = ?').bind(c.req.param('id'), p.userId).first<LinkRow>();
+  const edge = link ? await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(link.account_id).first<EdgeAccount>() : null;
+  if (!link || !edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such link.');
+  return { link, edge, host: (await liveLinkHost(c.env.DB, edge.id))?.host ?? null };
+}
+
+v1.post(
+  '/links',
+  handle({ scope: 'links' }, async (c, p, body) => {
+    const accountId = typeof body.account_id === 'string' ? body.account_id : '';
+    const edge = await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ? AND user_id = ?').bind(accountId, p.userId).first<EdgeAccount>();
+    if (!edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such account.', { field: 'account_id' });
+    const link = await addLink(c.env, p, edge, { code: body.code, url: body.url, rules: body.rules });
+    sync(c, p, edge.id);
+    return { status: 201, body: { link: linkView(link, (await liveLinkHost(c.env.DB, edge.id))?.host ?? null, edge.synced_revision) } };
+  }),
+);
+
+v1.get(
+  '/links',
+  handle({ scope: 'links' }, async (c, p) => {
+    const accountId = c.req.query('account_id') ?? null;
+    const rows = (
+      await c.env.DB.prepare(
+        "SELECT l.*, e.cf_account_id, e.synced_revision, h.host AS link_host FROM links l JOIN edge_accounts e ON e.id = l.account_id LEFT JOIN link_hosts h ON h.account_id = l.account_id AND h.state != 'deleted' WHERE l.user_id = ?1 AND l.state != 'deleted' AND (?2 IS NULL OR l.account_id = ?2) ORDER BY l.created_at",
+      )
+        .bind(p.userId, accountId)
+        .all<LinkRow & { cf_account_id: string; synced_revision: number; link_host: string | null }>()
+    ).results;
+    return { status: 200, body: { links: rows.filter((r) => mayTouch(p, r.cf_account_id)).map((r) => linkView(r, r.link_host, r.synced_revision)) } };
+  }),
+);
+
+v1.get(
+  '/links/:id',
+  handle({ scope: 'links' }, async (c, p) => {
+    const { link, edge, host } = await linkOf(c, p);
+    return { status: 200, body: { link: linkView(link, host, edge.synced_revision) } };
+  }),
+);
+
+v1.patch(
+  '/links/:id',
+  handle({ scope: 'links' }, async (c, p, body) => {
+    const { link, edge, host } = await linkOf(c, p);
+    if (body.code !== undefined) fail(400, 'invalid_request', 'A link keeps its code; create a new link for another one.', { field: 'code' });
+    const updated = await patchLink(c.env, p, link, { url: body.url, rules: body.rules });
+    sync(c, p, edge.id);
+    return { status: 200, body: { link: linkView(updated, host, edge.synced_revision) } };
+  }),
+);
+
+v1.delete(
+  '/links/:id',
+  handle({ scope: 'links' }, async (c, p) => {
+    const { link, edge, host } = await linkOf(c, p);
+    const deleted = await deleteLink(c.env, link);
+    sync(c, p, edge.id);
+    return { status: 200, body: { link: linkView(deleted, host, edge.synced_revision) } };
   }),
 );

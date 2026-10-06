@@ -15,6 +15,25 @@ export interface SiteConfig {
 
 export const siteKey = (host: string) => `site:${host}`;
 
+/** The account's link host (§6): its whole host is routed to the worker, so nothing there passes
+ *  through — an unknown path is a plain 404. Its data is `{}`. */
+export const linkHostKey = (host: string) => `linkhost:${host}`;
+/** A short link, by code: one link host per account, so the code alone names it. */
+export interface LinkConfig {
+  /** the target, `l…`: every click of this link carries it */
+  t: string;
+  url: string;
+  /** the first rule that matches the visitor's country and device wins; else `url` */
+  rules: { countries?: string[]; devices?: Device[]; url: string }[];
+}
+export type Device = 'mobile' | 'desktop';
+export const linkKey = (code: string) => `link:${code}`;
+/** A link code: 3–32 of `[A-Za-z0-9_-]`. */
+export const CODE = /^[A-Za-z0-9_-]{3,32}$/u;
+
+/** A user agent of a phone, as the collector and the link rules see it. */
+export const deviceOf = (ua: string): Device => (/Mobile|Android|iPhone/u.test(ua) ? 'mobile' : 'desktop');
+
 // The worker's counting tables (§5), as the day close and the reports (stages 4c, 4d) read them.
 /** Time is a UTC hour or day number since the epoch. */
 export const hourOf = (ms: number) => Math.floor(ms / 3_600_000);

@@ -41,6 +41,8 @@ export const fakeCf = {
   dbSize: 1_000_000,
   /** called when a route is made, before the answer: a concurrent change lands here */
   onRoutePost: null as null | (() => Promise<void>),
+  /** called when zones are listed, before the answer: a concurrent change lands here */
+  onZones: null as null | (() => Promise<void>),
   scripts: new Map<string, Script>(),
   dbs: new Map<string, { name: string; sql: string[]; db: DatabaseSync }>(),
   zones: [
@@ -61,6 +63,7 @@ export const fakeCf = {
     this.analytics = {};
     this.dbSize = 1_000_000;
     this.onRoutePost = null;
+    this.onZones = null;
     this.scripts.clear();
     for (const d of this.dbs.values()) d.db.close();
     this.dbs.clear();
@@ -222,6 +225,7 @@ function d1(path: string, method: string, init: RequestInit, url: URL): Response
 async function zones(path: string, method: string, init: RequestInit, url: URL): Promise<Response | null> {
   if (path === '/zones' && method === 'GET') {
     const name = url.searchParams.get('name');
+    await fakeCf.onZones?.();
     return ok(fakeCf.zones.filter((z) => !name || z.name === name));
   }
   const m = path.match(/^\/zones\/([^/]+)\/workers\/routes(?:\/([^/]+))?$/u);

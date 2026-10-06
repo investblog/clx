@@ -38,13 +38,15 @@ export function parseBody(v: unknown): PushBody | null {
 type Row = { kind: 'hour'; target: string; hour: number; views: number; bots: number } | { kind: 'day'; target: string; day: number; as_of_hour: number; final: boolean; views: number; bots: number; visitors: number };
 
 /** One item: its row, or why it is refused. */
-function check(it: Record<string, unknown>, targets: Set<string>, now: number): Row | Reason {
+function check(it: Record<string, unknown>, targets: Set<string>, links: Set<string>, now: number): Row | Reason {
   const hourNow = hourOf(now);
   const today = dayOf(now);
   if ('hour' in it) {
     if (!exactly(it, ['id', 'target', 'hour', 'views', 'bots']) || !str(it.target, 64) || !int(it.hour) || !int(it.views) || !int(it.bots)) return 'invalid';
     if (it.hour >= hourNow) return 'invalid'; // only closed hours
     if (it.hour < hourNow - DAYS_BACK * 24) return 'too_old';
+    // A link sends only its final days (§7).
+    if (links.has(it.target)) return 'invalid';
     if (!targets.has(it.target)) return 'unknown_target';
     return { kind: 'hour', target: it.target, hour: it.hour, views: it.views, bots: it.bots };
   }
@@ -55,7 +57,8 @@ function check(it: Record<string, unknown>, targets: Set<string>, now: number): 
   const asOf = final ? it.day * 24 + 23 : it.as_of_hour;
   if (it.day > today || (final && it.day === today) || !int(asOf) || asOf < it.day * 24 || asOf > it.day * 24 + 23 || asOf >= hourNow) return 'invalid';
   if (it.day < today - DAYS_BACK) return 'too_old';
-  if (!targets.has(it.target)) return 'unknown_target';
+  if (!final && links.has(it.target)) return 'invalid';
+  if (!targets.has(it.target) && !links.has(it.target)) return 'unknown_target';
   return { kind: 'day', target: it.target, day: it.day, as_of_hour: asOf, final, views: it.views, bots: it.bots, visitors: it.visitors };
 }
 
@@ -64,18 +67,22 @@ const chunks = <T>(list: T[], n: number) => Array.from({ length: Math.ceil(list.
 
 export async function receive(db: D1Database, edge: EdgeAccount, body: PushBody, now: number): Promise<PushAnswer> {
   const today = dayOf(now);
-  const [sites, owner] = await db.batch([
+  const [sites, owner, links] = await db.batch([
     db.prepare('SELECT target, state FROM sites WHERE account_id = ?1').bind(edge.id),
     db.prepare('SELECT plan FROM users WHERE id = ?1').bind(edge.user_id),
+    db.prepare('SELECT target, state FROM links WHERE account_id = ?1').bind(edge.id),
   ]);
   const siteRows = sites!.results as { target: string; state: string }[];
+  const linkRows = links!.results as { target: string; state: string }[];
   const targets = new Set(siteRows.map((s) => s.target));
-  const budget = writeBudget(planOf((owner!.results[0] as { plan?: string } | undefined)?.plan ?? 'free'), siteRows.filter((s) => s.state !== 'deleted').length);
+  const linkTargets = new Set(linkRows.map((l) => l.target));
+  const live = (rows: { state: string }[]) => rows.filter((r) => r.state !== 'deleted').length;
+  const budget = writeBudget(planOf((owner!.results[0] as { plan?: string } | undefined)?.plan ?? 'free'), live(siteRows), live(linkRows));
 
   const answer: PushAnswer = { accepted: [], rejected: [] };
   const valid: { id: number; row: Row }[] = [];
   for (const it of body.items as unknown as Record<string, unknown>[]) {
-    const row = check(it, targets, now);
+    const row = check(it, targets, linkTargets, now);
     if (typeof row === 'string') answer.rejected.push({ id: it.id as number, reason: row });
     else valid.push({ id: it.id as number, row });
   }

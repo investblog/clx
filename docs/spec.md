@@ -347,16 +347,27 @@ Why:
 ## 6. Short links, QR, rules
 
 - **Link host** — the user's choice: a subdomain (`go.example.com`) or a separate domain in their
-  account. Route `go.example.com/*` → `clx-edge`. How the subdomain gets its DNS record — §13
-  item 2.
+  account; **one per Cloudflare account** (`PUT /v1/accounts/{id}/link-host`). Route
+  `go.example.com/*` → `clx-edge`. How the subdomain gets its DNS record — §13 item 2. Another host
+  replaces it: the old route is deleted and the links move to the new host with their codes; a host
+  a link points at cannot become the link host, nor can a site's host (a site's host passes
+  everything outside the counter through, a link host nothing), and a link host cannot become a
+  site. The same host again after a `route_conflict` tries the route once more. The whole host is the worker's and has no origin:
+  nothing on it passes through — a path that is not a code, an unknown code or a method other than
+  `GET`/`HEAD` gets a plain `404` with no clx text.
 - **Link:** a code (3–32 characters `[A-Za-z0-9_-]`, chosen or a random 6) → target; `302`,
   `cache-control: no-store` (every click must reach the worker), no other headers and no body. A
-  click is written as a view of target `l<id>` (page empty, source — the `Referer` host). An unknown
-  code gets a plain `404` with no clx text.
+  click (`GET`; a `HEAD` is redirected, not counted) is written as a view of target `l<id>` (page
+  empty, source — the `Referer` host, or `qr`), with its daily visitor hash like a site's; a bot is
+  redirected too and counted as a bot. The code never changes (printed QR codes carry it): a new
+  code is a new link; a deleted link frees its code and keeps its totals. A code is unique within
+  the account — one link host per account, so the worker looks a link up by its code alone. Config
+  keys: `linkhost:<host>` and `link:<code>` ([ADR 0008](./decisions/0008-link-host-and-codes.md)).
 - **QR** — SVG via `@301st/qr-svg` (§11), built on clx.cx (download as SVG). The address in the QR
   is `go.example.com/<code>?q`; the worker records `?q` as source `qr` and does not pass it on.
-- **Rules:** `{country[], device[], target}`, the first match wins, otherwise the main target. Up
-  to 10 rules per link.
+- **Rules:** `{countries?, devices?, url}` — countries as ISO alpha-2 codes (`cf.country`), devices
+  `mobile`/`desktop` (as the collector tells them), at least one of the two; the first match wins,
+  otherwise the main target. Up to 10 rules per link.
 - **Targets:** `https://` only, not on the link host (no loops), up to 2048 characters.
 - **Sync clx.cx → worker** — everything the worker serves for the account: its sites (config of §5)
   and its links with rules. A delete-then-insert sync can leave sites or links without settings for
@@ -832,7 +843,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `plan_required`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_required`, `link_exists`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.

@@ -25,12 +25,13 @@ v2 stages — [`docs/spec.md`](./spec.md) §14.
       itself — done in stage 4c.)
 - [ ] The API's share of the per-account write budget (§8): idempotency rows and changes made
       through `/v1` are not counted yet — only the receiver's writes are (stage 4c).
-- [ ] Flaky tests: on 05.10.2026, 2 of 8 full runs failed — different tests each time (old connect
-      tests too, an auth test once), while the machine was short of memory; the failure text was
-      not captured. Find the cause before adding more timing-sensitive tests. Again on 05.10 with
-      memory to spare: one full run failed `test/deploy.test.ts` as a whole file (all its tests
-      skipped), the file alone and the next three full runs passed — a suite-level setup failure,
-      text again not captured (vitest printed only the file name).
+- [ ] Flaky tests — **cause found 06.10.2026: Windows runs out of outgoing ports.** Every D1 call
+      of a test goes to miniflare's proxy on a new connection; one full run leaves ~11,000 sockets
+      in TIME_WAIT (of 16,384 dynamic ports, freed after ~2 min), so a second run within two
+      minutes — the pre-push hook right after a manual run — fails random tests with
+      `connect EADDRINUSE 127.0.0.1:<port>` (a whole file, when it hits `beforeEach`). Until fixed:
+      wait for `(Get-NetTCPConnection -State TimeWait).Count` to drop before another run. Fix:
+      keep-alive to the proxy, or fewer D1 round trips per test.
 - [ ] A site added while its account is being disconnected: the route made in that moment is
       dropped by `placeRoute` when the row is gone, but only if the token still works.
 - [ ] A new script's crons may not fire at all for an hour or more when `clx-edge` is re-created
