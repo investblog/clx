@@ -1,0 +1,10 @@
+// The test inbox worker (mailbox/worker.js). Copy to mailbox/wrangler.jsonc with your KV id, deploy
+// with `node scripts/wrangler.mjs deploy -c mailbox/wrangler.jsonc`, then route an Email Routing
+// address of a subdomain (e.g. probe@t.example.com, plus-addressing on) to the worker clx-mailbox.
+{
+  "name": "clx-mailbox",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "kv_namespaces": [{ "binding": "MAIL", "id": "<kv namespace id>" }]
+}

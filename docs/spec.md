@@ -677,10 +677,11 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   - Turnstile on sign-up and reset;
   - IP floods — the rate limiting binding (60 s window, per location — a first line, not exact);
   - e-mail — Cloudflare Email Sending from `no-reply@clx.cx` (the `send_email` binding `EMAIL`,
-    `env.EMAIL.send({to, from, subject, text})`; beta, Workers Paid only — docs, 07.10.2026); until
-    clx.cx is onboarded as a sending domain, e-mail reaches only the account's verified addresses
-    (`email-service/platform/limits`). Onboarding (dashboard, Email Sending → Onboard Domain) adds
-    MX on `cf-bounce`, SPF, DKIM and DMARC records to the zone — the owner's step, part of stage 6.
+    `env.EMAIL.send({to, from, subject, text})`; beta, Workers Paid only — docs, 07.10.2026). Until a
+    domain is onboarded for sending, e-mail reaches only the account's verified addresses
+    (`email-service/platform/limits`). clx.cx was onboarded on 07.10.2026: the records sit on
+    `cf-bounce` (MX, SPF) and `cf-bounce._domainkey` (DKIM); the zone's own mail server keeps the
+    apex MX, SPF and its DMARC record (`docs/cloudflare-facts.md`).
     New accounts start with a daily quota Cloudflare does not publish;
   - deleting an account (`DELETE /v1/me` with the password, page session only): first every session
     and API key of the user ends (a fence — nothing of theirs can start a new connect meanwhile),

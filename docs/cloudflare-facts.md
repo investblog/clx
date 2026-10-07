@@ -1,11 +1,12 @@
 ---
 title: clx — Cloudflare behaviour checked live
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Cloudflare behaviour checked live
 
-What clx relies on and found out by trying it on a Free account, not by reading. Each entry says
+What clx relies on and found out by trying it — on a Free account unless a section says otherwise —
+not by reading. Each entry says
 when it was checked, what was used and where clx depends on it. **Look here before designing
 against Cloudflare, and add to it whenever a probe finds something new** — a fact goes in once,
 with its date; when Cloudflare changes, the entry is corrected, not duplicated.
@@ -86,3 +87,17 @@ to the token clx actually holds.
 | D1 rows appear ~15 minutes after the writes; a script made minutes earlier is counted under `__unknown__`. | 05.10.2026 | §8: account-wide sums only |
 | `workersInvocationsAdaptive` by `datetimeMinute` and `scriptName` shows when a script ran and how many subrequests it made — the way to see whether a user-side worker ran at all when there are no logs. | 05.10.2026 | diagnosing the self-check |
 | Workers Observability (`…/workers/observability/telemetry/query`) is refused (`403`) to the clx.cx deploy token — it holds no Observability right. | 05.10.2026 | — |
+
+## Email Sending and Email Routing (stage 6, the clx.cx zone)
+
+Checked on the clx.cx account (Workers Paid) with the owner's Global API Key — a one-off setup, not
+something clx does with its token. The zone's own mail stays on an outside server (apex MX and SPF).
+
+| Fact | Checked | Used in |
+|---|---|---|
+| `POST /zones/{zone}/email/sending/subdomains {"name": "<zone apex>"}` onboards the domain and **creates its DNS records itself**: three MX and an SPF TXT on `cf-bounce.<zone>`, a DKIM TXT on `cf-bounce._domainkey.<zone>`. Its `…/dns` also lists `_dmarc` `p=reject`, but an existing DMARC record is left as it is (none added). Apex MX and SPF untouched. | 07.10.2026 | §9 e-mail |
+| After onboarding, `POST /accounts/{account}/email/sending/send` delivers to any address at once; to an outside server it arrives from `bounces@cf-bounce.<zone>` with SPF, DKIM (`s=cf-bounce; d=<zone>`) and DMARC passing (the receiving MailCow's log). A text body comes quoted-printable. | 07.10.2026 | §9 e-mail |
+| A send the receiver refuses (550) shows only in GraphQL `emailSendingAdaptive` (`status: deliveryFailed`, `errorCause`); the send call answers 200 `queued`, and no suppression is added. | 07.10.2026 | diagnosing e-mail |
+| Email Routing works on a subdomain while the apex MX points elsewhere: `POST /zones/{zone}/email/routing/dns {"name": "t.<zone>"}` adds MX and SPF on that name only (plus `cf2024-1._domainkey.<zone>`). The zone then reports `enabled: true, status: misconfigured` (`mx.foreign` for the apex) — a report only; the apex records stay. The docs do not say what the call does without `name` — never send it so on a zone with outside mail. | 07.10.2026 | the probes' inbox |
+| A routing rule and `support_subaddress` (`PATCH /zones/{zone}/email/routing`) take effect after a delay: mail sent seconds after was refused `550 5.1.1 Address does not exist`, a minute or two later it went through. | 07.10.2026 | the probes' inbox |
+| Plus-addressing works on a subdomain: one literal rule `probe@t.<zone>` → a Worker gets `probe+<tag>@t.<zone>`, and the Worker's `message.to` is the full address, tag included. | 07.10.2026 | the probes' inbox (`mailbox/`) |

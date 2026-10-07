@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Backlog
@@ -9,9 +9,11 @@ v2 stages — [`docs/spec.md`](./spec.md) §14.
 
 Owner's steps (stages 5–7 are built; these open them to real users), in this order — Turnstile
 last, or sign-ups would make users whose confirmation e-mail never comes:
-- [ ] Email Sending: onboard clx.cx (dashboard → Email Sending → Onboard Domain; adds MX on
-      `cf-bounce`, SPF, DKIM, DMARC). Until then e-mail reaches only the account's verified addresses.
-- [ ] `abuse@clx.cx` (the /abuse page names it): an Email Routing rule to a real mailbox.
+- [x] Email Sending: clx.cx onboarded through the API (07.10; records on `cf-bounce` only, the
+      zone's own mail server keeps the apex MX, SPF and DMARC). Delivery to an outside mailbox checked.
+- [x] `abuse@clx.cx` (the /abuse page names it): an alias on the zone's own mail server (07.10).
+- [x] The probes' inbox: Email Routing on `t.clx.cx`, rule `probe@t.clx.cx` → the worker
+      `clx-mailbox` (`mailbox/`), which keeps each message a day in KV; `probe+<tag>@t.clx.cx` works.
 - [ ] Turnstile: a widget for clx.cx (dashboard → Turnstile); its site key goes to
       `TURNSTILE_SITE_KEY` in `wrangler.jsonc`, its secret to the Worker secret `TURNSTILE_SECRET`.
       Until then sign-up and reset say they do not work yet.
