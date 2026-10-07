@@ -11,7 +11,7 @@ import { LIMITS, planOf } from '../limits';
 import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
 import { CfError, type CallLog } from './api';
-import { inService, workingToken, type EdgeAccount } from './connect';
+import { inService, leased, workingToken, type EdgeAccount } from './connect';
 import { dropRoute, ensureRoute, validHost, zoneFor } from './sites';
 
 export interface LinkHostRow {
@@ -107,8 +107,12 @@ export function rulesOf(v: unknown, plan: string, linkHost: string | null): { ru
   return { rules, hosts };
 }
 
-/** Make or adopt the link host's route and record the outcome (as for a site, src/cf/sites.ts). */
+/** Make or adopt the link host's route and record the outcome — under the lease, as for a site (src/cf/sites.ts). */
 async function placeLinkRoute(env: Env, edge: EdgeAccount, h: LinkHostRow, principal: string): Promise<void> {
+  await leased(env.DB, edge.id, () => makeLinkRoute(env, edge, h, principal));
+}
+
+async function makeLinkRoute(env: Env, edge: EdgeAccount, h: LinkHostRow, principal: string): Promise<void> {
   const log: CallLog = { db: env.DB, edgeAccountId: edge.id, principal };
   const token = await workingToken(env, edge);
   const pattern = patternOf(h.host);

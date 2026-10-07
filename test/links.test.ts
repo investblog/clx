@@ -89,6 +89,17 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebK
 const visit = (url: string, headers: Record<string, string> = {}, country?: string) => viaWorker(url, { headers: { 'user-agent': CHROME, 'cf-connecting-ip': '198.51.100.7', ...headers } }, country);
 
 describe('the link host', () => {
+  it('gets no route while another operation holds the account; the cron makes it after', async () => {
+    const hold = (until: number | null) => env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(until).run();
+    await hold(Date.now() + 60_000);
+    expect((await setHost('go.example.com')).body.link_host.state).toBe('route_pending');
+    expect(routes()).toEqual([]);
+    await hold(null);
+    await runLinkHosts(env, Date.now() + 61_000);
+    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host.state).toBe('active');
+    expect(routes()).toHaveLength(1);
+  });
+
   it('routes the whole host to clx-edge and reaches the worker; the account shows it', async () => {
     const r = await setHost('go.example.com');
     expect(r.status).toBe(202);

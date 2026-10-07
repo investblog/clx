@@ -147,6 +147,21 @@ export async function lease(db: D1Database, edgeId: string, owner: string): Prom
   const r = await db.prepare('UPDATE edge_accounts SET lease_until = ?, lease_owner = ? WHERE id = ? AND (lease_until IS NULL OR lease_until < ?)').bind(now + LEASE, owner, edgeId, now).run();
   if (!r.meta.changes) fail(409, 'operation_in_progress', 'Another operation on this Cloudflare account is running; retry shortly.');
 }
+/** Work under the lease; null, without running it, when the lease is busy or the account is gone. */
+export async function leased<T>(db: D1Database, edgeId: string, work: () => Promise<T>): Promise<T | null> {
+  const owner = newId();
+  try {
+    await lease(db, edgeId, owner);
+  } catch (e) {
+    if (e instanceof ApiError) return null;
+    throw e;
+  }
+  try {
+    return await work();
+  } finally {
+    await release(db, edgeId, owner);
+  }
+}
 /** Only the owner releases; a second release, or one after a takeover, does nothing. */
 export const release = (db: D1Database, edgeId: string, owner: string) => db.prepare('UPDATE edge_accounts SET lease_until = NULL, lease_owner = NULL WHERE id = ? AND lease_owner = ?').bind(edgeId, owner).run();
 

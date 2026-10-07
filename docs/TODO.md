@@ -27,8 +27,11 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       0 rows — verified 05.10, `cloudflare-facts.md`.)
 - [ ] `MASTER_KEYS` rotation tool (a new key in front, re-encrypt, drop the old one) — before the
       first key needs replacing.
-- [ ] Sign-out: the page shows the sign-in form even when `/auth/logout` failed, so the refresh
-      cookie may stay valid — show the error or retry (stage 6, with sign-up).
+- [x] Sign-out: the page showed the sign-in form even when `/auth/logout` failed, so the refresh
+      cookie stayed valid behind it — now it stays on the page and says the session is not ended (07.10).
+- [x] A deleted user's sessions opened a new user who got the same id (SQLite reuses the highest
+      freed rowid; both started at session version 0; Codex 07.10). New users now start at the
+      sign-up time as their session version.
 - [ ] Proxy mode for the counter (a site not on Cloudflare) — after v2, if needed.
 - [ ] `over` from "pushes reporting write failures" (§8): the heartbeat carries the worker's error
       text only, with no clean sign of a failed D1 write — add one to the push body when it is
@@ -37,15 +40,19 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       is lost — the state it reports is still on the account's page.
 - [ ] The API's share of the per-account write budget (§8): idempotency rows and changes made
       through `/v1` are not counted yet — only the receiver's writes are (stage 4c).
-- [ ] Flaky tests — **cause found 06.10.2026: Windows runs out of outgoing ports.** Every D1 call
-      of a test goes to miniflare's proxy on a new connection; one full run leaves ~11,000 sockets
-      in TIME_WAIT (of 16,384 dynamic ports, freed after ~2 min), so a second run within two
-      minutes — the pre-push hook right after a manual run — fails random tests with
-      `connect EADDRINUSE 127.0.0.1:<port>` (a whole file, when it hits `beforeEach`). Until fixed:
-      wait for `(Get-NetTCPConnection -State TimeWait).Count` to drop before another run. Fix:
-      keep-alive to the proxy, or fewer D1 round trips per test.
-- [ ] A site added while its account is being disconnected: the route made in that moment is
-      dropped by `placeRoute` when the row is gone, but only if the token still works.
+- [x] Flaky tests — Windows ran out of outgoing ports. Miniflare closes the connection after every
+      proxied call (`options.reset = true` in its `DispatchFetchDispatcher`), so each D1 call takes a
+      port; a full run leaves ~11,000–13,000 sockets in TIME_WAIT (of 16,384 dynamic ports, ~2 min),
+      and a second run soon after failed random tests with `connect EADDRINUSE`. Now `test/ports.ts`
+      (vitest globalSetup) waits, on Windows, until fewer than 4,000 are left — up to 150 s (07.10:
+      two runs back to back, the second waited ~95 s, both green). Batching the tests' own setup
+      calls saved ~3%: the app's calls are the bulk. Not patched in miniflare (a pinned alpha of
+      wrangler). To remove the wait on a dev machine, widen the range (admin, the owner's call):
+      `netsh int ipv4 set dynamicport tcp start=10000 num=55000`.
+- [x] A site added while its account is being disconnected: the route made in that moment was
+      dropped by `placeRoute` when the row was gone, but only if that call worked. Now a route is
+      made and recorded under the account's lease, which disconnect takes too (sites, link hosts,
+      rotation); a busy lease leaves the route to the cron, or refuses a rotation (07.10).
 - [ ] A new script's crons may not fire at all for an hour or more when `clx-edge` is re-created
       within minutes of being deleted (the operations log 05–06.10: reinstalls 0.5–4.5 min after a
       disconnect got no `setup_ok` in 4 of 4, 6+ min after got one in 6 of 7; see

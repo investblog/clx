@@ -13,7 +13,7 @@ import { namesFor, scriptFor, snippetFor } from '../snippet';
 import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
 import { cf, CfError, type CallLog } from './api';
-import { edgeById, held, inService, lease, release, workingToken, type EdgeAccount } from './connect';
+import { edgeById, held, inService, lease, leased, release, workingToken, type EdgeAccount } from './connect';
 import { linkConfigRows } from './links';
 
 const SCRIPT = 'clx-edge';
@@ -134,8 +134,16 @@ const unchanged = (s: SiteRow): [string, unknown[]] => [' AND seed = ? AND state
 
 const siteById = (db: D1Database, id: string) => db.prepare('SELECT * FROM sites WHERE id = ?').bind(id).first<SiteRow>();
 
-/** Make or adopt the site's route and record the outcome. */
+/**
+ * Make or adopt the site's route and record the outcome — under the account's lease: disconnect
+ * takes it too, so it never runs between a route made and the row that records it (the route would
+ * outlive the account, recorded nowhere). Lease busy: the site stays route_pending for the cron.
+ */
 async function placeRoute(env: Env, edge: EdgeAccount, site: SiteRow, principal: string): Promise<void> {
+  await leased(env.DB, edge.id, () => makeRoute(env, edge, site, principal));
+}
+
+async function makeRoute(env: Env, edge: EdgeAccount, site: SiteRow, principal: string): Promise<void> {
   const log: CallLog = { db: env.DB, edgeAccountId: edge.id, principal };
   const token = await workingToken(env, edge);
   const pattern = patternOf(site.host, site.seed);
@@ -220,6 +228,11 @@ export async function patchSite(env: Env, site: SiteRow, excluded: string[]): Pr
 /** A new seed: new path, names and snippet; the old path keeps counting for 30 days (§5). */
 export async function rotateSite(env: Env, principal: string, edge: EdgeAccount, site: SiteRow): Promise<SiteRow> {
   if (site.state !== 'active') fail(409, 'site_not_active', 'Only an active site can be rotated.', { state: site.state });
+  // Under the lease, as placeRoute.
+  return (await leased(env.DB, edge.id, () => rotate(env, principal, edge, site))) ?? fail(409, 'operation_in_progress', 'Another operation on this Cloudflare account is running; retry shortly.');
+}
+
+async function rotate(env: Env, principal: string, edge: EdgeAccount, site: SiteRow): Promise<SiteRow> {
   const token = await workingToken(env, edge);
   const log: CallLog = { db: env.DB, edgeAccountId: edge.id, principal };
   const seed = newId();

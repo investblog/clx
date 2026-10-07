@@ -79,6 +79,23 @@ async function viaWorker(url: string, init: RequestInit = {}): Promise<{ status:
 }
 
 describe('adding a site', () => {
+  it('makes no route while another operation holds the account (a disconnect would miss it); the cron does it after', async () => {
+    const hold = (until: number | null) => env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(until).run();
+    await hold(Date.now() + 60_000);
+    const r = await addSite('example.com');
+    expect(r.body.site.state).toBe('route_pending');
+    expect(routes()).toEqual([]);
+    const id = r.body.site.id;
+    await hold(null);
+    await runSites(env, Date.now() + 61_000);
+    expect((await call('GET', `/v1/sites/${id}`)).body.site.state).toBe('active');
+    expect(routes()).toHaveLength(1);
+    // A rotation needs the lease too.
+    await hold(Date.now() + 60_000);
+    expect((await call('POST', `/v1/sites/${id}/rotate`)).body.error?.code).toBe('operation_in_progress');
+    expect(routes()).toHaveLength(1);
+  });
+
   it('finds the zone, makes the route, syncs the config; the worker serves the script and passes the rest on', async () => {
     const r = await addSite('example.com');
     expect(r.status).toBe(202);
