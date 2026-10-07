@@ -41,7 +41,10 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       is lost — the state it reports is still on the account's page.
 - [ ] The API's share of the per-account write budget (§8): idempotency rows and changes made
       through `/v1` are not counted yet — only the receiver's writes are (stage 4c).
-- [x] Flaky tests — Windows ran out of outgoing ports. Miniflare closes the connection after every
+- [ ] Flaky tests — Windows runs out of outgoing ports. **07.10 evening: the wait below is not
+      enough** — one run now needs ~14,000 ports, and with other programs on the machine a pre-push
+      failed with `EADDRINUSE` in the middle of a run after starting below 1,500. The fix is the
+      wider range (the owner's admin command below) or a D1 for tests without the proxy. Miniflare closes the connection after every
       proxied call (`options.reset = true` in its `DispatchFetchDispatcher`), so each D1 call takes a
       port; a full run leaves ~11,000–13,000 sockets in TIME_WAIT (of 16,384 dynamic ports, ~2 min),
       and a second run soon after failed random tests with `connect EADDRINUSE`. Now `test/ports.ts`
