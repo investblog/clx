@@ -46,8 +46,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       proxied call (`options.reset = true` in its `DispatchFetchDispatcher`), so each D1 call takes a
       port; a full run leaves ~11,000–13,000 sockets in TIME_WAIT (of 16,384 dynamic ports, ~2 min),
       and a second run soon after failed random tests with `connect EADDRINUSE`. Now `test/ports.ts`
-      (vitest globalSetup) waits, on Windows, until fewer than 4,000 are left — up to 150 s (07.10:
-      two runs back to back, the second waited ~95 s, both green). Batching the tests' own setup
+      (vitest globalSetup) waits, on Windows, until fewer than 1,500 are left — up to 180 s. (07.10:
+      first set at 4,000, a pre-push failed 2 tests once the suite grew to ~14,000 sockets a run.) Batching the tests' own setup
       calls saved ~3%: the app's calls are the bulk. Not patched in miniflare (a pinned alpha of
       wrangler). To remove the wait on a dev machine, widen the range (admin, the owner's call):
       `netsh int ipv4 set dynamicport tcp start=10000 num=55000`.

@@ -1,12 +1,12 @@
 // vitest globalSetup: on Windows, wait for the ports of the previous run to come back.
 // Miniflare closes the connection after every proxied call (`options.reset = true` in its
 // DispatchFetchDispatcher), so each D1 call of a test takes one outgoing port, held ~2 min in
-// TIME_WAIT after it. A full run takes ~11,000 of the 16,384 dynamic ports; a second run started
-// sooner fails random tests with `connect EADDRINUSE`. Waiting turns that into a pause.
+// TIME_WAIT after it. A full run takes ~14,000 of the 16,384 dynamic ports (07.10); a second run
+// started sooner fails random tests with `connect EADDRINUSE`. Waiting turns that into a pause.
 import { execSync } from 'node:child_process';
 
-const FREE_ENOUGH = 4_000; // TIME_WAIT sockets a full run can start on top of
-const CAP = 150_000;
+const FREE_ENOUGH = 1_500; // TIME_WAIT sockets a full run can start on top of (other programs use ports too)
+const CAP = 180_000;
 
 function timeWait(): number {
   return execSync('netstat -ano -p tcp', { encoding: 'utf8' }).split('\n').filter((l) => l.includes('TIME_WAIT')).length;
