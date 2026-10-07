@@ -15,3 +15,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0007](./0007-both-crons-at-upload.md) | The working cron is set at upload, next to the self-check | 06.10.2026 | §4, §5 |
 | [0008](./0008-link-host-and-codes.md) | One link host per account, links keyed by code alone | 06.10.2026 | §6 |
 | [0009](./0009-qr-copy-in-repo.md) | The QR library is copied into the repository until it is on npm | 06.10.2026 | §6, §11, §14 |
+| [0010](./0010-session-version-starts-at-sign-up.md) | A new user's session version starts at the sign-up time | 07.10.2026 | §9 |

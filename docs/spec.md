@@ -661,7 +661,9 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   - `POST /auth/reset {email, turnstile}` + `POST /auth/reset/confirm {token, password}` — password
     reset by e-mail (1 h, `/#/reset?t=<token>`); a reset ends all sessions: every refresh session and
     access token carries the user's session version, a reset bumps it (`users.session_version`), so
-    all issued before are refused at once; it confirms the address too. What tells a known address
+    all issued before are refused at once; it confirms the address too. A new user starts at the
+    sign-up time as the version, so a deleted user's sessions never open a user who gets the same
+    id (ADR 0010). What tells a known address
     from an unknown one — a token, an e-mail through Cloudflare — is done after the answer, and the
     e-mail limit is taken for any address; a new link replaces the old one only when its e-mail
     goes;
