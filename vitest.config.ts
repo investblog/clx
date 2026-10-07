@@ -7,5 +7,6 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 120_000,
     fileParallelism: false,
+    globalSetup: ['test/ports.ts'],
   },
 });
