@@ -14,9 +14,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] `abuse@clx.cx` (the /abuse page names it): an alias on the zone's own mail server (07.10).
 - [x] The probes' inbox: Email Routing on `t.clx.cx`, rule `probe@t.clx.cx` → the worker
       `clx-mailbox` (`mailbox/`), which keeps each message a day in KV; `probe+<tag>@t.clx.cx` works.
-- [ ] Turnstile: a widget for clx.cx (dashboard → Turnstile); its site key goes to
-      `TURNSTILE_SITE_KEY` in `wrangler.jsonc`, its secret to the Worker secret `TURNSTILE_SECRET`.
-      Until then sign-up and reset say they do not work yet.
+- [x] Turnstile: the widget `clx.cx` (managed) made through the API on 07.10; its site key is in
+      `TURNSTILE_SITE_KEY` (`wrangler.jsonc`), its secret in the Worker secret `TURNSTILE_SECRET`.
 - [ ] Then the live check of stage 6: a real sign-up to the owner's address, the confirmation link,
       a reset; a used link refused.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
