@@ -72,6 +72,16 @@ describe('sign-up', () => {
     expect(((await (await me(token)).json()) as { user: { email_confirmed: boolean } }).user.email_confirmed).toBe(true);
   });
 
+  it("a deleted user's sessions do not open the account that gets the same id", async () => {
+    const old = await login('owner@example.com', 'Right-pass-1');
+    await env.DB.prepare('DELETE FROM users').run();
+    await post('/auth/signup', { email: 'next@example.com', password: 'a-long-password', turnstile: 'human' });
+    // SQLite hands the freed id out again.
+    expect(await env.DB.prepare("SELECT id FROM users WHERE email = 'next@example.com'").first('id')).toBe(1);
+    expect((await me(old.token)).status).toBe(401);
+    expect((await post('/auth/refresh', {}, { cookie: `clx_refresh=${old.cookie}` })).status).toBe(401);
+  });
+
   it('a known address gets the same answer; its owner is told by e-mail, the password stays', async () => {
     const r = await json(await post('/auth/signup', { email: 'owner@example.com', password: 'someone-elses-pass', turnstile: 'human' }));
     expect(r).toEqual({ status: 202, body: { ok: true, message: 'If the address can get it, an e-mail is on its way.' } });

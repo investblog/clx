@@ -62,6 +62,8 @@ function accountCard(): HTMLElement {
       password,
       confirmAction('Удалить учётную запись', 'Да, удалить всё', async (key) => {
         const r = await call<{ left: string[]; revoke_tokens: string[] }>('DELETE', '/v1/me', { password: password.value }, key);
+        // A failed logout leaves nothing: the user's sessions end with the user, and a new user who
+        // gets the same id starts at another session version (src/auth/signup.ts).
         await logout();
         location.hash = '#/';
         const rest = [...r.revoke_tokens.map((t) => `токен ${t}`), ...r.left];
@@ -173,7 +175,15 @@ $('password-toggle').addEventListener('click', () => {
 });
 
 out.addEventListener('click', async () => {
-  await logout();
+  const button = out as HTMLButtonElement;
+  button.disabled = true;
+  const ok = await logout();
+  button.disabled = false;
+  if (!ok) {
+    // The session lives on: the sign-in form now would only hide it.
+    flash = 'Выйти не удалось — сессия не завершена. Проверьте сеть и попробуйте ещё раз.';
+    return void route();
+  }
   location.hash = '#/';
   showLogin();
 });

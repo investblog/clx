@@ -30,9 +30,11 @@ export async function login(email: string, password: string): Promise<string | n
   return 'Не удалось войти. Попробуйте ещё раз.';
 }
 
-export async function logout(): Promise<void> {
-  token = null;
-  await fetch('/auth/logout', { method: 'POST' }).catch(() => undefined);
+/** False when the server did not end the session: its refresh cookie may still sign this browser in. */
+export async function logout(): Promise<boolean> {
+  const ok = await fetch('/auth/logout', { method: 'POST' }).then((r) => r.ok, () => false);
+  if (ok) token = null;
+  return ok;
 }
 
 /** An error answer of /v1: `{error: {code, message, details}}`. */

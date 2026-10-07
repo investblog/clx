@@ -87,8 +87,10 @@ const { stored, out } = newPassword(email);
 try {
   write(
     cmd === 'add'
-      ? `INSERT INTO users (email, password_hash, created_at, email_confirmed_at) VALUES (${sq(email)}, ${sq(stored)}, ${Date.now()}, ${Date.now()});`
-      : `UPDATE users SET password_hash = ${sq(stored)} WHERE email = ${sq(email)};`,
+      ? // The session version starts at the time, as at sign-up (src/auth/signup.ts).
+        `INSERT INTO users (email, password_hash, created_at, email_confirmed_at, session_version) VALUES (${sq(email)}, ${sq(stored)}, ${Date.now()}, ${Date.now()}, ${Date.now()});`
+      : // A new password ends every session, as a reset does.
+        `UPDATE users SET password_hash = ${sq(stored)}, session_version = session_version + 1 WHERE email = ${sq(email)};`,
   );
 } catch (e) {
   // No write, no password: a file that matches nothing would only mislead.

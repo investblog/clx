@@ -119,8 +119,10 @@ signup.post('/signup', async (c) => {
   if (!email) return c.json({ error: 'invalid_email' }, 400);
   if (!password) return c.json({ error: 'weak_password', min: PASSWORD_MIN }, 400);
   const now = Date.now();
-  // The hash is made either way, so a known address costs the same time as a new one.
-  const created = await c.env.DB.prepare('INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?) ON CONFLICT (email) DO NOTHING RETURNING id')
+  // The hash is made either way, so a known address costs the same time as a new one. The session
+  // version starts at the time: SQLite may hand a deleted user's id out again (no AUTOINCREMENT),
+  // and that user's sessions carry a small version, which then never matches.
+  const created = await c.env.DB.prepare('INSERT INTO users (email, password_hash, created_at, session_version) VALUES (?1, ?2, ?3, ?3) ON CONFLICT (email) DO NOTHING RETURNING id')
     .bind(email, await hashPassword(password), now)
     .first<{ id: number }>();
   const reserved = await reserveMail(c.env, email, now);
