@@ -372,7 +372,9 @@ describe('the report of a link', () => {
     await addLink({ code: 'promo', url: 'https://example.org/' });
     const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
     const edge = (await env.DB.prepare('SELECT * FROM edge_accounts').first<EdgeAccount>())!;
-    const now = Date.now();
+    // Ten minutes into the hour: a minute later is the same hour, so the same read (a new hour is a
+    // new read — the cache key holds it).
+    const now = Math.floor(Date.now() / 3_600_000) * 3_600_000 + 10 * 60_000;
     const first = await linkReport(env, { id: 1, plan: 'free' }, edge, t, 'today', false, now);
     const later = await linkReport(env, { id: 1, plan: 'free' }, edge, t, 'today', false, now + 60_000);
     expect(later.as_of).toBe(first.as_of);
