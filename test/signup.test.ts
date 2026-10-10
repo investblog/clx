@@ -60,7 +60,7 @@ describe('sign-up', () => {
     expect(r).toMatchObject({ status: 202, body: { ok: true } });
     expect(mail).toHaveLength(1);
     expect(mail[0]).toMatchObject({ to: 'new@example.com', from: 'no-reply@clx.example.com' });
-    expect(mail[0]!.text).toContain('https://clx.example.com/#/confirm?t=');
+    expect(mail[0]!.text).toContain('https://clx.example.com/app#/confirm?t=');
     const { token } = await login('new@example.com', 'a-long-password');
     expect(((await (await me(token)).json()) as { user: { email_confirmed: boolean } }).user.email_confirmed).toBe(false);
     const connect = await app.request('https://clx.cx/v1/accounts', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ cf_account_id: 'a'.repeat(32), bootstrap_token: 'x'.repeat(40) }) }, env);
@@ -87,6 +87,7 @@ describe('sign-up', () => {
     expect(r).toEqual({ status: 202, body: { ok: true, message: 'If the address can get it, an e-mail is on its way.' } });
     expect(mail).toHaveLength(1);
     expect(mail[0]!.subject).toContain('уже есть аккаунт');
+    expect(mail[0]!.text).toContain('Войти: https://clx.example.com/app\n');
     expect((await login('owner@example.com', 'Right-pass-1')).status).toBe(200);
   });
 
@@ -135,7 +136,7 @@ describe('password reset', () => {
     expect((await me(before.token)).status).toBe(200);
     await post('/auth/reset', { email: 'owner@example.com', turnstile: 'human' });
     const t = tokenIn(mail[0]!.text);
-    expect(mail[0]!.text).toContain('/#/reset?t=');
+    expect(mail[0]!.text).toContain('/app#/reset?t=');
     expect(await json(await post('/auth/reset/confirm', { token: t, password: 'short' }))).toMatchObject({ status: 400, body: { error: 'weak_password' } });
     // Within the same second as the sign-in: the session still ends.
     expect((await post('/auth/reset/confirm', { token: t, password: 'a-new-long-password' })).status).toBe(200);

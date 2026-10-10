@@ -84,8 +84,21 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 @media (max-width:560px){.rule-row{grid-template-columns:1fr}}
 .qr-card .qr{width:200px;height:200px;image-rendering:pixelated;background:#fff}
 
-/* Pages of stage 6b: sign-up, reset, the legal pages. */
+/* Pages of stage 6b: sign-up, reset. */
 .turnstile{min-height:65px}
-main.legal{margin:var(--space-5) auto;padding:0 var(--space-4)}
-main.legal h2{margin:var(--space-5) 0 var(--space-2)}
-main.legal ul{padding-left:var(--space-5)}
+
+/* The site's pages (site/): home, legal, 404. */
+.site-main{min-height:60vh}
+.legal{margin:var(--space-5) 0}
+.legal h2{margin:var(--space-5) 0 var(--space-2)}
+.legal ul{padding-left:var(--space-5)}
+.hero{margin:var(--space-6) 0}
+.hero h1{font-size:var(--fs-2xl);line-height:1.2;margin:0 0 var(--space-4)}
+.lead{font-size:var(--fs-lg);color:var(--text-muted)}
+.points{padding-left:var(--space-5);margin:var(--space-4) 0}
+.points li{margin-bottom:var(--space-2)}
+.lang-switch{font-size:var(--fs-sm);color:var(--text-muted);text-decoration:none}
+.lang-switch:hover{color:var(--text)}
+.site-foot{max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
+.site-foot a{color:var(--text-muted);text-decoration:none}
+.site-foot a:hover{color:var(--text)}

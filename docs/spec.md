@@ -653,13 +653,13 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   (`src/auth/routes.ts`).
 - New:
   - `POST /auth/signup {email, password, turnstile}` → a confirmation e-mail (24 h) with a link
-    `/#/confirm?t=<token>` (in the fragment, so the token reaches no server log or `Referer`);
+    `/app#/confirm?t=<token>` (in the fragment, so the token reaches no server log or `Referer`);
     `POST /auth/confirm {token}`; a signed-in unconfirmed user can ask again
     (`POST /auth/confirm/resend`, the new link replaces the old one). Before confirming the user
     can sign in but cannot connect a Cloudflare account (`email_unconfirmed`). Passwords: 10–256
     characters. Users made by `scripts/user.mjs` are confirmed;
   - `POST /auth/reset {email, turnstile}` + `POST /auth/reset/confirm {token, password}` — password
-    reset by e-mail (1 h, `/#/reset?t=<token>`); a reset ends all sessions: every refresh session and
+    reset by e-mail (1 h, `/app#/reset?t=<token>`); a reset ends all sessions: every refresh session and
     access token carries the user's session version, a reset bumps it (`users.session_version`), so
     all issued before are refused at once; it confirms the address too. A new user starts at the
     sign-up time as the version, so a deleted user's sessions never open a user who gets the same
@@ -696,8 +696,10 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
 The page stack stays (`ui/*`, CSP without `unsafe-inline`); every page action is a `/v1` call (§15).
 Pages:
 - **Connection:** a "bootstrap token → check → install" wizard with step status.
-- **Sites:** add a site by its host — clx.cx finds the zone in the account itself, as the API does
-  (no zone picker, no zones endpoint) — the snippet, excluded paths, rotate, delete, route status.
+- **Sites:** add a site by its host, suggested from the account's zones as the reader types
+  (`GET /v1/accounts/{id}/zones`; a host in none of them is flagged before sending) — clx.cx still
+  finds the zone itself, as the API does ([ADR 0011](./decisions/0011-zone-picker.md)) — the
+  snippet, excluded paths, rotate, delete, route status.
 - **Links:** the link host, a list of links with 7-day clicks, create and edit, rules, QR (SVG).
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
   "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques".
@@ -906,3 +908,22 @@ that adds a site and embeds its counter at build time.
   rights of §3), `POST /v1/sites` per site, and the `snippet` from the answer embedded into every
   page at build time. The snippet is stable, so rebuilding a site needs no call; only `rotate`
   changes it.
+
+## 16. The site and the app
+
+clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site-and-app.md)).
+- **Addresses.** The site at the root: `/`, `/privacy`, `/terms`, `/abuse` in English, the same
+  under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` — the pages
+  of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
+  where they were (`/v1`, `/auth`, `/hook`, `/admin`).
+- **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
+  canonical and hreflang (with `x-default` on English), the sitemap, robots.txt and the footer all
+  derive from it. The language comes from the address only.
+- **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`) and the site's script
+  (`public/site.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
+  result before every deploy. Nothing generated is committed.
+- **Languages.** English and Russian for the site; the app and the e-mails follow, with the user's
+  language kept with the account. Legal texts exist in both, English is the original.
+- **Planned** (the product plan, in parts): docs for agents and the API reference built from
+  `docs/openapi.yaml` (`/api`, `/agents`, `llms.txt`, markdown on `Accept: text/markdown`); the
+  app's design system (drawers, dialogs, navigation); the content pages and SEO (OG cards, JSON-LD).

@@ -1,8 +1,12 @@
-# Pages and files of the reports. The API sets its own headers (src/index.ts).
+# Headers of the files Workers Static Assets serve: the site's pages (site/), the app's page and
+# their files. The API sets its own headers (src/index.ts).
 # No inline script or style anywhere: geometry is set through the CSSOM (ui/). Turnstile (sign-up,
 # reset) loads its script and frame from challenges.cloudflare.com.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: same-origin
+
+# The app is a signed-in page: never indexed (the site's pages are; a 404 says noindex in its <head>).
+/app
   X-Robots-Tag: noindex, nofollow

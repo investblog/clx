@@ -1,0 +1,44 @@
+<h1 class="h3">Privacy</h1>
+<p class="muted text-sm">Version of 7 October 2026.</p>
+
+<h2 class="h4">What clx is</h2>
+<p>
+  clx is an open visit counter and short links. The clx worker and its database are installed in
+  your own Cloudflare account: your sites' and links' traffic goes there, not through clx.cx. The
+  code is open: <a href="https://github.com/investblog/clx">github.com/investblog/clx</a>.
+</p>
+
+<h2 class="h4">What clx.cx keeps about you</h2>
+<ul>
+  <li>your e-mail address, a hash of your password (PBKDF2), the time you signed in;</li>
+  <li>the working token of your Cloudflare account — encrypted only; a log of the calls it made on your behalf (90 days);</li>
+  <li>your sites, links and rules;</li>
+  <li>totals of your sites and links: views, bots and visitors by hour (2 days) and by day (400 days) — no pages, sources or other breakdowns.</li>
+</ul>
+<p>clx.cx sets one cookie — the sign-in session (HttpOnly, this site only). There are no ads and no third-party analytics.</p>
+
+<h2 class="h4">Visitors of your sites</h2>
+<p>
+  The counter sets no cookies and loads nothing from other addresses. Visit data — page, source,
+  country, device type, browser and system — is kept in the database in your Cloudflare account,
+  not on clx.cx. The IP address and User-Agent are used in memory only: to count a day's unique
+  visitors they are hashed with a salt of the day; the salt and the hashes are deleted once the
+  day is closed. Only totals go to clx.cx.
+</p>
+<p>
+  For your sites' visitors you are the controller of their data, and clx processes the totals.
+  Mention the counter in your site's privacy policy.
+</p>
+
+<h2 class="h4">E-mails</h2>
+<p>clx writes only when it has to: to confirm your address, to reset your password, about the state of your account. The e-mails go through Cloudflare Email Sending.</p>
+
+<h2 class="h4">Deletion</h2>
+<p>
+  Disconnecting a Cloudflare account removes the clx worker, database and routes from it; the
+  totals on clx.cx are kept 30 days and then deleted. Deleting your clx account deletes it and all
+  its totals at once.
+</p>
+
+<h2 class="h4">Processors</h2>
+<p>clx.cx runs on Cloudflare (Workers, D1, KV, Email Sending, Turnstile).</p>

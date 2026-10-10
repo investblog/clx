@@ -68,7 +68,7 @@ async function turnstile(box: HTMLElement): Promise<{ token: () => string; reset
 const card = (title: string, ...children: (Node | null)[]) => h('section', { class: 'auth-card login' }, h('h1', { class: 'h3' }, title), ...children);
 const field = (label: string, input: HTMLInputElement, hint?: string) => h('div', { class: 'field' }, h('label', { class: 'field-label', for: input.id }, label), input, hint ? h('p', { class: 'field-hint' }, hint) : null);
 const footer = () =>
-  h('p', { class: 'muted text-sm' }, h('a', { href: '#/' }, 'Вход'), ' · ', h('a', { href: '#/signup' }, 'Регистрация'), ' · ', h('a', { href: '#/reset' }, 'Забыли пароль?'), ' · ', h('a', { href: '/privacy' }, 'Конфиденциальность'), ' · ', h('a', { href: '/terms' }, 'Условия'));
+  h('p', { class: 'muted text-sm' }, h('a', { href: '#/' }, 'Вход'), ' · ', h('a', { href: '#/signup' }, 'Регистрация'), ' · ', h('a', { href: '#/reset' }, 'Забыли пароль?'), ' · ', h('a', { href: '/ru/privacy' }, 'Конфиденциальность'), ' · ', h('a', { href: '/ru/terms' }, 'Условия'));
 
 /** Without Turnstile set up the server refuses sign-up and reset (`not_configured`): say so at once. */
 const closed = (title: string, what: string) => card(title, h('p', {}, `${what} пока не работает: сервис ещё настраивается. Загляните позже.`), footer());
@@ -89,7 +89,7 @@ export async function signupPage(): Promise<HTMLElement> {
     box,
     status,
     h('div', { class: 'auth-actions' }, button),
-    h('p', { class: 'muted text-sm' }, 'Регистрируясь, вы принимаете ', h('a', { href: '/terms' }, 'условия'), ' и ', h('a', { href: '/privacy' }, 'политику конфиденциальности'), '.'),
+    h('p', { class: 'muted text-sm' }, 'Регистрируясь, вы принимаете ', h('a', { href: '/ru/terms' }, 'условия'), ' и ', h('a', { href: '/ru/privacy' }, 'политику конфиденциальности'), '.'),
   );
   const widget = await turnstile(box);
   form.addEventListener('submit', async (e) => {

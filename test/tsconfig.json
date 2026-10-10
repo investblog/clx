@@ -1,7 +1,8 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["@cloudflare/workers-types", "node"]
+    "types": ["@cloudflare/workers-types", "node"],
+    "allowImportingTsExtensions": true
   },
-  "include": ["../src", "../edge", "."]
+  "include": ["../src", "../edge", "../site/pages.ts", "../site/urls.ts", "."]
 }

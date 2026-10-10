@@ -4,12 +4,12 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
-    "lint": "tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p ui",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p ui",
+    "lint": "tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p ui && tsc --noEmit -p site",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p ui && tsc --noEmit -p site",
     "test": "vitest run",
-    "build": "node scripts/build-ui.mjs && node scripts/build-edge.mjs --check && wrangler deploy --dry-run --outdir dist --config wrangler.example.jsonc",
+    "build": "node scripts/build-ui.mjs && node scripts/check-site.mjs && node scripts/build-edge.mjs --check && wrangler deploy --dry-run --outdir dist --config wrangler.example.jsonc",
     "db:local": "node scripts/wrangler.mjs d1 migrations apply clx --local",
-    "deploy": "node scripts/build-ui.mjs && node scripts/build-edge.mjs --check && node scripts/wrangler.mjs deploy",
+    "deploy": "node scripts/build-ui.mjs && node scripts/check-site.mjs && node scripts/build-edge.mjs --check && node scripts/wrangler.mjs deploy",
     "build:edge": "node scripts/build-edge.mjs"
   },
   "dependencies": {

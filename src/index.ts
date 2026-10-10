@@ -34,7 +34,7 @@ async function mailRenew(env: Env, a: { id: string; user_id: number; cf_account_
     env,
     user.email,
     `clx: продлите подключение «${name}»`,
-    `Здравствуйте!\n\nТокен, которым clx работает в аккаунте Cloudflare «${name}», действует до ${until}. После этого clx не сможет обновлять воркер, добавлять сайты и ссылки и читать разбивки отчётов.\nЧтобы продлить, создайте новый bootstrap-токен и вставьте его на странице аккаунта: ${appOrigin(env)}/#/accounts/${a.id}\n`,
+    `Здравствуйте!\n\nТокен, которым clx работает в аккаунте Cloudflare «${name}», действует до ${until}. После этого clx не сможет обновлять воркер, добавлять сайты и ссылки и читать разбивки отчётов.\nЧтобы продлить, создайте новый bootstrap-токен и вставьте его на странице аккаунта: ${appOrigin(env)}/app#/accounts/${a.id}\n`,
     now,
   );
   // Marked only once it went: a send that failed is tried again the next hour.
@@ -50,7 +50,7 @@ async function mailSilence(env: Env, a: { id: string; user_id: number; cf_accoun
     env,
     user.email,
     `clx: нет связи с воркером в «${name}»`,
-    `Здравствуйте!\n\nВоркер clx-edge в аккаунте Cloudflare «${name}» не присылал итоги больше суток. Счётчик и ссылки, скорее всего, работают, но итоги на clx.cx не обновляются.\nЧастые причины: воркер или его база удалены в Cloudflare, отозван токен, не срабатывает его крон.\n\nСостояние аккаунта: ${appOrigin(env)}/#/accounts/${a.id}\n`,
+    `Здравствуйте!\n\nВоркер clx-edge в аккаунте Cloudflare «${name}» не присылал итоги больше суток. Счётчик и ссылки, скорее всего, работают, но итоги на clx.cx не обновляются.\nЧастые причины: воркер или его база удалены в Cloudflare, отозван токен, не срабатывает его крон.\n\nСостояние аккаунта: ${appOrigin(env)}/app#/accounts/${a.id}\n`,
     now,
   );
 }

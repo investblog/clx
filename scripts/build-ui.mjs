@@ -1,16 +1,13 @@
 #!/usr/bin/env node
-// node scripts/build-ui.mjs — bundles the reports' client (ui/) into public/app.js, which Workers
-// Static Assets serve. The bundle is built, not committed: `build` and `deploy` run this first.
+// node scripts/build-ui.mjs — builds what Workers Static Assets serve: the app's client (ui/ →
+// public/app.js), the site pages' script (site/client.ts → public/site.js), then the site pages,
+// the app's page, robots.txt and sitemap.xml (site/build.ts). The output is built, not committed:
+// `build` and `deploy` run this first, and scripts/check-site.mjs checks it.
+import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 
-await build({
-  entryPoints: ['ui/main.ts'],
-  bundle: true,
-  minify: true,
-  format: 'iife',
-  target: 'es2022',
-  outfile: 'public/app.js',
-  legalComments: 'none',
-  logLevel: 'warning',
-});
-console.log('public/app.js built');
+const common = { bundle: true, minify: true, format: 'iife', target: 'es2022', legalComments: 'none', logLevel: 'warning' };
+await build({ ...common, entryPoints: ['ui/main.ts'], outfile: 'public/app.js' });
+await build({ ...common, entryPoints: ['site/client.ts'], outfile: 'public/site.js' });
+console.log('public/app.js, public/site.js built');
+execFileSync(process.execPath, ['site/build.ts'], { stdio: 'inherit' });

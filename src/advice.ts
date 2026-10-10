@@ -191,8 +191,8 @@ async function mailAdvice(env: Env, edge: EdgeAccount, advice: Advice, now: numb
   const name = edge.cf_account_name ?? edge.cf_account_id;
   const text =
     advice.level === 'over'
-      ? `Здравствуйте!\n\nАккаунт Cloudflare «${name}» упёрся в лимит бесплатного тарифа Workers — ${what}.\nСверх лимита Cloudflare отказывает в работе воркерам: счётчик и ссылки могут не отвечать до конца суток (UTC).\n${advice.suggest ? 'Дело в размере базы: помогло бы хранить почасовые детали короче.\n' : 'Переход этого аккаунта на Workers Paid ($5 в месяц) снимает лимит.\n'}\nПодробности: ${appOrigin(env)}/#/accounts/${edge.id}\n`
-      : `Здравствуйте!\n\nАккаунт Cloudflare «${name}» скоро упрётся в лимит бесплатного тарифа Workers — ${what}.\n${advice.suggest ? 'Дело в размере базы: помогло бы хранить почасовые детали короче.\n' : 'Стоит заранее перевести его на Workers Paid ($5 в месяц).\n'}\nПодробности: ${appOrigin(env)}/#/accounts/${edge.id}\n`;
+      ? `Здравствуйте!\n\nАккаунт Cloudflare «${name}» упёрся в лимит бесплатного тарифа Workers — ${what}.\nСверх лимита Cloudflare отказывает в работе воркерам: счётчик и ссылки могут не отвечать до конца суток (UTC).\n${advice.suggest ? 'Дело в размере базы: помогло бы хранить почасовые детали короче.\n' : 'Переход этого аккаунта на Workers Paid ($5 в месяц) снимает лимит.\n'}\nПодробности: ${appOrigin(env)}/app#/accounts/${edge.id}\n`
+      : `Здравствуйте!\n\nАккаунт Cloudflare «${name}» скоро упрётся в лимит бесплатного тарифа Workers — ${what}.\n${advice.suggest ? 'Дело в размере базы: помогло бы хранить почасовые детали короче.\n' : 'Стоит заранее перевести его на Workers Paid ($5 в месяц).\n'}\nПодробности: ${appOrigin(env)}/app#/accounts/${edge.id}\n`;
   if (await sendNotice(env, user.email, advice.level === 'over' ? `clx: «${name}» упёрся в лимит Cloudflare` : `clx: «${name}» скоро упрётся в лимит Cloudflare`, text, now))
     await env.DB.prepare('UPDATE edge_accounts SET advice_mailed_level = ?, advice_mailed_at = ? WHERE id = ?').bind(advice.level, now, edge.id).run();
 }

@@ -42,8 +42,13 @@ context/attachments/
 # local scratch (dev log, generated seed)
 temp/
 
-# the reports client bundle (scripts/build-ui.mjs)
+# built by scripts/build-ui.mjs: the app and site scripts, the site pages, app.html, robots.txt, sitemap.xml
 public/app.js
+public/site.js
+public/*.html
+public/ru/
+public/robots.txt
+public/sitemap.xml
 
 # agent infrastructure — this is a public repository: it holds the product only. The agent's rules,
 # plans, hooks, settings and memory stay on the maintainer's machine (canon BOOTSTRAP step 5).

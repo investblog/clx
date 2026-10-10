@@ -91,11 +91,11 @@ const sent = (c: C) => c.json({ ok: true, message: 'If the address can get it, a
 const later = (c: C, work: Promise<unknown>) => c.executionCtx.waitUntil(work.catch((e: unknown) => console.error('signup mail', e instanceof Error ? e.message : e)));
 
 const confirmText = (env: Env, token: string) =>
-  `Здравствуйте!\n\nЧтобы подтвердить адрес для clx, откройте ссылку (действует 24 часа):\n${appOrigin(env)}/#/confirm?t=${token}\n\nЕсли вы не регистрировались на clx, просто удалите это письмо.\n`;
+  `Здравствуйте!\n\nЧтобы подтвердить адрес для clx, откройте ссылку (действует 24 часа):\n${appOrigin(env)}/app#/confirm?t=${token}\n\nЕсли вы не регистрировались на clx, просто удалите это письмо.\n`;
 const knownText = (env: Env) =>
-  `Здравствуйте!\n\nКто-то (возможно, вы) пытался зарегистрироваться на clx с этим адресом, но аккаунт у вас уже есть.\nВойти: ${appOrigin(env)}/\nЗабыли пароль: ${appOrigin(env)}/#/reset\n\nЕсли это были не вы, ничего делать не нужно.\n`;
+  `Здравствуйте!\n\nКто-то (возможно, вы) пытался зарегистрироваться на clx с этим адресом, но аккаунт у вас уже есть.\nВойти: ${appOrigin(env)}/app\nЗабыли пароль: ${appOrigin(env)}/app#/reset\n\nЕсли это были не вы, ничего делать не нужно.\n`;
 const resetText = (env: Env, token: string) =>
-  `Здравствуйте!\n\nЧтобы задать новый пароль для clx, откройте ссылку (действует час):\n${appOrigin(env)}/#/reset?t=${token}\n\nПосле сброса все открытые сессии закончатся. Если вы не просили сброс, просто удалите это письмо — пароль не изменится.\n`;
+  `Здравствуйте!\n\nЧтобы задать новый пароль для clx, откройте ссылку (действует час):\n${appOrigin(env)}/app#/reset?t=${token}\n\nПосле сброса все открытые сессии закончатся. Если вы не просили сброс, просто удалите это письмо — пароль не изменится.\n`;
 
 /** A token and its e-mail — only once the e-mail's place is taken; the new link replaces the old one
  *  only when its e-mail went, so a request over the limit or a failed send leaves the link already

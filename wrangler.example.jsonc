@@ -7,9 +7,15 @@
   "workers_dev": false,
   "preview_urls": false,
   "routes": [{ "pattern": "clx.example.com/*", "zone_name": "example.com" }],
-  // The page and its files (public/, app.js built by scripts/build-ui.mjs). Sign-in, the API,
-  // admin commands and worker reports go to the Worker first; everything else is a file or 404.
-  "assets": { "directory": "public", "run_worker_first": ["/auth/*", "/v1/*", "/admin/*", "/hook/*"] },
+  // The site's pages, the app (/app) and their files (public/, built by scripts/build-ui.mjs). Sign-in, the API,
+  // admin commands and worker reports go to the Worker first; everything else is a file, or the
+  // nearest 404.html (ru/404.html under /ru). `/privacy.html` is served at `/privacy`, no trailing slash.
+  "assets": {
+    "directory": "public",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/auth/*", "/v1/*", "/admin/*", "/hook/*"]
+  },
   // Secrets (scripts/secrets.mjs): JWT_SECRET, MASTER_KEYS. Tests set their own (test/env.ts).
   "d1_databases": [
     {
