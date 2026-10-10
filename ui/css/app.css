@@ -112,6 +112,8 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 
 /* The site's pages (site/): home, legal, 404. */
 .site-main{min-height:60vh}
+/* A link inside running text is underlined, not told apart by colour alone (Lighthouse, link-in-text-block). */
+.site-main p a:not(.btn){text-decoration:underline;text-underline-offset:2px}
 .legal{margin:var(--space-5) 0}
 .legal h2{margin:var(--space-5) 0 var(--space-2)}
 .legal ul{padding-left:var(--space-5)}
