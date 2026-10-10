@@ -16,9 +16,10 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       `clx-mailbox` (`mailbox/`), which keeps each message a day in KV; `probe+<tag>@t.clx.cx` works.
 - [x] Turnstile: the widget `clx.cx` (managed) made through the API on 07.10; its site key is in
       `TURNSTILE_SITE_KEY` (`wrangler.jsonc`), its secret in the Worker secret `TURNSTILE_SECRET`.
-- [ ] Then the live check of stage 6: a real sign-up (the owner, in a browser, to
-      `probe+<tag>@t.clx.cx`; the links are read from the inbox's KV), the confirmation link, a reset,
-      a used link refused, the account deleted. Sign-up is open to everyone from 07.10.
+- [x] The live check of stage 6 (10.10): a real sign-up to `probe+live1@t.clx.cx`, the confirmation
+      link, a reset (sessions ended, password changed), both used links refused (`invalid_token`), a
+      sign-in with the new password, the account deleted with nothing of it left in D1. Mail passed
+      DKIM, SPF and DMARC.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
 - [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published
