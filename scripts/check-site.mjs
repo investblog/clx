@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // node scripts/check-site.mjs — checks what scripts/build-ui.mjs put in public/ against the table of
 // pages (site/pages.ts), before `build` and `deploy` go on:
-//   - every page × language of the table has its file, and no other HTML page is there (app.html
-//     aside), so a page dropped from the table does not linger on the site;
+//   - every page × language of the table has its file, and no other HTML page is there (the app's
+//     pages aside), so a page dropped from the table does not linger on the site;
 //   - the app's and site's scripts, robots.txt, sitemap.xml and the hand-written files are there;
 //   - no page has an inline script or style (the CSP would block it — a page that only works in
 //     development);
@@ -14,14 +14,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ORIGIN, SITE_PAGES, STATIC_FILES, markdownFile } from '../site/pages.ts';
+import { ALL_LOCALES, ORIGIN, SITE_PAGES, STATIC_FILES, markdownFile } from '../site/pages.ts';
 import { fileFor } from '../site/urls.ts';
 
 const OUT = 'public';
 const problems = [];
 const exists = (f) => fs.existsSync(path.join(OUT, f));
 
-const expected = new Set(['app.html']);
+const expected = new Set(ALL_LOCALES.map((l) => fileFor('/app', l)));
 for (const p of SITE_PAGES) for (const l of p.locales) expected.add(fileFor(p.slug, l));
 const markdown = SITE_PAGES.filter((p) => p.markdown).map((p) => markdownFile(p.slug));
 const agentFiles = ['llms.txt', 'auth.md', '.well-known/auth.md', '.well-known/api-catalog', '.well-known/agent-skills/index.json', 'openapi.yaml', 'openapi.json', ...markdown];
@@ -63,7 +63,7 @@ for (const f of pages) {
 const own = new RegExp(`${ORIGIN.replaceAll('.', '\\.')}(/[^\\s)"'<>]*)`, 'gu');
 for (const f of agentFiles.filter((x) => exists(x) && !x.startsWith('openapi')))
   for (const [, href] of fs.readFileSync(path.join(OUT, f), 'utf8').matchAll(own))
-    if (!/^\/(v1|app)\b/u.test(href) && !served(href.replace(/[.,;:]+$/u, ''))) problems.push(`public/${f}: ${ORIGIN}${href} leads nowhere`);
+    if (!/^\/(v1|app|ru\/app)\b/u.test(href) && !served(href.replace(/[.,;:]+$/u, ''))) problems.push(`public/${f}: ${ORIGIN}${href} leads nowhere`);
 
 if (problems.length) {
   console.error(`check-site: ${problems.length} problem(s)\n  ${problems.join('\n  ')}`);

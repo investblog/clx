@@ -1,6 +1,8 @@
 // Talking to the Worker, as the 301.st UI does: the access
 // token lives in memory only; the refresh id is an HttpOnly cookie the page never sees. A 401 gets
 // one refresh and one retry; if that fails too, the reader signs in again.
+import { t } from './i18n';
+
 let token: string | null = null;
 let refreshing: Promise<boolean> | null = null;
 
@@ -25,9 +27,9 @@ export async function login(email: string, password: string): Promise<string | n
     token = body.access_token;
     return null;
   }
-  if (res.status === 429) return `Слишком много попыток. Попробуйте через ${Math.ceil((body.retryAfter ?? 60) / 60)} мин.`;
-  if (body.error === 'invalid_login') return 'Неверный email или пароль.';
-  return 'Не удалось войти. Попробуйте ещё раз.';
+  if (res.status === 429) return t.login.tooMany(Math.ceil((body.retryAfter ?? 60) / 60));
+  if (body.error === 'invalid_login') return t.login.invalid;
+  return t.login.failed;
 }
 
 /** False when the server did not end the session: its refresh cookie may still sign this browser in. */
@@ -95,7 +97,7 @@ export async function text(path: string): Promise<string> {
 
 // The answer of /v1/me (src/v1/index.ts).
 export interface Me {
-  user: { id: number; email: string; email_confirmed: boolean };
+  user: { id: number; email: string; email_confirmed: boolean; locale: string };
   plan: 'free' | 'api';
   limits: { cfAccounts: number; sites: number; links: number; apiKeys: number };
   use: { cf_accounts: number; api_keys: number };

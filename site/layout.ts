@@ -1,9 +1,9 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import { APP_PATH, LOCALES, REPO, footPages, type Locale, type PageDef } from './pages.ts';
+import { LOCALES, REPO, footPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
-import { alternatesFor, pathFor, urlFor } from './urls.ts';
+import { alternatesFor, appPathFor, pathFor, urlFor } from './urls.ts';
 
 export function escapeHtml(v: string): string {
   return v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -36,7 +36,7 @@ function header(page: PageDef, locale: Locale): string {
     <p class="brand"><a href="${pathFor('/', locale)}">${icon('analytics', 'icon brand__mark')}<span>clx</span></a></p>
     ${langSwitch(page, locale)}
     <button type="button" class="btn-close" id="theme" aria-label="${escapeHtml(s.theme)}" title="${escapeHtml(s.theme)}">${icon('theme-light-dark')}</button>
-    <a class="btn btn--ghost btn--sm" href="${APP_PATH}">${escapeHtml(s.signIn)}</a>
+    <a class="btn btn--ghost btn--sm" href="${appPathFor(locale)}">${escapeHtml(s.signIn)}</a>
   </div>
 </header>`;
 }

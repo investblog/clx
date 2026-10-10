@@ -1,5 +1,7 @@
 // A small element builder. Text goes in as text nodes, never as HTML.
 // The page's CSP has no 'unsafe-inline', so a style="" attribute would be dropped — set geometry through the CSSOM.
+import { t } from './i18n';
+
 type Child = Node | string | number | null | undefined | false;
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -15,7 +17,7 @@ export function s(tag: string, attrs: Record<string, string | number> = {}, ...c
 const icon = (name: string) => s('svg', { class: 'icon', 'aria-hidden': 'true' }, s('use', { href: `/icons.svg#i-mono-${name}` }));
 
 /** 301-ui's copy button: an icon that turns into a green tick for two seconds once copied. */
-export function copyButton(text: string, label = 'Скопировать'): HTMLButtonElement {
+export function copyButton(text: string, label = t.common.copy): HTMLButtonElement {
   const btn = h('button', { type: 'button', class: 'btn-icon btn-icon--ghost btn-icon--sm', title: label, 'aria-label': label }, icon('copy'));
   let timer: ReturnType<typeof setTimeout> | undefined;
   btn.addEventListener('click', () =>

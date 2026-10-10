@@ -2,6 +2,7 @@
 // and a host field that suggests the zones of the chosen Cloudflare account.
 import { call } from './api';
 import { h, s } from './dom';
+import { t } from './i18n';
 
 const chevron = () => s('svg', { class: 'icon btn-chip__chevron', 'aria-hidden': 'true' }, s('use', { href: '/icons.svg#i-mono-chevron-down' }));
 
@@ -97,7 +98,7 @@ export function zoneHost(input: HTMLInputElement, account: () => string): { el: 
     const host = needle();
     const zone = host && list ? holder(host) : undefined;
     hint.classList.toggle('text-warning', !!host && !!list && !zone && !list.truncated);
-    hint.textContent = !list ? '' : !host || list.truncated ? '' : !zone ? 'В этом аккаунте нет такой зоны — выберите из списка или проверьте аккаунт.' : zone.status !== 'active' ? `Зона ${zone.name} ещё не активна в Cloudflare.` : '';
+    hint.textContent = !list ? '' : !host || list.truncated ? '' : !zone ? t.pick.noZone : zone.status !== 'active' ? t.pick.zoneInactive(zone.name) : '';
   };
   const render = () => {
     const q = needle();
@@ -105,12 +106,12 @@ export function zoneHost(input: HTMLInputElement, account: () => string): { el: 
     menu.replaceChildren(
       ...(shown.length
         ? shown.map((z, i) => {
-            const item = h('button', { type: 'button', class: `dropdown__item${i === active ? ' is-active' : ''}`, role: 'option', 'data-value': z.name }, z.name, z.status === 'active' ? null : h('span', { class: 'text-sm muted' }, 'не активна'));
+            const item = h('button', { type: 'button', class: `dropdown__item${i === active ? ' is-active' : ''}`, role: 'option', 'data-value': z.name }, z.name, z.status === 'active' ? null : h('span', { class: 'text-sm muted' }, t.pick.inactive));
             item.addEventListener('mousedown', (e) => e.preventDefault());
             item.addEventListener('click', () => pick(z.name));
             return item;
           })
-        : [h('p', { class: 'combobox__empty text-sm muted' }, list ? 'Нет подходящих зон.' : requested ? 'Загружаем зоны…' : 'Список зон не загрузился.')]),
+        : [h('p', { class: 'combobox__empty text-sm muted' }, list ? t.pick.noMatch : requested ? t.pick.loading : t.pick.failed)]),
     );
   };
   const open = () => {
@@ -133,7 +134,7 @@ export function zoneHost(input: HTMLInputElement, account: () => string): { el: 
     const id = account();
     requested = true;
     list = null;
-    hint.textContent = 'Загружаем зоны аккаунта…';
+    hint.textContent = t.pick.loadingAccount;
     hint.classList.remove('text-warning');
     if (!zonesOf.has(id)) zonesOf.set(id, call<Zones>('GET', `/v1/accounts/${id}/zones`).catch(() => (zonesOf.delete(id), null)));
     void zonesOf.get(id)!.then((z) => {
@@ -142,7 +143,7 @@ export function zoneHost(input: HTMLInputElement, account: () => string): { el: 
       // A failed load is tried again on the next focus.
       if (!z) {
         requested = false;
-        hint.textContent = 'Список зон не загрузился — введите хост вручную или попробуйте ещё раз.';
+        hint.textContent = t.pick.failedHint;
       }
       else check();
       if (!menu.hidden) render();

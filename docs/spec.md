@@ -652,8 +652,10 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   15-minute JWT (`src/auth/jwt.ts`), a 7-day refresh session in KV `SESSIONS`
   (`src/auth/routes.ts`).
 - New:
-  - `POST /auth/signup {email, password, turnstile}` → a confirmation e-mail (24 h) with a link
-    `/app#/confirm?t=<token>` (in the fragment, so the token reaches no server log or `Referer`);
+  - `POST /auth/signup {email, password, turnstile, locale}` → a confirmation e-mail (24 h) with a
+    link `/app#/confirm?t=<token>` (in the fragment, so the token reaches no server log or
+    `Referer`; `/ru/app#/…` for a Russian account — the account keeps the sign-up page's language,
+    and every e-mail speaks it, [ADR 0015](./decisions/0015-app-language.md));
     `POST /auth/confirm {token}`; a signed-in unconfirmed user can ask again
     (`POST /auth/confirm/resend`, the new link replaces the old one). Before confirming the user
     can sign in but cannot connect a Cloudflare account (`email_unconfirmed`). Passwords: 10–256
@@ -886,7 +888,8 @@ that adds a site and embeds its counter at build time.
 
 | Method and path | What it does |
 |---|---|
-| `GET /v1/me` | plan, limits, current use, whether the address is confirmed |
+| `GET /v1/me` | plan, limits, current use, whether the address is confirmed, the language |
+| `PATCH /v1/me` `{locale}` | the language of the app and the e-mails (page session only, ADR 0015) |
 | `DELETE /v1/me` `{password}` | delete the account (page session only, §9) |
 | `POST /v1/keys`, `GET /v1/keys`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
@@ -915,8 +918,8 @@ that adds a site and embeds its counter at build time.
 
 clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site-and-app.md)).
 - **Addresses.** The site at the root: `/`, `/privacy`, `/terms`, `/abuse` in English, the same
-  under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` — the pages
-  of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
+  under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` (and
+  `/ru/app`, ADR 0015) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
   canonical and hreflang (with `x-default` on English), the sitemap, robots.txt and the footer all
@@ -924,8 +927,12 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
 - **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`) and the site's script
   (`public/site.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
   result before every deploy. Nothing generated is committed.
-- **Languages.** English and Russian for the site; the app and the e-mails follow, with the user's
-  language kept with the account. Legal texts exist in both, English is the original.
+- **Languages.** English and Russian for the site; the app and the e-mails too
+  ([ADR 0015](./decisions/0015-app-language.md)): the app at `/app` and `/ru/app` speaks the
+  address's language until sign-in, then the account's (`users.locale`, set at sign-up from the
+  page, changed on the profile page with `PATCH /v1/me {locale}`); the e-mails speak the account's
+  and link to its app. The words are dictionaries of one shape (`ui/i18n/`, `src/mail-text.ts`).
+  Legal texts exist in both, English is the original.
 - **For agents** ([ADR 0013](./decisions/0013-docs-for-agents.md)), English only: `/agents` — the
   walkthrough an agent follows with a key from its person; `/api` — the reference, generated from
   `docs/openapi.yaml`, which is also served (`/openapi.yaml`, `/openapi.json`). Both and the home page

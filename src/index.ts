@@ -8,7 +8,8 @@ import { runOperations } from './cf/deploy';
 import { runLinkHosts } from './cf/links';
 import { runSites } from './cf/sites';
 import { hook } from './hook';
-import { appOrigin, sendNotice } from './mail';
+import { sendNotice } from './mail';
+import { appUrl, MAIL, recipient } from './mail-text';
 import { MARKDOWN_PAGES, servePage } from './markdown';
 import type { Env } from './types';
 import { IDEM_TTL } from './v1/idempotency';
@@ -27,33 +28,20 @@ const HOURLY_AT = 20;
 const RENEW_BEFORE = 30 * 86_400_000;
 
 async function mailRenew(env: Env, a: { id: string; user_id: number; cf_account_id: string; cf_account_name: string | null; token_expires_at: number }, now: number): Promise<void> {
-  const user = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(a.user_id).first<{ email: string }>();
+  const user = await recipient(env, a.user_id);
   if (!user) return;
-  const name = a.cf_account_name ?? a.cf_account_id;
-  const until = new Date(a.token_expires_at).toLocaleDateString('ru-RU', { timeZone: 'UTC' });
-  const sent = await sendNotice(
-    env,
-    user.email,
-    `clx: продлите подключение «${name}»`,
-    `Здравствуйте!\n\nТокен, которым clx работает в аккаунте Cloudflare «${name}», действует до ${until}. После этого clx не сможет обновлять воркер, добавлять сайты и ссылки и читать разбивки отчётов.\nЧтобы продлить, создайте новый bootstrap-токен и вставьте его на странице аккаунта: ${appOrigin(env)}/app#/accounts/${a.id}\n`,
-    now,
-  );
+  const mail = MAIL[user.locale].renew(a.cf_account_name ?? a.cf_account_id, a.token_expires_at, appUrl(env, user.locale, `#/accounts/${a.id}`));
+  const sent = await sendNotice(env, user.email, mail.subject, mail.text, now);
   // Marked only once it went: a send that failed is tried again the next hour.
   if (sent) await env.DB.prepare('UPDATE edge_accounts SET renew_mailed_at = ? WHERE id = ?').bind(now, a.id).run();
 }
 
 /** The e-mail of §4: a worker silent for 26 hours. */
 async function mailSilence(env: Env, a: { id: string; user_id: number; cf_account_id: string; cf_account_name: string | null }, now: number): Promise<void> {
-  const user = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(a.user_id).first<{ email: string }>();
+  const user = await recipient(env, a.user_id);
   if (!user) return;
-  const name = a.cf_account_name ?? a.cf_account_id;
-  await sendNotice(
-    env,
-    user.email,
-    `clx: нет связи с воркером в «${name}»`,
-    `Здравствуйте!\n\nВоркер clx-edge в аккаунте Cloudflare «${name}» не присылал итоги больше суток. Счётчик и ссылки, скорее всего, работают, но итоги на clx.cx не обновляются.\nЧастые причины: воркер или его база удалены в Cloudflare, отозван токен, не срабатывает его крон.\n\nСостояние аккаунта: ${appOrigin(env)}/app#/accounts/${a.id}\n`,
-    now,
-  );
+  const mail = MAIL[user.locale].silence(a.cf_account_name ?? a.cf_account_id, appUrl(env, user.locale, `#/accounts/${a.id}`));
+  await sendNotice(env, user.email, mail.subject, mail.text, now);
 }
 
 export const app = new Hono<{ Bindings: Env }>();

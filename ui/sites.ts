@@ -1,10 +1,13 @@
-// Pages of stage 4e-2 (docs/spec.md §10): sites — the list, adding one by its host, and a site's
-// page with its snippet, excluded paths, route state, rotate and delete. Every action is a /v1 call.
+// Pages of stage 4e-2 (docs/spec.md §10): sites — the list, adding one by its host (a drawer), and a
+// site's page with its snippet, excluded paths, route state, rotate and delete. Every action is a
+// /v1 call.
 import { ApiError, call, type Account, type Me } from './api';
-import { action, confirmAction, notice, when, type Live } from './accounts';
+import { action, badge, cell, confirmAction, notice, pageHead, table, type Live, type Tone } from './accounts';
+import { openDrawer } from './dialog';
 import { codeBlock, h } from './dom';
+import { errorText, t, when } from './i18n';
+import { paged } from './pager';
 import { dropdown, zoneHost } from './pick';
-import { errorText } from './text';
 
 export interface Site {
   id: string;
@@ -20,99 +23,105 @@ export interface Site {
   created_at: string;
 }
 
-const SITE_STATE: Record<string, [string, string]> = {
-  route_pending: ['маршрут создаётся', 'neutral'],
-  active: ['работает', 'success'],
-  route_conflict: ['путь занят другим воркером', 'danger'],
-  deleted: ['удалён', 'neutral'],
-};
-const badge = ([text, tone]: [string, string]) => h('span', { class: `badge badge--${tone}` }, text);
-const siteBadge = (s: Site) => badge(SITE_STATE[s.state] ?? [s.state, 'neutral']);
+const SITE_TONE: Record<string, Tone> = { active: 'success', route_conflict: 'danger' };
+const siteBadge = (s: Site) => badge((t.sites.state as Record<string, string>)[s.state] ?? s.state, SITE_TONE[s.state]);
 const paths = (text: string) => [...new Set(text.split(/[\s,]+/u).filter(Boolean))];
+const usable = (a: Account) => a.state === 'ready' || a.state === 'no_connection';
 
-/** The sites block of the home page. */
-export async function sitesBlock(): Promise<HTMLElement> {
-  const [{ sites }, { accounts }] = await Promise.all([call<{ sites: Site[] }>('GET', '/v1/sites'), call<{ accounts: Account[] }>('GET', '/v1/accounts')]);
-  const name = (id: string) => accounts.find((a) => a.id === id)?.name ?? '';
-  return h(
-    'div',
-    {},
-    h('div', { class: 'page-head' }, h('h2', {}, 'Сайты'), accounts.length ? h('a', { class: 'btn btn--primary', href: '#/sites/new' }, 'Добавить сайт') : null),
-    sites.length
-      ? h(
-          'div',
-          { class: 'stack stack--md' },
-          ...sites.map((s) =>
-            h(
-              'a',
-              { class: 'card card--compact account-row', href: `#/sites/${s.id}` },
-              h('strong', {}, s.host),
-              siteBadge(s),
-              s.config === 'pending' ? badge(['настройки в пути', 'neutral']) : null,
-              h('span', { class: 'muted' }, name(s.account_id)),
-            ),
-          ),
-        )
-      : h('div', { class: 'card empty-state' }, h('p', {}, accounts.length ? 'Сайтов пока нет. Добавьте сайт с вашего аккаунта Cloudflare — clx выдаст для него сниппет счётчика.' : 'Сначала подключите аккаунт Cloudflare — сайты добавляются на его зоны.')),
-  );
-}
-
-// ---- adding ----
-
-export async function newSitePage(me: Me, go: (hash: string) => void): Promise<HTMLElement> {
-  const { accounts } = await call<{ accounts: Account[] }>('GET', '/v1/accounts');
-  const usable = accounts.filter((a) => a.state === 'ready' || a.state === 'no_connection');
-  if (!usable.length) return h('div', { class: 'narrow' }, h('h2', {}, 'Добавить сайт'), h('div', { class: 'card' }, h('p', {}, 'Нет аккаунта с установленным воркером. '), h('p', {}, h('a', { href: '#/' }, '← К аккаунтам'))));
-  const account = dropdown(
-    usable.map((a) => ({ value: a.id, label: a.name ?? a.cf_account_id })),
-    { id: 'site-account', onChange: () => zones.refresh() },
-  );
-  const host = h('input', { class: 'input', id: 'site-host', required: '', placeholder: 'начните вводить домен', autocomplete: 'off', spellcheck: 'false' });
-  const zones = zoneHost(host, account.value);
-  const excluded = h('input', { class: 'input', id: 'site-excluded', placeholder: '/admin, /preview', autocomplete: 'off', spellcheck: 'false' });
-  return h(
-    'div',
-    { class: 'narrow stack stack--md' },
-    h('p', {}, h('a', { href: '#/' }, '← Назад')),
-    h('h2', {}, 'Добавить сайт'),
-    h(
+/** Adding a site: the account, the host from its zones, the paths not to count. */
+function newSiteDrawer(me: Me, accounts: Account[], go: (hash: string) => void): void {
+  const c = t.sites;
+  openDrawer(c.add, (close) => {
+    const account = dropdown(
+      accounts.map((a) => ({ value: a.id, label: a.name ?? a.cf_account_id })),
+      { id: 'site-account', onChange: () => zones.refresh() },
+    );
+    const host = h('input', { class: 'input', id: 'site-host', required: '', placeholder: c.hostPlaceholder, autocomplete: 'off', spellcheck: 'false' });
+    const zones = zoneHost(host, account.value);
+    const excluded = h('input', { class: 'input', id: 'site-excluded', placeholder: '/admin, /preview', autocomplete: 'off', spellcheck: 'false' });
+    return h(
       'div',
-      { class: 'card stack stack--sm' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-account' }, 'Аккаунт Cloudflare'), account.el),
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-host' }, 'Хост сайта'), zones.el, h('p', { class: 'field-hint' }, 'Выберите домен из зон этого аккаунта; поддомен (blog.example.com) допишите. clx поставит маршрут только на путь счётчика, страницы сайта он не трогает.')),
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-excluded' }, 'Не считать пути (необязательно)'), excluded, h('p', { class: 'field-hint' }, 'Начала путей через запятую, до 50.')),
+      { class: 'stack stack--md' },
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-account' }, c.account), account.el),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-host' }, c.host), zones.el, h('p', { class: 'field-hint' }, c.hostHint)),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-excluded' }, c.excluded), excluded, h('p', { class: 'field-hint' }, c.excludedHint)),
       h(
         'div',
         { class: 'actions' },
-        action('Добавить', 'btn--primary', async (key) => {
-          if (!host.value.trim()) throw new ApiError(400, 'invalid_request', 'Укажите хост.');
+        action(c.add, 'btn--primary', async (key) => {
+          if (!host.value.trim()) throw new ApiError(400, 'invalid_request', c.needHost);
           const r = await call<{ site: Site }>('POST', '/v1/sites', { account_id: account.value(), host: host.value.trim(), excluded_paths: paths(excluded.value) }, key);
+          close();
           go(`#/sites/${r.site.id}`);
         }),
       ),
-    ),
-    h('p', { class: 'muted text-sm' }, `Тариф ${me.plan}: до ${me.limits.sites} сайтов.`),
+      h('p', { class: 'muted text-sm' }, c.planLimit(me.plan, me.limits.sites)),
+    );
+  });
+}
+
+export async function sitesPage(me: Me, go: (hash: string) => void): Promise<HTMLElement> {
+  const c = t.sites;
+  const [{ sites }, { accounts }] = await Promise.all([call<{ sites: Site[] }>('GET', '/v1/sites'), call<{ accounts: Account[] }>('GET', '/v1/accounts')]);
+  const name = (id: string) => accounts.find((a) => a.id === id)?.name ?? '';
+  const ready = accounts.filter(usable);
+  const add = h('button', { type: 'button', class: 'btn btn--primary' }, c.add);
+  add.addEventListener('click', () => newSiteDrawer(me, ready, go));
+  const empty = !accounts.length ? c.noAccount : !ready.length ? c.noReady : c.empty;
+  return h(
+    'div',
+    {},
+    pageHead(t.titles.sites, ready.length ? add : null),
+    sites.length
+      ? paged(
+          sites.map((s) =>
+            h(
+              'tr',
+              {},
+              cell(h('a', { href: `#/sites/${s.id}` }, s.host)),
+              cell(h('span', {}, siteBadge(s), s.config === 'pending' ? ' ' : '', s.config === 'pending' ? badge(c.configPending) : null)),
+              cell(name(s.account_id), 'low'),
+            ),
+          ),
+          (rows) => table([[c.colHost], [c.colState], [c.colAccount, 'low']], rows),
+        )
+      : h('div', { class: 'card empty-state' }, h('p', {}, empty)),
   );
 }
 
 // ---- one site ----
 
 function snippetCard(s: Site): HTMLElement {
-  if (!s.snippet) return h('section', { class: 'card' }, h('h3', { class: 'h4' }, 'Сниппет'), h('p', { class: 'muted' }, 'Появится, когда маршрут будет создан.'));
-  const block = (title: string, hint: string, code: string) => {
-    return h('div', { class: 'stack stack--sm secret-card' }, h('strong', {}, title), h('p', { class: 'muted text-sm' }, hint), codeBlock(code, 'Скопировать сниппет'));
-  };
-  return h(
-    'section',
-    { class: 'card stack stack--md' },
-    h('h3', { class: 'h4' }, 'Сниппет'),
-    h('p', {}, 'Вставьте один из двух вариантов в шаблон всех страниц сайта — при сборке. Адрес счётчика — на вашем домене, ничего внешнего на странице нет. Сниппет не меняется, пока вы не смените путь.'),
-    block('Встроенный скрипт', 'Без отдельного запроса за файлом.', s.snippet.inline),
-    block('Подключаемый файл', 'Если на сайте CSP без inline-скриптов.', s.snippet.script_tag),
-  );
+  const c = t.sites;
+  if (!s.snippet) return h('section', { class: 'card' }, h('h3', { class: 'h4' }, c.snippet), h('p', { class: 'muted' }, c.snippetLater));
+  const block = (title: string, hint: string, code: string) => h('div', { class: 'stack stack--sm secret-card' }, h('strong', {}, title), h('p', { class: 'muted text-sm' }, hint), codeBlock(code, c.copySnippet));
+  return h('section', { class: 'card stack stack--md' }, h('h3', { class: 'h4' }, c.snippet), h('p', {}, c.snippetHow), block(c.inline, c.inlineHint, s.snippet.inline), block(c.file, c.fileHint, s.snippet.script_tag));
+}
+
+/** Editing what can change: the paths not to count. */
+function editSiteDrawer(s: Site, redraw: () => void): void {
+  const c = t.sites;
+  openDrawer(s.host, (close) => {
+    const excluded = h('input', { class: 'input', id: 'site-excluded', value: s.excluded_paths.join(', '), autocomplete: 'off', spellcheck: 'false' });
+    return h(
+      'div',
+      { class: 'stack stack--md' },
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-excluded' }, c.excludedNow), excluded, h('p', { class: 'field-hint' }, c.excludedHint)),
+      h(
+        'div',
+        { class: 'actions' },
+        action(c.save, 'btn--primary', async (key) => {
+          await call('PATCH', `/v1/sites/${s.id}`, { excluded_paths: paths(excluded.value) }, key);
+          close();
+          redraw();
+        }),
+      ),
+    );
+  });
 }
 
 export async function sitePage(id: string, live: Live, redraw: (message?: string) => void): Promise<HTMLElement> {
+  const c = t.sites;
   const { site: s } = await call<{ site: Site }>('GET', `/v1/sites/${id}`);
   // A route still being made or config still on its way: look again in a few seconds, redraw on change.
   if (s.state === 'route_pending' || s.config === 'pending') {
@@ -127,46 +136,43 @@ export async function sitePage(id: string, live: Live, redraw: (message?: string
       }, 5000);
     poll();
   }
-  const excluded = h('input', { class: 'input', value: s.excluded_paths.join(', '), autocomplete: 'off', spellcheck: 'false' });
   const deleted = s.state === 'deleted';
+  const edit = h('button', { type: 'button', class: 'btn btn--ghost' }, c.edit);
+  edit.addEventListener('click', () => editSiteDrawer(s, redraw));
   return h(
     'div',
     { class: 'stack stack--md' },
-    h('p', {}, h('a', { href: '#/' }, '← Сайты')),
-    h('div', { class: 'page-head' }, h('h2', {}, s.host), siteBadge(s), deleted ? null : h('a', { class: 'btn btn--ghost', href: `#/sites/${s.id}/report` }, 'Отчёт')),
+    h('p', {}, h('a', { href: '#/sites' }, c.back)),
+    pageHead(s.host, siteBadge(s), deleted ? null : edit, deleted ? null : h('a', { class: 'btn btn--ghost', href: `#/sites/${s.id}/report` }, c.report)),
     s.error?.code ? notice(errorText(s.error.code, s.error.code)) : null,
-    s.config === 'pending' && !deleted ? notice('Настройки сайта едут в воркер — обычно меньше минуты.', 'loading') : null,
-    deleted ? notice('Сайт удалён: маршрут снят, итоги хранятся, пока аккаунт подключён.', 'idle') : snippetCard(s),
+    s.config === 'pending' && !deleted ? notice(c.configMoving, 'loading') : null,
+    deleted ? notice(c.deleted, 'idle') : snippetCard(s),
     deleted
       ? null
       : h(
           'section',
           { class: 'card stack stack--sm' },
-          h('h3', { class: 'h4' }, 'Настройки'),
-          h('p', { class: 'muted text-sm' }, `Путь счётчика: ${s.path}. Добавлен ${when(s.created_at)}.`),
-          s.retiring.length ? h('p', { class: 'muted text-sm' }, `Старые пути ещё считаются: ${s.retiring.map((r) => `${r.path} до ${when(r.until)}`).join(', ')}.`) : null,
-          h('div', { class: 'field-label' }, 'Не считать пути (начала путей через запятую)'),
-          h(
-            'div',
-            { class: 'actions' },
-            excluded,
-            action('Сохранить', 'btn--ghost', async (key) => {
-              await call('PATCH', `/v1/sites/${s.id}`, { excluded_paths: paths(excluded.value) }, key);
-              redraw();
-            }),
-          ),
+          h('h3', { class: 'h4' }, c.settings),
+          h('p', { class: 'muted text-sm' }, c.path(s.path, when(s.created_at))),
+          s.excluded_paths.length ? h('p', { class: 'muted text-sm' }, `${c.excludedNow}: ${s.excluded_paths.join(', ')}`) : null,
+          s.retiring.length ? h('p', { class: 'muted text-sm' }, c.retiring(s.retiring.map((r) => c.until(r.path, when(r.until))).join(', '))) : null,
           // Rotation needs a working route (the API answers site_not_active otherwise).
-          s.state === 'active' ? h('p', { class: 'muted text-sm' }, 'Сменить путь — если старый попал в список блокировки или его нужно спрятать: появится новый путь и новый сниппет, старый будет считаться ещё 30 дней.') : null,
+          s.state === 'active' ? h('p', { class: 'muted text-sm' }, c.rotateHint) : null,
           h(
             'div',
             { class: 'actions' },
             s.state === 'active'
-              ? confirmAction('Сменить путь', 'Да, выдать новый путь и сниппет', async (key) => {
-                  await call('POST', `/v1/sites/${s.id}/rotate`, undefined, key);
-                  redraw();
-                })
+              ? confirmAction(
+                  c.rotate,
+                  { title: c.rotate, body: c.rotateAsk, confirmLabel: c.rotateConfirm },
+                  async (key) => {
+                    await call('POST', `/v1/sites/${s.id}/rotate`, undefined, key);
+                    redraw();
+                  },
+                  'btn--ghost',
+                )
               : null,
-            confirmAction('Удалить сайт', 'Да, снять маршрут', async (key) => {
+            confirmAction(c.remove, { title: c.remove, body: c.removeAsk, confirmLabel: c.removeConfirm }, async (key) => {
               await call('DELETE', `/v1/sites/${s.id}`, undefined, key);
               redraw();
             }),
@@ -174,4 +180,3 @@ export async function sitePage(id: string, live: Live, redraw: (message?: string
         ),
   );
 }
-

@@ -53,16 +53,22 @@ describe('generated pages', () => {
 
   it('the home page links to the app, the other language and the legal pages of its own language', () => {
     const ru = read('ru.html');
-    expect(ru).toContain('href="/app"');
+    expect(ru).toContain('href="/ru/app"');
+    expect(read('index.html')).toContain('href="/app"');
     expect(ru).toContain('href="/" hreflang="en"');
     expect(ru).toContain('href="/ru/privacy"');
     expect(read('index.html')).toContain('href="/ru" hreflang="ru"');
   });
 
+  it('the app has a page per language, which sets the language until sign-in (ADR 0015)', () => {
+    expect(read('app.html')).toContain('<html lang="en"');
+    expect(read('ru/app.html')).toContain('<html lang="ru"');
+  });
+
   it('robots.txt keeps crawlers off the app and the API; the sitemap lists indexed pages only', () => {
     const robots = read('robots.txt');
     // `$` ends the rule at /app: a prefix rule would also keep crawlers off /app.css, which the site loads.
-    for (const p of ['/app$', '/v1/', '/auth/', '/admin/', '/hook/']) expect(robots).toContain(`Disallow: ${p}\n`);
+    for (const p of ['/app$', '/ru/app$', '/v1/', '/auth/', '/admin/', '/hook/']) expect(robots).toContain(`Disallow: ${p}\n`);
     const sitemap = read('sitemap.xml');
     expect(sitemap).toContain('<loc>https://clx.cx/ru/terms</loc>');
     expect(sitemap).not.toContain('404');

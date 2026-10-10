@@ -20,3 +20,6 @@
 /app
   X-Robots-Tag: noindex, nofollow
   ! Link
+/ru/app
+  X-Robots-Tag: noindex, nofollow
+  ! Link

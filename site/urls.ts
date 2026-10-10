@@ -5,7 +5,7 @@
 // English lives at the root, Russian under `/ru`. A language's home page has no trailing slash
 // (`/ru`, not `/ru/`): with drop-trailing-slash `/ru/` answers with a redirect, and a canonical that
 // redirects makes a search engine read the page again (catchall.in, measured 03.09).
-import { LOCALES, ORIGIN, type Locale } from './pages.ts';
+import { APP_PATH, LOCALES, ORIGIN, type Locale } from './pages.ts';
 
 export const prefixFor = (locale: Locale): string => (locale === 'en' ? '' : `/${locale}`);
 
@@ -17,6 +17,9 @@ export function pathFor(slug: string, locale: Locale): string {
 }
 
 export const urlFor = (slug: string, locale: Locale): string => `${ORIGIN}${pathFor(slug, locale)}`;
+
+/** The app of a language (ADR 0015): `/app`, `/ru/app` — the language until the person signs in. */
+export const appPathFor = (locale: Locale): string => `${prefixFor(locale)}${APP_PATH}`;
 
 /** The file in public/: `index.html`, `ru.html`, `privacy.html`, `ru/privacy.html`. */
 export function fileFor(slug: string, locale: Locale): string {

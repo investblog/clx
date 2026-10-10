@@ -111,7 +111,7 @@ describe('the hourly job', () => {
     try {
       fakeCf.analytics = { [day(3)]: { requests: 1, writes: 84_000, reads: 1 } };
       await job(D0 + 10 * H + 20 * 60_000);
-      expect(mail).toEqual([expect.objectContaining({ to: 'free@example.com', subject: expect.stringContaining('скоро упрётся') })]);
+      expect(mail).toEqual([expect.objectContaining({ to: 'free@example.com', subject: expect.stringContaining('will soon hit') })]);
       // The next day, the same level: no e-mail within the week.
       await job(D0 + 34 * H + 20 * 60_000);
       expect((await account()).advice.level).toBe('upgrade_soon');
@@ -120,8 +120,8 @@ describe('the hourly job', () => {
       fakeCf.analytics = { [day(3)]: { requests: 1, writes: 84_000, reads: 1 }, [day(-1)]: { requests: 1, writes: 100_000, reads: 1 } };
       await job(D0 + 58 * H + 20 * 60_000);
       expect((await account()).advice.level).toBe('over');
-      const advice = () => mail.filter((m) => m.subject.includes('лимит'));
-      expect(advice().at(-1)!.subject).toContain('упёрся');
+      const advice = () => mail.filter((m) => m.subject.includes('Cloudflare limit'));
+      expect(advice().at(-1)!.subject).toMatch(/" hit a Cloudflare limit$/u);
       // Back to ok: the last level is cleared, so a new rise is written about at once.
       fakeCf.analytics = {};
       await job(D0 + 82 * H + 20 * 60_000);
@@ -136,7 +136,7 @@ describe('the hourly job', () => {
     const mail: { subject: string }[] = [];
     const real = env;
     env = { ...env, EMAIL: { send: async (m) => (mail.push(m), {}) } };
-    const renew = () => mail.filter((m) => m.subject.includes('продлите'));
+    const renew = () => mail.filter((m) => m.subject.includes('renew the connection'));
     try {
       await env.DB.prepare('UPDATE edge_accounts SET token_expires_at = ?').bind(D0 + 40 * D).run();
       await job(D0 + 10 * H + 20 * 60_000);

@@ -247,11 +247,24 @@ paths:
               schema:
                 type: object
                 properties:
-                  user: { type: object, properties: { id: { type: integer }, email: { type: string }, email_confirmed: { type: boolean } } }
+                  user: { type: object, properties: { id: { type: integer }, email: { type: string }, email_confirmed: { type: boolean }, locale: { type: string, enum: [en, ru], description: "The language of the app after sign-in and of clx's e-mails" } } }
                   plan: { type: string, enum: [free, api] }
                   limits: { type: object }
                   use: { type: object }
                   via: { type: string, enum: [session, key] }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Set the user's language (page session only)
+      description: |
+        The app after sign-in and every e-mail of clx speak it; sign-up sets it to the language of
+        the page signed up from.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [locale], properties: { locale: { type: string, enum: [en, ru] } } }
+      responses:
+        '200': { description: Set, content: { application/json: { schema: { type: object, properties: { locale: { type: string, enum: [en, ru] } } } } } }
         default: { $ref: '#/components/responses/Error' }
     delete:
       summary: Delete the account (page session only, with the password)

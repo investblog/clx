@@ -11,6 +11,7 @@ import { verifyPassword } from '../auth/password';
 import { sha256 } from '../lib/crypto';
 import { generateMatrix, renderSvg } from '../qr';
 import { LIMITS, planOf, SCOPES } from '../limits';
+import { LOCALES, type Locale } from '../mail-text';
 import { linkReport, PERIODS, siteReport, type Period } from '../report';
 import type { Env, Principal } from '../types';
 import { KEY_PREFIX, mayTouch, principalOf, requireScope, requireSession } from './auth';
@@ -84,14 +85,24 @@ v1.onError((e, c) => {
 v1.get(
   '/me',
   handle({}, async (c, p) => {
-    const row = (await c.env.DB.prepare('SELECT id, email, email_confirmed_at FROM users WHERE id = ?').bind(p.userId).first<{ id: number; email: string; email_confirmed_at: number | null }>())!;
-    const user = { id: row.id, email: row.email, email_confirmed: row.email_confirmed_at !== null };
+    const row = (await c.env.DB.prepare('SELECT id, email, email_confirmed_at, locale FROM users WHERE id = ?').bind(p.userId).first<{ id: number; email: string; email_confirmed_at: number | null; locale: string }>())!;
+    const user = { id: row.id, email: row.email, email_confirmed: row.email_confirmed_at !== null, locale: row.locale };
     const use = await c.env.DB.prepare(
       "SELECT (SELECT count(*) FROM edge_accounts WHERE user_id = ?1 AND state != 'pending') AS cf_accounts, (SELECT count(*) FROM api_keys WHERE user_id = ?1 AND revoked_at IS NULL) AS api_keys",
     )
       .bind(p.userId)
       .first<{ cf_accounts: number; api_keys: number }>();
     return { status: 200, body: { user, plan: planOf(p.plan), limits: LIMITS[planOf(p.plan)], use, via: p.via } };
+  }),
+);
+
+/** The user's language (ADR 0015): the app after sign-in and the e-mails speak it. Page session only. */
+v1.patch(
+  '/me',
+  handle({ session: true }, async (c, p, body) => {
+    if (!LOCALES.includes(body.locale as Locale)) fail(400, 'invalid_request', `locale must be one of ${LOCALES.join(', ')}.`, { field: 'locale' });
+    await c.env.DB.prepare('UPDATE users SET locale = ? WHERE id = ?').bind(body.locale, p.userId).run();
+    return { status: 200, body: { locale: body.locale } };
   }),
 );
 

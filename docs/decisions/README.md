@@ -20,3 +20,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0012](./0012-site-and-app.md) | A site at the root, the app at /app; English and Russian | 10.10.2026 | §9, §10, §16 |
 | [0013](./0013-docs-for-agents.md) | Docs for agents, with the API reference generated from the contract | 10.10.2026 | §15, §16 |
 | [0014](./0014-a-key-on-free.md) | The free plan has one API key; the api plan on request, unpaid for now | 10.10.2026 | §1, §8, §10, §15 |
+| [0015](./0015-app-language.md) | The app's language comes from the address until sign-in, then from the account | 10.10.2026 | §9, §15, §16 |

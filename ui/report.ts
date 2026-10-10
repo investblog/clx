@@ -1,12 +1,13 @@
 // The site report (stage 4e-3, docs/spec.md §7, §10): totals, the chart and the breakdowns of
 // GET /v1/sites/{id}/report. Everything is "as of" the last hour the worker sent (ADR 0004).
 import { call } from './api';
-import { num, when } from './accounts';
 import { h, s } from './dom';
+import { locale, num, t, when } from './i18n';
 import type { Link } from './links';
 import type { Site } from './sites';
 
 type Top = { key: string; n: number }[];
+type Dim = 'pages' | 'sources' | 'countries' | 'devices' | 'browsers' | 'os' | 'bots';
 interface Report {
   period: 'today' | '7d' | '30d';
   from: string;
@@ -15,40 +16,32 @@ interface Report {
   totals: { views: number; bots: number; visitors: number };
   series: { at: string; views: number; bots: number; visitors?: number }[];
   incomplete: boolean;
-  breakdowns?: Record<'pages' | 'sources' | 'countries' | 'devices' | 'browsers' | 'os' | 'bots', Top> | null;
+  breakdowns?: Record<Dim, Top> | null;
   unavailable?: 'not_installed' | 'cloudflare' | 'rate_limited';
 }
 
-const PERIODS: [Report['period'], string][] = [
-  ['today', 'Сегодня'],
-  ['7d', '7 дней'],
-  ['30d', '30 дней'],
-];
-const COUNTRY = (() => {
-  try {
-    return new Intl.DisplayNames(['ru'], { type: 'region' });
-  } catch {
-    return null;
-  }
-})();
-const NAMES: Record<string, Record<string, string>> = {
-  devices: { mobile: 'Телефон', desktop: 'Компьютер' },
-  browsers: { chrome: 'Chrome', safari: 'Safari', firefox: 'Firefox', edge: 'Edge', opera: 'Opera', samsung: 'Samsung Internet', other: 'Другой' },
-  os: { windows: 'Windows', android: 'Android', ios: 'iOS', macos: 'macOS', linux: 'Linux', chromeos: 'ChromeOS', other: 'Другая' },
-  bots: { search: 'Поисковики', ai_training: 'ИИ-сборщики', monitoring: 'Мониторинг', ad_review: 'Реклама', social_preview: 'Превью соцсетей', headless: 'Автоматические браузеры', other: 'Прочие' },
-};
-const UNAVAILABLE: Record<string, string> = {
-  not_installed: 'Разбивки читаются из базы в вашем аккаунте Cloudflare, а доступа к ней сейчас нет: воркер не установлен или токен отозван.',
-  cloudflare: 'Cloudflare не ответил вовремя — разбивки временно недоступны. Обновите страницу через минуту.',
-  rate_limited: 'Слишком много запросов разбивок за минуту — подождите немного.',
-};
+const PERIODS: Report['period'][] = ['today', '7d', '30d'];
+/** Browser and system names are names in every language; only "other" is translated. */
+const PROPER: Record<string, string> = { chrome: 'Chrome', safari: 'Safari', firefox: 'Firefox', edge: 'Edge', opera: 'Opera', samsung: 'Samsung Internet', windows: 'Windows', android: 'Android', ios: 'iOS', macos: 'macOS', linux: 'Linux', chromeos: 'ChromeOS' };
 
-const label = (dim: string, key: string): string => {
-  if (key === '(other)') return 'Прочее (сверх лимита детализации)';
-  if (dim === 'sources') return key || 'Прямые заходы';
-  if (dim === 'pages') return key || '(адрес не передан)';
-  if (dim === 'countries') return key ? (COUNTRY?.of(key) ?? key) : 'Неизвестно';
-  return NAMES[dim]?.[key] ?? (key || 'Неизвестно');
+const countryNames = new Map<string, Intl.DisplayNames | null>();
+function country(code: string): string {
+  if (!countryNames.has(locale))
+    try {
+      countryNames.set(locale, new Intl.DisplayNames([locale], { type: 'region' }));
+    } catch {
+      countryNames.set(locale, null);
+    }
+  return countryNames.get(locale)?.of(code) ?? code;
+}
+
+const label = (dim: Dim, key: string): string => {
+  const r = t.report;
+  if (key === '(other)') return r.other;
+  if (dim === 'sources') return key || r.direct;
+  if (dim === 'pages') return key || r.noPage;
+  if (dim === 'countries') return key ? country(key) : r.unknown;
+  return (r.names as Record<string, Record<string, string>>)[dim]?.[key] ?? PROPER[key] ?? (key || r.unknown);
 };
 const pct = (part: number, total: number) => (total ? `${Math.round((part / total) * 100)}%` : '—');
 const hourLabel = (iso: string) => `${iso.slice(11, 13)}:00`;
@@ -59,13 +52,7 @@ function statCard(title: string, value: string, hint?: string): HTMLElement {
 }
 
 /** The words of a site's report, or of a link's: a link's view is a click. */
-interface Words {
-  views: string;
-  ofViews: string;
-  empty: string;
-}
-const SITE_WORDS: Words = { views: 'Просмотры', ofViews: 'просмотров', empty: 'За сегодня ещё нет закрытых часов: первые цифры придут в начале следующего часа.' };
-const LINK_WORDS: Words = { views: 'Клики', ofViews: 'кликов', empty: 'Сегодняшние клики сейчас недоступны.' };
+type Words = { views: string; ofViews: string; empty: string };
 
 function chart(r: Report, w: Words): HTMLElement {
   const hourly = r.period === 'today';
@@ -73,12 +60,12 @@ function chart(r: Report, w: Words): HTMLElement {
   if (!n) return h('div', { class: 'card chart-card' }, h('p', { class: 'muted' }, w.empty));
   const max = Math.max(1, ...r.series.map((p) => Math.max(p.views, p.visitors ?? 0)));
   const W = n * 10;
-  const svg = s('svg', { class: 'chart', viewBox: `0 0 ${W} 100`, preserveAspectRatio: 'none', role: 'img', 'aria-label': `${w.views} по ${hourly ? 'часам' : 'дням'}` });
+  const svg = s('svg', { class: 'chart', viewBox: `0 0 ${W} 100`, preserveAspectRatio: 'none', role: 'img', 'aria-label': hourly ? t.report.byHour(w.views) : t.report.byDayAria(w.views) });
   for (const y of [25, 50, 75]) svg.append(s('line', { x1: 0, x2: W, y1: y, y2: y }));
   const at = (i: number) => (hourly ? hourLabel(r.series[i]!.at) : dayLabel(r.series[i]!.at));
   r.series.forEach((p, i) => {
     const hgt = (p.views / max) * 96;
-    const tip = `${at(i)}: ${num(p.views)} ${w.ofViews}${p.visitors !== undefined ? `, ${num(p.visitors)} посетителей` : ''}, ${num(p.bots)} ботов`;
+    const tip = t.report.tip(at(i), num(p.views), w.ofViews, p.visitors !== undefined ? num(p.visitors) : null, num(p.bots));
     svg.append(s('rect', { x: i * 10 + 1.5, width: 7, y: 100 - hgt, height: Math.max(hgt, 0) }, s('title', {}, document.createTextNode(tip))));
   });
   if (!hourly) svg.append(s('polyline', { points: r.series.map((p, i) => `${i * 10 + 5},${100 - ((p.visitors ?? 0) / max) * 96}`).join(' ') }));
@@ -86,13 +73,13 @@ function chart(r: Report, w: Words): HTMLElement {
   return h(
     'div',
     { class: 'card chart-card' },
-    h('div', { class: 'legend' }, h('span', { class: 'l-views' }, hourly ? `${w.views} по часам` : w.views), hourly ? null : h('span', { class: 'l-visitors' }, 'Посетители'), h('span', { class: 'muted' }, `макс. ${num(max)}`)),
+    h('div', { class: 'legend' }, h('span', { class: 'l-views' }, hourly ? t.report.byHour(w.views) : w.views), hourly ? null : h('span', { class: 'l-visitors' }, t.report.visitors), h('span', { class: 'muted' }, t.report.max(num(max)))),
     svg,
     axis,
   );
 }
 
-function breakdown(title: string, dim: string, rows: Top, total: number): HTMLElement {
+function breakdown(dim: Dim, rows: Top, total: number): HTMLElement {
   const top = Math.max(1, ...rows.map((r) => r.n));
   const list = h(
     'ol',
@@ -104,36 +91,24 @@ function breakdown(title: string, dim: string, rows: Top, total: number): HTMLEl
       return h('li', { title: text }, bar, h('span', { class: 'k' }, text), h('span', { class: 'v' }, `${num(r.n)} · ${pct(r.n, total)}`));
     }),
   );
-  return h('section', { class: 'card breakdown' }, h('h3', {}, title), rows.length ? list : h('p', { class: 'empty' }, 'Нет данных за период'));
+  return h('section', { class: 'card breakdown' }, h('h3', {}, t.report.dims[dim]), rows.length ? list : h('p', { class: 'empty' }, t.report.noData));
 }
 
 /** The report of a site or of a link: the same shape; a link has no pages and its today is live. */
 export async function reportPage(kind: 'sites' | 'links', id: string, period: string): Promise<HTMLElement> {
-  const p = PERIODS.some(([k]) => k === period) ? period : 'today';
+  const R = t.report;
+  const p = (PERIODS as string[]).includes(period) ? period : 'today';
   const [subject, { report: r }] = await Promise.all([
     kind === 'sites' ? call<{ site: Site }>('GET', `/v1/sites/${id}`).then(({ site }) => site.host) : call<{ link: Link }>('GET', `/v1/links/${id}`).then(({ link }) => link.short_url ?? link.code),
     call<{ report: Report }>('GET', `/v1/${kind}/${id}/report?period=${p}&breakdowns=1`),
   ]);
-  const t = r.totals;
-  const span = r.period === 'today' ? `${r.to}, UTC` : `${r.from} — ${r.to}, UTC`;
+  const totals = r.totals;
+  const span = R.utc(r.period === 'today' ? r.to : `${r.from} — ${r.to}`);
   const b = r.breakdowns;
-  const dims: [keyof NonNullable<Report['breakdowns']>, string][] = [
-    ...(kind === 'sites' ? [['pages', 'Страницы'] as [keyof NonNullable<Report['breakdowns']>, string]] : []),
-    ['sources', 'Источники'],
-    ['countries', 'Страны'],
-    ['devices', 'Устройства'],
-    ['browsers', 'Браузеры'],
-    ['os', 'Системы'],
-  ];
-  const w = kind === 'links' ? LINK_WORDS : SITE_WORDS;
-  const asOf =
-    kind === 'links'
-      ? r.as_of
-        ? `Клики считаются сразу — по состоянию на ${when(r.as_of)}.`
-        : `Сегодняшние клики сейчас недоступны: ${UNAVAILABLE[r.unavailable ?? 'cloudflare']}`
-      : r.as_of
-        ? `По состоянию на ${when(r.as_of)} — часы приходят с задержкой до часа.`
-        : 'Сегодняшних часов ещё нет.';
+  const dims: Dim[] = [...(kind === 'sites' ? (['pages'] as Dim[]) : []), 'sources', 'countries', 'devices', 'browsers', 'os'];
+  const w = kind === 'links' ? R.link : R.site;
+  const why = R.unavailable[r.unavailable ?? 'cloudflare'];
+  const asOf = kind === 'links' ? (r.as_of ? R.linkAsOf(when(r.as_of)) : R.linkUnavailable(why)) : r.as_of ? R.siteAsOf(when(r.as_of)) : R.siteNoHours;
   return h(
     'div',
     { class: 'stack stack--md' },
@@ -141,22 +116,20 @@ export async function reportPage(kind: 'sites' | 'links', id: string, period: st
     h(
       'div',
       { class: 'page-head' },
-      h('h2', {}, `Отчёт: ${subject}`),
-      h('div', { class: 'btn-chip-group', role: 'group' }, ...PERIODS.map(([k, text]) => h('a', { class: 'btn btn-chip btn-chip--sm', href: `#/${kind}/${id}/report?p=${k}`, 'aria-pressed': String(k === r.period) }, text))),
+      h('h2', {}, R.title(subject)),
+      h('div', { class: 'btn-chip-group', role: 'group' }, ...PERIODS.map((k) => h('a', { class: 'btn btn-chip btn-chip--sm', href: `#/${kind}/${id}/report?p=${k}`, 'aria-pressed': String(k === r.period) }, R.periods[k]))),
     ),
     h('p', { class: 'muted text-sm' }, `${span}. ${asOf}`),
-    r.incomplete ? h('div', { class: 'banner banner--warning' }, 'Сегодняшние часы неполные: аккаунт превысил дневной бюджет записей на clx.cx. Итоги дня останутся точными.') : null,
+    r.incomplete ? h('div', { class: 'banner banner--warning' }, R.incomplete) : null,
     h(
       'div',
       { class: 'stats-grid' },
-      statCard('Посетители', num(t.visitors), 'сумма дневных уникальных'),
-      statCard(w.views, num(t.views)),
-      statCard(`${w.views} на посетителя`, t.visitors ? (t.views / t.visitors).toFixed(1).replace('.', ',') : '—'),
-      statCard('Доля ботов', pct(t.bots, t.bots + t.views), `заходов ботов: ${num(t.bots)}`),
+      statCard(R.visitors, num(totals.visitors), R.visitorsHint),
+      statCard(w.views, num(totals.views)),
+      statCard(R.perVisitor(w.views), totals.visitors ? (totals.views / totals.visitors).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'),
+      statCard(R.botShare, pct(totals.bots, totals.bots + totals.views), R.botHits(num(totals.bots))),
     ),
     chart(r, w),
-    b
-      ? h('div', { class: 'breakdowns' }, ...dims.map(([d, title]) => breakdown(title, d, b[d], t.views)), breakdown('Боты', 'bots', b.bots, t.bots))
-      : h('div', { class: 'card' }, h('p', {}, UNAVAILABLE[r.unavailable ?? 'cloudflare'])),
+    b ? h('div', { class: 'breakdowns' }, ...dims.map((d) => breakdown(d, b[d], totals.views)), breakdown('bots', b.bots, totals.bots)) : h('div', { class: 'card' }, h('p', {}, why)),
   );
 }

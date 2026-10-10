@@ -1,5 +1,5 @@
 // node site/build.ts — prints every page of the table (site/pages.ts) × its languages into public/,
-// copies the app's page to public/app.html, and writes robots.txt and sitemap.xml. Run by
+// writes the app's page of each language (app.html, ru/app.html), robots.txt and sitemap.xml. Run by
 // scripts/build-ui.mjs; the output is not committed. Node runs this file as is (type stripping).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -7,10 +7,10 @@ import path from 'node:path';
 import TurndownService from 'turndown';
 import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, skillMd } from './agents.ts';
 import { apiBody, apiJson, loadOpenapi } from './api.ts';
-import { ALL_LOCALES, APP_PATH, ORIGIN, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
+import { ALL_LOCALES, LOCALES, ORIGIN, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, layout } from './layout.ts';
-import { alternatesFor, fileFor, pathFor, urlFor } from './urls.ts';
+import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
 
 const OUT = 'public';
 const here = import.meta.dirname;
@@ -22,7 +22,7 @@ function home(locale: Locale): { title: string; description: string; body: strin
   <h1>${escapeHtml(s.h1)}</h1>
   <p class="lead">${escapeHtml(s.lead)}</p>
   <ul class="points">${s.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
-  <p class="actions"><a class="btn btn--primary" href="${APP_PATH}">${escapeHtml(s.cta)}</a></p>
+  <p class="actions"><a class="btn btn--primary" href="${appPathFor(locale)}">${escapeHtml(s.cta)}</a></p>
 </section>`;
   return { title: s.title, description: s.description, body };
 }
@@ -73,7 +73,9 @@ for (const page of SITE_PAGES)
     // The home page's markdown is the index of the docs (llms.txt), not its marketing text.
     if (page.markdown && locale === 'en') write(markdownFile(page.slug), page.slug === '/' ? llmsTxt() : toMarkdown(html));
   }
-fs.copyFileSync(path.join(here, 'app.html'), path.join(OUT, 'app.html'));
+// The app's page of each language: app.html, ru/app.html.
+const appPage = fs.readFileSync(path.join(here, 'app.html'), 'utf8');
+for (const locale of ALL_LOCALES) write(fileFor('/app', locale), appPage.replace('%LANG%', LOCALES[locale].htmlLang));
 
 // For agents (docs/spec.md §16): the docs index, how auth works (Cloudflare's scanner reads the root
 // copy), the API catalog (RFC 9727), the skill with its digest (Agent Skills Discovery 0.2), the contract.
@@ -99,7 +101,7 @@ write('openapi.json', apiJson(openapi.doc));
 
 write(
   'robots.txt',
-  ['User-agent: *', 'Content-Signal: search=yes, ai-input=yes, ai-train=yes', `Disallow: ${APP_PATH}$`, 'Disallow: /v1/', 'Disallow: /auth/', 'Disallow: /admin/', 'Disallow: /hook/', '', `Sitemap: ${ORIGIN}/sitemap.xml`, ''].join('\n'),
+  ['User-agent: *', 'Content-Signal: search=yes, ai-input=yes, ai-train=yes', ...ALL_LOCALES.map((l) => `Disallow: ${appPathFor(l)}$`), 'Disallow: /v1/', 'Disallow: /auth/', 'Disallow: /admin/', 'Disallow: /hook/', '', `Sitemap: ${ORIGIN}/sitemap.xml`, ''].join('\n'),
 );
 
 const urls = SITE_PAGES.filter((p) => p.indexed).flatMap((p) =>
@@ -118,4 +120,4 @@ const urls = SITE_PAGES.filter((p) => p.indexed).flatMap((p) =>
 );
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join('\n')}\n</urlset>\n`);
 
-console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, app.html, robots.txt, sitemap.xml`);
+console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, the app in each, robots.txt, sitemap.xml`);

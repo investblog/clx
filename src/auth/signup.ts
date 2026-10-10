@@ -5,7 +5,8 @@
 // second use fails. A reset ends every session of the user (`session_version`).
 import { Hono, type Context } from 'hono';
 import { sha256 } from '../lib/crypto';
-import { appOrigin, deliverMail, reserveMail } from '../mail';
+import { deliverMail, reserveMail } from '../mail';
+import { appUrl, localeOf, MAIL, type Locale } from '../mail-text';
 import type { Env } from '../types';
 import { hashPassword } from './password';
 import { userOf } from './routes';
@@ -90,20 +91,14 @@ const sent = (c: C) => c.json({ ok: true, message: 'If the address can get it, a
  *  through Cloudflare) does not show in how long the answer takes. */
 const later = (c: C, work: Promise<unknown>) => c.executionCtx.waitUntil(work.catch((e: unknown) => console.error('signup mail', e instanceof Error ? e.message : e)));
 
-const confirmText = (env: Env, token: string) =>
-  `Здравствуйте!\n\nЧтобы подтвердить адрес для clx, откройте ссылку (действует 24 часа):\n${appOrigin(env)}/app#/confirm?t=${token}\n\nЕсли вы не регистрировались на clx, просто удалите это письмо.\n`;
-const knownText = (env: Env) =>
-  `Здравствуйте!\n\nКто-то (возможно, вы) пытался зарегистрироваться на clx с этим адресом, но аккаунт у вас уже есть.\nВойти: ${appOrigin(env)}/app\nЗабыли пароль: ${appOrigin(env)}/app#/reset\n\nЕсли это были не вы, ничего делать не нужно.\n`;
-const resetText = (env: Env, token: string) =>
-  `Здравствуйте!\n\nЧтобы задать новый пароль для clx, откройте ссылку (действует час):\n${appOrigin(env)}/app#/reset?t=${token}\n\nПосле сброса все открытые сессии закончатся. Если вы не просили сброс, просто удалите это письмо — пароль не изменится.\n`;
-
 /** A token and its e-mail — only once the e-mail's place is taken; the new link replaces the old one
  *  only when its e-mail went, so a request over the limit or a failed send leaves the link already
- *  sent working. */
-async function mailToken(env: Env, userId: number, email: string, kind: 'confirm' | 'reset', reserved: boolean, now: number): Promise<void> {
+ *  sent working. In the user's language, linking to the app of that language. */
+async function mailToken(env: Env, user: { id: number; email: string; locale: Locale }, kind: 'confirm' | 'reset', reserved: boolean, now: number): Promise<void> {
   if (!reserved) return;
-  const { token, settle } = await issueToken(env.DB, userId, kind, now);
-  await settle(await deliverMail(env, email, kind === 'confirm' ? 'clx: подтвердите адрес' : 'clx: сброс пароля', kind === 'confirm' ? confirmText(env, token) : resetText(env, token)));
+  const { token, settle } = await issueToken(env.DB, user.id, kind, now);
+  const mail = MAIL[user.locale][kind](appUrl(env, user.locale, `#/${kind}?t=${token}`));
+  await settle(await deliverMail(env, user.email, mail.subject, mail.text));
 }
 
 export const signup = new Hono<{ Bindings: Env }>();
@@ -122,13 +117,26 @@ signup.post('/signup', async (c) => {
   // The hash is made either way, so a known address costs the same time as a new one. The session
   // version starts at the time: SQLite may hand a deleted user's id out again (no AUTOINCREMENT),
   // and that user's sessions carry a small version, which then never matches.
-  const created = await c.env.DB.prepare('INSERT INTO users (email, password_hash, created_at, session_version) VALUES (?1, ?2, ?3, ?3) ON CONFLICT (email) DO NOTHING RETURNING id')
-    .bind(email, await hashPassword(password), now)
+  // The language is the sign-up page's (ADR 0015); the account keeps it.
+  const locale = localeOf(body.locale);
+  const created = await c.env.DB.prepare('INSERT INTO users (email, password_hash, created_at, session_version, locale) VALUES (?1, ?2, ?3, ?3, ?4) ON CONFLICT (email) DO NOTHING RETURNING id')
+    .bind(email, await hashPassword(password), now, locale)
     .first<{ id: number }>();
   const reserved = await reserveMail(c.env, email, now);
-  if (created) later(c, mailToken(c.env, created.id, email, 'confirm', reserved, now));
-  // A known address: the owner is told, nothing changes — the answer is the same.
-  else if (reserved) later(c, deliverMail(c.env, email, 'clx: у вас уже есть аккаунт', knownText(c.env)));
+  if (created) later(c, mailToken(c.env, { id: created.id, email, locale }, 'confirm', reserved, now));
+  // A known address: the owner is told in their own language, nothing changes — the answer is the same.
+  else if (reserved)
+    later(
+      c,
+      c.env.DB.prepare('SELECT locale FROM users WHERE email = ?')
+        .bind(email)
+        .first<{ locale: Locale }>()
+        .then((u) => {
+          const known = localeOf(u?.locale ?? locale);
+          const mail = MAIL[known].known(appUrl(c.env, known), appUrl(c.env, known, '#/reset'));
+          return deliverMail(c.env, email, mail.subject, mail.text);
+        }),
+    );
   return sent(c);
 });
 
@@ -148,11 +156,11 @@ signup.post('/confirm', async (c) => {
 signup.post('/confirm/resend', async (c) => {
   const userId = await userOf(c);
   if (!userId) return c.json({ error: 'unauthorized' }, 401);
-  const user = await c.env.DB.prepare('SELECT email, email_confirmed_at FROM users WHERE id = ?').bind(userId).first<{ email: string; email_confirmed_at: number | null }>();
+  const user = await c.env.DB.prepare('SELECT email, email_confirmed_at, locale FROM users WHERE id = ?').bind(userId).first<{ email: string; email_confirmed_at: number | null; locale: Locale }>();
   if (!user) return c.json({ error: 'unauthorized' }, 401);
   if (user.email_confirmed_at !== null) return c.json({ ok: true, confirmed: true });
   const now = Date.now();
-  await mailToken(c.env, userId, user.email, 'confirm', await reserveMail(c.env, user.email, now), now);
+  await mailToken(c.env, { id: userId, email: user.email, locale: user.locale }, 'confirm', await reserveMail(c.env, user.email, now), now);
   return sent(c);
 });
 
@@ -163,8 +171,8 @@ signup.post('/reset', async (c) => {
   if (!email) return c.json({ error: 'invalid_email' }, 400);
   const now = Date.now();
   // The same work before the answer for any address: the limit is taken, the user looked up.
-  const [reserved, user] = await Promise.all([reserveMail(c.env, email, now), c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: number }>()]);
-  if (user) later(c, mailToken(c.env, user.id, email, 'reset', reserved, now));
+  const [reserved, user] = await Promise.all([reserveMail(c.env, email, now), c.env.DB.prepare('SELECT id, locale FROM users WHERE email = ?').bind(email).first<{ id: number; locale: Locale }>()]);
+  if (user) later(c, mailToken(c.env, { id: user.id, email, locale: user.locale }, 'reset', reserved, now));
   return sent(c);
 });
 

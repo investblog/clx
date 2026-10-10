@@ -10,7 +10,8 @@
 import { EDGE_SHA256 } from '../../edge/bundle.gen';
 import { open, seal, type Sealed } from '../lib/crypto';
 import { FREE_ACCOUNTS_CAP, LIMITS, planOf } from '../limits';
-import { appOrigin, sendNotice } from '../mail';
+import { sendNotice } from '../mail';
+import { appUrl, MAIL, recipient } from '../mail-text';
 import type { Env, Principal } from '../types';
 import { ApiError, fail, newId } from '../v1/http';
 import { cf, CfError, cfGraphql, type CallLog } from './api';
@@ -540,14 +541,8 @@ export async function checkTokens(env: Env, now = Date.now()): Promise<{ checked
 }
 
 async function mailRevoked(env: Env, edge: EdgeAccount, now: number): Promise<void> {
-  const user = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(edge.user_id).first<{ email: string }>();
+  const user = await recipient(env, edge.user_id);
   if (!user) return;
-  const name = edge.cf_account_name ?? edge.cf_account_id;
-  await sendNotice(
-    env,
-    user.email,
-    `clx: токен для «${name}» больше не работает`,
-    `Здравствуйте!\n\nCloudflare больше не принимает токен, которым clx работал в аккаунте «${name}»: его отозвали или он истёк. Счётчик и ссылки в аккаунте продолжают работать, но clx не может обновлять воркер, добавлять сайты и ссылки и читать разбивки отчётов.\nЧтобы вернуть связь, создайте новый bootstrap-токен и вставьте его на странице аккаунта: ${appOrigin(env)}/app#/accounts/${edge.id}\n`,
-    now,
-  );
+  const mail = MAIL[user.locale].revoked(edge.cf_account_name ?? edge.cf_account_id, appUrl(env, user.locale, `#/accounts/${edge.id}`));
+  await sendNotice(env, user.email, mail.subject, mail.text, now);
 }

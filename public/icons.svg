@@ -10,4 +10,5 @@
 <symbol id="i-mono-chevron-down" viewBox="0 0 20 20"><path d="M5.41 6.29 10 10.88l4.59-4.59L16 7.71l-6 6-6-6z" fill="currentColor"/></symbol>
 <symbol id="i-mono-copy" viewBox="0 0 19 22"><path d="M17 20H6V6h11m0-2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2m-3-4H2a2 2 0 0 0-2 2v14h2V2h12z" fill="currentColor"/></symbol>
 <symbol id="i-mono-check" viewBox="0 0 20 20"><path d="M6.75 17.77.54 11.56l2.83-2.83 3.38 3.39 9.88-9.89 2.83 2.83z" fill="currentColor"/></symbol>
+<symbol id="i-mono-close" viewBox="0 0 20 20"><path d="M17 4.41 15.59 3 10 8.59 4.41 3 3 4.41 8.59 10 3 15.59 4.41 17 10 11.41 15.59 17 17 15.59 11.41 10z" fill="currentColor"/></symbol>
 </svg>

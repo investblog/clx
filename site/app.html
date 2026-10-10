@@ -1,58 +1,20 @@
 <!doctype html>
-<html lang="ru" data-theme="dark">
+<!-- The app's page, one per language (site/build.ts: /app, /ru/app). The language here is the one of
+     the address, used until the person signs in; then the account's (ADR 0015). ui/main.ts draws
+     everything inside. -->
+<html lang="%LANG%" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>clx — посещения</title>
+    <title>clx</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/app.css" />
     <script src="/theme.js"></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
-    <header class="topbar">
-      <div class="topbar__inner">
-        <h1 class="brand">
-          <a href="#/"><svg class="icon brand__mark" aria-hidden="true"><use href="/icons.svg#i-mono-analytics"></use></svg><span>clx</span></a>
-        </h1>
-        <span class="who" id="who"></span>
-        <button type="button" class="btn-close" id="theme" aria-label="Сменить тему" title="Сменить тему">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-mono-theme-light-dark"></use></svg>
-        </button>
-        <button type="button" class="btn-close" id="logout" aria-label="Выйти" title="Выйти" hidden>
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-mono-log-out"></use></svg>
-        </button>
-      </div>
-    </header>
-    <main>
-      <section class="auth-card login" id="login" hidden>
-        <h1 class="h3">Вход</h1>
-        <form class="auth-form" id="login-form">
-          <div class="field">
-            <label class="field-label" for="email">Email</label>
-            <input class="input" id="email" name="email" type="email" autocomplete="email" required />
-          </div>
-          <div class="field">
-            <label class="field-label" for="password">Пароль</label>
-            <div class="password-field">
-              <input class="input" id="password" name="password" type="password" autocomplete="current-password" required />
-              <button type="button" class="password-toggle" id="password-toggle" aria-label="Показать пароль">
-                <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-mono-eye"></use></svg>
-              </button>
-            </div>
-          </div>
-          <div class="auth-status" id="login-status" data-type="idle" role="status" aria-live="polite"></div>
-          <div class="auth-actions">
-            <button type="submit" class="btn btn--primary">Войти</button>
-          </div>
-        </form>
-        <p class="muted text-sm">
-          <a href="#/signup">Регистрация</a> · <a href="#/reset">Забыли пароль?</a> ·
-          <a href="/ru/privacy">Конфиденциальность</a> · <a href="/ru/terms">Условия</a> · <a href="/ru/abuse">Жалобы</a>
-        </p>
-      </section>
-      <section id="app" hidden></section>
-    </main>
+    <header class="topbar" id="shell"></header>
+    <main id="app"></main>
   </body>
 </html>

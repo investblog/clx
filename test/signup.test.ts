@@ -30,7 +30,7 @@ let ipSeq = 0;
 beforeEach(async () => {
   mail.length = 0;
   for (const t of ['email_tokens', 'email_sends', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
-  await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, email_confirmed_at) VALUES (1, 'owner@example.com', ?, 0, 0)").bind(await hashPassword('Right-pass-1')).run();
+  await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, email_confirmed_at, locale) VALUES (1, 'owner@example.com', ?, 0, 0, 'ru')").bind(await hashPassword('Right-pass-1')).run();
 });
 
 /** A fresh address per request, so the per-IP limit of one test does not reach the next; the work
@@ -87,7 +87,8 @@ describe('sign-up', () => {
     expect(r).toEqual({ status: 202, body: { ok: true, message: 'If the address can get it, an e-mail is on its way.' } });
     expect(mail).toHaveLength(1);
     expect(mail[0]!.subject).toContain('уже есть аккаунт');
-    expect(mail[0]!.text).toContain('Войти: https://clx.example.com/app\n');
+    // In the owner's language (Russian here), not the language of the sign-up page (none: English).
+    expect(mail[0]!.text).toContain('Войти: https://clx.example.com/ru/app\n');
     expect((await login('owner@example.com', 'Right-pass-1')).status).toBe(200);
   });
 
@@ -113,6 +114,28 @@ describe('sign-up', () => {
     expect(mail).toHaveLength(2);
   });
 
+  it('the account keeps the language of the sign-up page; the e-mails and /v1/me follow it, PATCH /v1/me changes it (ADR 0015)', async () => {
+    await post('/auth/signup', { email: 'ru@example.com', password: 'a-long-password', turnstile: 'human', locale: 'ru' });
+    expect(mail[0]!.subject).toBe('clx: подтвердите адрес');
+    expect(mail[0]!.text).toContain('https://clx.example.com/ru/app#/confirm?t=');
+    // Anything else is English.
+    await post('/auth/signup', { email: 'en@example.com', password: 'a-long-password', turnstile: 'human', locale: 'de' });
+    expect(mail[1]!.subject).toBe('clx: confirm your address');
+    expect(mail[1]!.text).toContain('https://clx.example.com/app#/confirm?t=');
+    const { token } = await login('ru@example.com', 'a-long-password');
+    const locale = async () => ((await (await me(token)).json()) as { user: { locale: string } }).user.locale;
+    expect(await locale()).toBe('ru');
+    const patch = (body: unknown, auth = `Bearer ${token}`) => app.request('https://clx.cx/v1/me', { method: 'PATCH', headers: { authorization: auth, 'content-type': 'application/json' }, body: JSON.stringify(body) }, env);
+    expect(await json(await patch({ locale: 'en' }))).toEqual({ status: 200, body: { locale: 'en' } });
+    expect(await locale()).toBe('en');
+    expect(await json(await patch({ locale: 'de' }))).toMatchObject({ status: 400, body: { error: { code: 'invalid_request' } } });
+    // The reset e-mail speaks the account's language now.
+    await env.DB.prepare('UPDATE email_sends SET last_at = 0').run();
+    await post('/auth/reset', { email: 'ru@example.com', turnstile: 'human' });
+    expect(mail[2]).toMatchObject({ to: 'ru@example.com', subject: 'clx: password reset' });
+    expect(mail[2]!.text).toContain('https://clx.example.com/app#/reset?t=');
+  });
+
   it('a signed-in unconfirmed user can have the confirmation sent again', async () => {
     await post('/auth/signup', { email: 'new@example.com', password: 'a-long-password', turnstile: 'human' });
     const { token } = await login('new@example.com', 'a-long-password');
@@ -136,7 +159,7 @@ describe('password reset', () => {
     expect((await me(before.token)).status).toBe(200);
     await post('/auth/reset', { email: 'owner@example.com', turnstile: 'human' });
     const t = tokenIn(mail[0]!.text);
-    expect(mail[0]!.text).toContain('/app#/reset?t=');
+    expect(mail[0]!.text).toContain('https://clx.example.com/ru/app#/reset?t=');
     expect(await json(await post('/auth/reset/confirm', { token: t, password: 'short' }))).toMatchObject({ status: 400, body: { error: 'weak_password' } });
     // Within the same second as the sign-in: the session still ends.
     expect((await post('/auth/reset/confirm', { token: t, password: 'a-new-long-password' })).status).toBe(200);

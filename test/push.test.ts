@@ -238,7 +238,7 @@ describe('the worker side', () => {
     await settle();
     expect((await account()).state).toBe('no_connection');
     // The user hears of it once, by e-mail (§4).
-    expect(mail).toEqual([expect.objectContaining({ to: 'free@example.com', subject: expect.stringContaining('нет связи') })]);
+    expect(mail).toEqual([expect.objectContaining({ to: 'free@example.com', subject: expect.stringContaining('no word from the worker') })]);
     expect((await call('POST', '/v1/sites', { account_id: accountId, host: 'blog.example.com' })).status).toBe(202);
     await hourly(D0 + 39 * H + 300_000);
     expect((await account()).state).toBe('ready');
