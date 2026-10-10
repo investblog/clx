@@ -88,6 +88,7 @@ to the token clx actually holds.
 | D1 rows appear ~15 minutes after the writes; a script made minutes earlier is counted under `__unknown__`. | 05.10.2026 | §8: account-wide sums only |
 | `workersInvocationsAdaptive` by `datetimeMinute` and `scriptName` shows when a script ran and how many subrequests it made — the way to see whether a user-side worker ran at all when there are no logs. | 05.10.2026 | diagnosing the self-check |
 | Workers Observability (`…/workers/observability/telemetry/query`) is refused (`403`) to the clx.cx deploy token — it holds no Observability right. | 05.10.2026 | — |
+| Web Analytics (RUM) with automatic setup injects `static.cloudflareinsights.com/beacon.min.js` into proxied HTML; a strict CSP blocks it (a console error on every page). It is turned off per site with `PUT /accounts/{id}/rum/site_info/{site_tag}` `{auto_install: true, enabled: false, zone_tag}` (sites: `GET …/rum/site_info/list`; right: Account Settings Write) — the beacon was gone from clx.cx pages within a minute. | 10.10.2026, the clx.cx zone (Global key) | clx.cx has no Web Analytics. On users' zones clx does not touch it: `clx-edge` answers with no HTML (script, 204, 302, empty 404/503), so the injection never lands on clx's answers, and the working token holds only Account Settings Read |
 
 ## Email Sending and Email Routing (stage 6, the clx.cx zone)
 
