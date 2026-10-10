@@ -1,0 +1,7 @@
+/* The one stylesheet of clx.cx, for the site and the app alike, bundled by scripts/build-ui.mjs into
+   public/app.css. In cascade order: the 301.st tokens, its components, clx's own layer.
+   test/css.test.ts guards them: every class has a rule, every token is defined, no selector twice
+   in a file, every icon exists, text keeps its contrast. */
+@import "./theme.css";
+@import "./components.css";
+@import "./app.css";

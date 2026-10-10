@@ -1,4 +1,4 @@
-/* clx's own layer over the 301.st UI styles (ui.css): page frame, header, sign-in card. */
+/* clx's own layer over the 301.st components: the page frame and header, the app's pages, the site's. */
 :root{--page-gutter-desktop:var(--space-5);--page-gutter-mobile:var(--space-4);--gutter:var(--page-gutter-desktop)}
 @media (max-width:768px){:root{--gutter:var(--page-gutter-mobile)}}
 body{font-size:var(--fs-body);line-height:var(--lh-body);overflow-x:clip}

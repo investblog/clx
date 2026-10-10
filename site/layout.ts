@@ -63,7 +63,6 @@ export function layout(input: LayoutInput): string {
       ? [`<link rel="canonical" href="${urlFor(page.slug, locale)}" />`, ...alternatesFor(page.slug, page.locales).map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}" />`)].join('\n    ')
       : '<meta name="robots" content="noindex" />',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml" />',
-    '<link rel="stylesheet" href="/ui.css" />',
     '<link rel="stylesheet" href="/app.css" />',
     '<script src="/theme.js"></script>',
     '<script src="/site.js" defer></script>',
