@@ -100,7 +100,7 @@ export async function accountsPage(me: Me): Promise<HTMLElement> {
       ),
     ),
   );
-  return h('div', {}, head, list, me.plan === 'api' ? h('p', {}, h('a', { href: '#/keys' }, 'Ключи API →')) : null);
+  return h('div', {}, head, list, h('p', {}, h('a', { href: '#/keys' }, 'Ключи API →')));
 }
 
 // ---- connecting ----
@@ -339,8 +339,6 @@ export function confirmAction(label: string, confirmLabel: string, work: (key: s
 // ---- API keys ----
 
 export async function keysPage(me: Me, redraw: (message?: string) => void): Promise<HTMLElement> {
-  if (me.plan !== 'api')
-    return h('div', {}, h('h2', {}, 'Ключи API'), h('div', { class: 'card' }, h('p', {}, 'Ключи API входят в тариф api: им пользуются генераторы сайтов и консольные инструменты. Тариф включает администратор.')));
   const [{ keys }, { accounts }] = await Promise.all([call<{ keys: Key[] }>('GET', '/v1/keys'), call<{ accounts: Account[] }>('GET', '/v1/accounts')]);
   const shown = h('div', {});
   const scopeBoxes = Object.entries(SCOPE).map(([k, label]) => {
@@ -382,7 +380,13 @@ export async function keysPage(me: Me, redraw: (message?: string) => void): Prom
     'div',
     { class: 'stack stack--md' },
     h('h2', {}, 'Ключи API'),
-    h('p', { class: 'muted' }, `Ключ показывается один раз; на clx.cx хранится только его хеш. До ${me.limits.apiKeys} ключей.`),
+    h(
+      'p',
+      { class: 'muted' },
+      `Ключ — для агентов, генераторов сайтов и консоли (`,
+      h('a', { href: '/agents' }, 'инструкция для агентов'),
+      `). Показывается один раз; на clx.cx хранится только его хеш. ${me.plan === 'api' ? `До ${me.limits.apiKeys} ключей.` : 'На тарифе free — один ключ и те же пределы, что в кабинете; больше аккаунтов, сайтов и ключей даёт тариф api — по запросу.'}`,
+    ),
     list,
     h(
       'section',

@@ -40,7 +40,6 @@ export async function principalOf(c: Context<{ Bindings: Env }>): Promise<Princi
     .bind(await sha256(token))
     .first<KeyRow>();
   if (!key) return fail(401, 'unauthorized', 'The API key is invalid or revoked.');
-  if (key.plan !== 'api') return fail(403, 'plan_required', 'API keys work on the api plan only.');
   const ips = list(key.allow_ips);
   if (ips && !ips.has(c.req.header('cf-connecting-ip') ?? '')) return fail(401, 'unauthorized', 'The API key is not allowed from this address.');
   const { success } = await c.env.API_LIMIT.limit({ key: key.id });

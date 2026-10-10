@@ -49,8 +49,16 @@ describe('/v1 basics', () => {
 });
 
 describe('API keys', () => {
-  it('only the api plan gets keys; the key is shown once, its replay says so', async () => {
-    expect((await call('POST', '/v1/keys', { auth: await session(1), body: { scopes: ['sites'] }, key: 'i1' })).body.error.code).toBe('plan_required');
+  it('free gets one key, and it works (ADR 0014); the api plan more', async () => {
+    const one = await call('POST', '/v1/keys', { auth: await session(1), body: { scopes: ['sites'] }, key: 'f1' });
+    expect(one.status).toBe(201);
+    expect((await call('GET', '/v1/me', { auth: `Bearer ${one.body.key}` })).body).toMatchObject({ plan: 'free', via: 'key' });
+    const two = await call('POST', '/v1/keys', { auth: await session(1), body: { scopes: ['sites'] }, key: 'f2' });
+    expect(two.body.error).toMatchObject({ code: 'limit_reached', details: { limit: 1 } });
+    expect((await call('DELETE', `/v1/keys/${one.body.id}`, { auth: await session(1) })).status).toBe(200);
+  });
+
+  it('the key is shown once, its replay says so', async () => {
     const made = await call('POST', '/v1/keys', { auth: await session(2), body: { scopes: ['sites', 'reports'] }, key: 'i1' });
     expect(made.status).toBe(201);
     expect(made.body.key).toMatch(/^clx_[A-Za-z0-9_-]{40,}$/u);

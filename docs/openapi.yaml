@@ -5,7 +5,7 @@ info:
   description: |
     The /v1 API of clx (docs/spec.md §15). The clx.cx page is a thin client over the same endpoints.
     Authorization: `Bearer <access token>` from a signed-in page, or `Bearer clx_…` — an API key
-    (the `api` plan). Every POST, PUT, PATCH and DELETE takes an `Idempotency-Key` header, required
+    (one on the `free` plan, up to 5 on `api`). Every POST, PUT, PATCH and DELETE takes an `Idempotency-Key` header, required
     with an API key; a repeat with the same body replays the first answer for 24 hours.
     Errors: `{ "error": { "code", "message", "details"? } }`. This file grows with each stage; a
     test checks that every route in the code is here and back.
@@ -43,7 +43,7 @@ components:
               description: |
                 Stable codes: unauthorized, invalid_request, not_found, payload_too_large,
                 limit_reached, service_full, idempotency_conflict, operation_in_progress,
-                plan_required, scope_required, session_required, key_already_issued,
+                scope_required, session_required, key_already_issued,
                 account_taken, already_connected, account_not_ready, invalid_bootstrap,
                 bootstrap_permission_error, permission_catalog, orphan_not_deleted,
                 token_rights_mismatch, token_check_failed, renew_lost, rate_limited, cloudflare_unavailable,
@@ -284,7 +284,7 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { type: object, properties: { keys: { type: array, items: { $ref: '#/components/schemas/Key' } } } } } } }
         default: { $ref: '#/components/responses/Error' }
     post:
-      summary: Issue an API key (page session only; the `api` plan); the key is in this answer only
+      summary: Issue an API key (page session only; 1 on the free plan, 5 on api — `limit_reached` over it); the key is in this answer only
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:

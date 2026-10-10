@@ -188,14 +188,15 @@ v1.post(
           : { status: s.status, body: s.answer },
     },
     async (c, p, body, idemRef) => {
-      if (planOf(p.plan) !== 'api') fail(403, 'plan_required', 'API keys come with the api plan.');
+      // Every plan has keys (ADR 0014): one on free, more on api.
+      const limits = LIMITS[planOf(p.plan)];
       // A retry of a call that died after its insert finds that key, and never shows it again.
       const issued = idemRef ? await c.env.DB.prepare('SELECT id FROM api_keys WHERE idem_ref = ? AND created_at > ?').bind(idemRef, Date.now() - IDEM_TTL).first<{ id: string }>() : null;
       if (issued) fail(409, 'key_already_issued', 'This Idempotency-Key already issued a key; it is shown once. Revoke it and issue a new one if it was lost.', { key_id: issued.id });
       const scopes = stringList(body.scopes, 'scopes', /^[a-z]+$/u, SCOPES.length) ?? fail(400, 'invalid_request', '"scopes" is required.', { field: 'scopes' });
       const unknown = scopes.filter((s) => !(SCOPES as readonly string[]).includes(s));
       if (unknown.length) fail(400, 'invalid_request', `Unknown scopes: ${unknown.join(', ')}.`, { field: 'scopes' });
-      const accounts = stringList(body.allow_accounts, 'allow_accounts', /^[0-9a-f]{32}$/u, LIMITS.api.cfAccounts);
+      const accounts = stringList(body.allow_accounts, 'allow_accounts', /^[0-9a-f]{32}$/u, limits.cfAccounts);
       const ips = stringList(body.allow_ips, 'allow_ips', /^[0-9a-f.:]{2,45}$/u, 20);
       const bytes = crypto.getRandomValues(new Uint8Array(32));
       const key = KEY_PREFIX + btoa(String.fromCharCode(...bytes)).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
@@ -204,9 +205,9 @@ v1.post(
       const added = await c.env.DB.prepare(
         'INSERT INTO api_keys (id, user_id, prefix, key_hash, scopes, allow_accounts, allow_ips, created_at, idem_ref) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10 WHERE (SELECT count(*) FROM api_keys WHERE user_id = ?2 AND revoked_at IS NULL) < ?9',
       )
-        .bind(row.id, p.userId, row.prefix, await sha256(key), row.scopes, row.allow_accounts, row.allow_ips, row.created_at, LIMITS.api.apiKeys, idemRef)
+        .bind(row.id, p.userId, row.prefix, await sha256(key), row.scopes, row.allow_accounts, row.allow_ips, row.created_at, limits.apiKeys, idemRef)
         .run();
-      if (!added.meta.changes) fail(403, 'limit_reached', `At most ${LIMITS.api.apiKeys} API keys; revoke one first.`, { limit: LIMITS.api.apiKeys });
+      if (!added.meta.changes) fail(403, 'limit_reached', `At most ${limits.apiKeys} API key(s) on the ${planOf(p.plan)} plan; revoke one first.`, { limit: limits.apiKeys });
       return { status: 201, body: { ...keyView(row), key }, stored: { key_id: row.id } };
     },
   ),

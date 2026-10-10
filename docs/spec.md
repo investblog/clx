@@ -27,7 +27,7 @@ account, summary totals on clx.cx, details read from the user's database on dema
 Out of scope:
 - sites not on Cloudflare, and links without one's own domain (clx.cx carries no user traffic);
 - events, goals, funnels, raw visit logs, per-visitor exports;
-- billing — the paid `api` plan (§15) is switched on by an admin; prices and tiers come later.
+- billing — the `api` plan (§15) is switched on by an admin on request; prices and tiers come later ([ADR 0014](./decisions/0014-a-key-on-free.md)).
 
 Integrators — for example a site generator — work through the **management API** (§15): connect a
 customer's Cloudflare account, add a site, get a counter snippet that works on the site's own domain
@@ -643,7 +643,7 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
 | rules per link | 10 | 10 |
 | totals writes on clx.cx a day | 3,000 | 3,000 + 110 per site + 3 per link |
 | breakdown requests a minute | 30 | 30 |
-| API keys | — | 5 |
+| API keys | 1 | 5 |
 
 ## 9. clx.cx accounts
 
@@ -707,8 +707,8 @@ Pages:
   upgrade advice (a banner at `upgrade_soon` and `over`, §8), "reinstall", "renew the token" and
   "disconnect" — the last shows what could not be removed and the link to revoke the working
   token in Cloudflare (§4).
-- **API keys** (plan `api`): issue with scopes and allow lists, the key shown once, revoke — keys
-  are issued only from a page session (§15), so without this page an `api` user cannot get one.
+- **API keys** (1 on `free`, 5 on `api`): issue with scopes and allow lists, the key shown once, revoke — keys
+  are issued only from a page session (§15), so without this page a user cannot get one.
 
 ## 11. Open source
 
@@ -826,12 +826,14 @@ that adds a site and embeds its counter at build time.
 - **One contract.** `/v1` is the only implementation: the clx.cx page is a thin client over the same
   endpoints with its session token, so the page and the API cannot drift apart. The contract is
   `docs/openapi.yaml`; a test checks that every route in the code is in it and back.
-- **Plans.** `free` — what sign-up gives (limits in §8), the page only. `api` — the same plus API keys
-  and the higher limits of §8; switched on by an admin (billing is out of scope for now). Neither
+- **Plans** ([ADR 0014](./decisions/0014-a-key-on-free.md)). `free` — what sign-up gives (limits
+  in §8), the page and one API key, so an agent can set clx up within those limits. `api` — the
+  higher limits of §8 and up to 5 keys; switched on by an admin on request, free of charge for now
+  (billing is out of scope; a paid plan comes later). Neither
   plan requires Workers Paid in the user's Cloudflare accounts — the upgrade advice (§8) says when
   one should move.
 - **Keys.** `Authorization: Bearer <key>`; 32 random bytes with a readable prefix (`clx_`) so that
-  secret scanners catch a leaked one; D1 keeps only the SHA-256. Up to 5 per account, revoked one by
+  secret scanners catch a leaked one; D1 keeps only the SHA-256. 1 per user on `free`, 5 on `api`, revoked one by
   one. Checking a key writes **at most once a day per key** (`last_used_at`), never per call.
   - **scopes**, chosen at creation, least by default: `accounts` (connect, renew, disconnect —
     the only scope that takes bootstrap tokens), `sites` (add, change, rotate, delete sites),
@@ -871,7 +873,7 @@ that adds a site and embeds its counter at build time.
   polling proves not enough.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
-  `idempotency_conflict`, `plan_required`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
+  `idempotency_conflict`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
   `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_required`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write

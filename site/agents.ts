@@ -19,7 +19,7 @@ export function agentsBody(): string {
 
 <h2 id="ask">What to ask your human for</h2>
 <ol>
-<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a>; keys come with the <code>api</code> plan, which clx switches on by request. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites. The key is shown once.</li>
+<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a> and confirms their address. The free plan has one key, enough for one Cloudflare account, 10 sites and 200 links; the <code>api</code> plan (more accounts, sites and keys) is switched on by clx on request. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites. The key is shown once.</li>
 <li><strong>The Cloudflare account ID</strong> — 32 hex characters, in the dashboard address after <code>dash.cloudflare.com/</code>.</li>
 <li><strong>A bootstrap token</strong>, made by the person in that account. clx uses it within one request to make its own working token, then deletes it. Steps for them:
 <ol>
@@ -36,7 +36,7 @@ export function agentsBody(): string {
 <pre><code>export CLX=https://clx.cx
 export CLX_KEY=clx_...   # from the person
 
-curl -s $CLX/v1/me -H "Authorization: Bearer $CLX_KEY"   # plan "api", via "key"
+curl -s $CLX/v1/me -H "Authorization: Bearer $CLX_KEY"   # via "key"; plan "free" or "api" sets the limits
 
 curl -s -X POST $CLX/v1/accounts \\
   -H "Authorization: Bearer $CLX_KEY" \\
@@ -96,7 +96,7 @@ curl -s -X POST $CLX/v1/links \\
 
 <h2 id="cheatsheet">Cheat sheet</h2>
 <pre><code>base_url:      ${ORIGIN}
-auth:          Authorization: Bearer clx_...   (api plan; scopes accounts, sites, links, reports)
+auth:          Authorization: Bearer clx_...   (1 key on free, 5 on api; scopes accounts, sites, links, reports)
 idempotency:   Idempotency-Key on every POST/PUT/PATCH/DELETE; replays for 24 h
 connect:       POST /v1/accounts {cf_account_id, bootstrap_token} -&gt; 202; poll GET /v1/accounts/{id}
                while pending|installing; ready, else show error
@@ -132,7 +132,7 @@ with rules and QR codes on a link host, and reads visit and click reports.
 - A site generator has to add a site and embed its counter at build time.
 
 ## Prerequisites (from the person)
-- A clx API key \`clx_…\` (the \`api\` plan) with the scopes needed: \`accounts\`, \`sites\`, \`links\`, \`reports\`.
+- A clx API key \`clx_…\` (one comes with the free plan) with the scopes needed: \`accounts\`, \`sites\`, \`links\`, \`reports\`.
 - The Cloudflare account ID and a bootstrap token: Account API Tokens — Edit, Account Settings —
   Read, scope Entire Account, expiring tomorrow. clx deletes it after use; never store it.
 
@@ -164,10 +164,10 @@ clx's management API (${ORIGIN}/v1) takes **bearer API keys**:
 
 ## Getting a key
 - A person signs up at ${ORIGIN}/app (e-mail and password, with a CAPTCHA) and confirms the address.
-- Keys come with the \`api\` plan, switched on by clx on request.
 - The person issues a key on the Keys page of the app, choosing its scopes (\`accounts\`, \`sites\`,
   \`links\`, \`reports\`) and, optionally, the Cloudflare accounts and client IPs it may be used for.
-  The key is shown once; up to 5 per user, revoked one by one.
+  The key is shown once; one per user on the free plan, up to 5 on the \`api\` plan (switched on by
+  clx on request), revoked one by one.
 
 ## Registration / provisioning
 There is no OAuth and no self-service registration for agents: an agent gets its key from its

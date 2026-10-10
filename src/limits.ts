@@ -3,7 +3,7 @@
 export type Plan = 'free' | 'api';
 
 export const LIMITS: Record<Plan, { cfAccounts: number; sites: number; links: number; rulesPerLink: number; apiKeys: number }> = {
-  free: { cfAccounts: 1, sites: 10, links: 200, rulesPerLink: 10, apiKeys: 0 },
+  free: { cfAccounts: 1, sites: 10, links: 200, rulesPerLink: 10, apiKeys: 1 },
   api: { cfAccounts: 50, sites: 500, links: 10_000, rulesPerLink: 10, apiKeys: 5 },
 };
 

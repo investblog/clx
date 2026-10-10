@@ -53,7 +53,6 @@ const ERROR: Record<string, string> = {
   storage_limit: 'Превышен объём настроек аккаунта.',
   service_full: 'Подключение новых аккаунтов временно закрыто — места закончились.',
   operation_in_progress: 'С этим аккаунтом уже идёт операция. Подождите и обновите страницу.',
-  plan_required: 'Нужен тариф api.',
   account_taken: 'Этот аккаунт Cloudflare подключён другим пользователем clx.',
   already_connected: 'Этот аккаунт Cloudflare уже подключён.',
   account_not_ready: 'Аккаунт ещё не готов.',
