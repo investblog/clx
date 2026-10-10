@@ -945,7 +945,7 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   `Content-Signal: search=yes, ai-input=yes, ai-train=yes` in robots.txt. The zone's Browser
   Integrity Check is off: it refused `Python-urllib` on every path, `/v1` included.
 - **Brand** ([ADR 0016](./decisions/0016-brand-and-report-charts.md)): the 301.st components in
-  violet (`#4D48ED`, from the logo), the clx mark in the header, `favicon.svg`, `favicon.ico`
-  (16/32/48) and `apple-touch-icon.png`.
+  violet (`#4D48ED`, from the logo), the Onest typeface served from `public/fonts/`, the clx mark in
+  the header, `favicon.svg`, `favicon.ico` (16/32/48) and `apple-touch-icon.png`.
 - **Planned** (the product plan, in parts): the app's design system (drawers, dialogs, navigation);
   the content pages and SEO (OG cards, JSON-LD).

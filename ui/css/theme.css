@@ -73,8 +73,8 @@
   --info: #3B82F6;
 
   /* Typography */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
+  --font-sans: "Onest", system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif; /* Onest: clx's face (ADR 0016), declared in app.css */
   /* Was used by name with differing fallbacks and never defined. */
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;

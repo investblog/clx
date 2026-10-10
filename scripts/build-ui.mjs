@@ -13,6 +13,7 @@ const common = { bundle: true, minify: true, format: 'iife', target: 'es2022', l
 const licence = fs.readFileSync('node_modules/affiliate-charts/LICENSE', 'utf8').trim();
 await build({ ...common, entryPoints: ['ui/main.ts'], outfile: 'public/app.js', footer: { js: `/*! affiliate-charts\n${licence}\n*/` } });
 await build({ ...common, entryPoints: ['site/client.ts'], outfile: 'public/site.js' });
-await build({ bundle: true, minify: true, legalComments: 'none', logLevel: 'warning', entryPoints: ['ui/css/index.css'], outfile: 'public/app.css' });
+// The fonts are static files next to the stylesheet (public/fonts), not something to bundle.
+await build({ bundle: true, minify: true, legalComments: 'none', logLevel: 'warning', external: ['/fonts/*'], entryPoints: ['ui/css/index.css'], outfile: 'public/app.css' });
 console.log('public/app.js, public/site.js, public/app.css built');
 execFileSync(process.execPath, ['site/build.ts'], { stdio: 'inherit' });

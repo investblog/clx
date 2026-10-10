@@ -16,6 +16,11 @@
 /openapi.yaml
   Content-Type: application/yaml; charset=utf-8
 
+# The typeface (ADR 0016) changes rarely: a week in the browser. Not immutable — the names carry no
+# version, so a new file under the same name must still reach readers.
+/fonts/*
+  Cache-Control: public, max-age=604800
+
 # The app is a signed-in page: never indexed (the site's pages are; a 404 says noindex in its <head>).
 /app
   X-Robots-Tag: noindex, nofollow

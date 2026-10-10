@@ -23,6 +23,12 @@ lists with CSS bars.
   engines take a multiple of 48 px; old browsers ask for `/favicon.ico` whatever the page links);
   `apple-touch-icon.png` 180 px, full-bleed, since iOS rounds it and paints transparency black. All
   are listed in `STATIC_FILES`, so a missing one fails the build check.
+- **Typeface.** Onest (SIL OFL 1.1), served from clx.cx itself (`public/fonts/`, the CSP allows no
+  other font source): one variable file (400–700) per script — Latin, Latin Extended, Cyrillic —
+  with `unicode-range`, so a page loads only what its text needs (Latin ≈ 34 KB, Cyrillic ≈ 16 KB);
+  `font-display: swap`, the system faces behind it in `--font-sans`. Chosen over Manrope and Golos
+  Text; it differs little from the system face at text sizes — the point is the same look on every
+  platform, not a display face.
 - **Report charts** are drawn by `affiliate-charts` (MIT, by 301), pinned to an exact version: KPI
   tiles with sparklines, the series (an area for today's hours, columns for days with visitors in a
   tint of the brand, a left gutter sized from the card's width so the axis labels keep off the
