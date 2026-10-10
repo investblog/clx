@@ -791,7 +791,7 @@ html[data-theme="light"] .btn--ghost:hover {
    primary in both themes → 5.69:1. */
 .badge--primary {
   background-color: var(--primary-soft);
-  border-color: rgba(77, 163, 255, 0.5);
+  border-color: rgba(139, 135, 255, 0.5);
   color: var(--primary-hover);
 }
 
@@ -801,7 +801,7 @@ html[data-theme="light"] .btn--ghost:hover {
    badges I could see" is not the same set as "all the badges". */
 .badge.badge--info {
   background-color: var(--primary-soft);
-  border-color: rgba(77, 163, 255, 0.5);
+  border-color: rgba(139, 135, 255, 0.5);
   color: var(--primary-hover);
 }
 
@@ -825,8 +825,8 @@ html[data-theme="light"] .btn--ghost:hover {
    token fixes dark without dulling light. Raising the wash alpha would have made
    it worse: the wash is lighter than the text, so more of it cuts contrast. */
 .badge--brand {
-  background-color: rgba(94, 139, 255, 0.16);
-  border-color: rgba(94, 139, 255, 0.55);
+  background-color: rgba(139, 135, 255, 0.16);
+  border-color: rgba(139, 135, 255, 0.55);
   color: var(--primary-hover);
 }
 
@@ -893,8 +893,8 @@ html[data-theme="light"] .btn--ghost:hover {
 }
 
 :root[data-theme='light'] .badge.badge--info {
-  background-color: rgba(0, 85, 220, 0.12);
-  border-color: rgba(0, 85, 220, 0.5);
+  background-color: rgba(77, 72, 237, 0.12);
+  border-color: rgba(77, 72, 237, 0.5);
   color: var(--primary);
 }
 

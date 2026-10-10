@@ -43,7 +43,7 @@ function themeButton(): HTMLElement {
 
 /** The top bar; with `current`, the signed-in navigation and the sign-out button. */
 function drawShell(current?: Section): void {
-  const brand = h('p', { class: 'brand' }, h('a', { href: '#/' }, s('svg', { class: 'icon brand__mark', 'aria-hidden': 'true' }, s('use', { href: '/icons.svg#i-mono-analytics' })), h('span', {}, 'clx')));
+  const brand = h('p', { class: 'brand' }, h('a', { href: '#/' }, s('svg', { class: 'icon brand__mark', 'aria-hidden': 'true' }, s('use', { href: '/icons.svg#i-mono-clx' })), h('span', {}, 'clx')));
   if (!current) return void shell.replaceChildren(h('div', { class: 'topbar__inner' }, brand, themeButton()));
   const nav = h('nav', { class: 'shell-nav', 'aria-label': 'clx' }, ...NAV.map(([id, href]) => h('a', { href, ...(id === current ? { 'aria-current': 'page' } : {}) }, t.shell.nav[id])));
   const out = h('button', { type: 'button', class: 'btn-close', 'aria-label': t.shell.signOut, title: t.shell.signOut }, icon('log-out'));

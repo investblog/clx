@@ -55,7 +55,7 @@ export const SITE_PAGES: readonly PageDef[] = [
 ];
 
 /** Hand-written files in public/ every build needs (the rest is generated). */
-export const STATIC_FILES: readonly string[] = ['_headers', 'favicon.svg', 'icons.svg', 'theme.js'];
+export const STATIC_FILES: readonly string[] = ['_headers', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png', 'icons.svg', 'theme.js'];
 
 /** The footer of a language: its own pages, and the English-only ones (the agent docs) in English. */
 export const footPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.foot && (p.locales.includes(locale) || p.locales.length === 1));

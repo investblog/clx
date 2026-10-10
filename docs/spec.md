@@ -704,7 +704,8 @@ Pages:
   snippet, excluded paths, rotate, delete, route status.
 - **Links:** the link host, a list of links with 7-day clicks, create and edit, rules, QR (SVG).
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
-  "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques".
+  "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques". Tiles, the series and
+  the breakdowns are drawn by `affiliate-charts` ([ADR 0016](./decisions/0016-brand-and-report-charts.md)).
 - **Status:** last push, bundle and schema version, queue depth, last error, rejected rows, the
   upgrade advice (a banner at `upgrade_soon` and `over`, §8), "reinstall", "renew the token" and
   "disconnect" — the last shows what could not be removed and the link to revoke the working
@@ -943,5 +944,8 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   sha256 digest), `Link: …rel="api-catalog", …rel="describedby"` on every page but the app, and
   `Content-Signal: search=yes, ai-input=yes, ai-train=yes` in robots.txt. The zone's Browser
   Integrity Check is off: it refused `Python-urllib` on every path, `/v1` included.
+- **Brand** ([ADR 0016](./decisions/0016-brand-and-report-charts.md)): the 301.st components in
+  violet (`#4D48ED`, from the logo), the clx mark in the header, `favicon.svg`, `favicon.ico`
+  (16/32/48) and `apple-touch-icon.png`.
 - **Planned** (the product plan, in parts): the app's design system (drawers, dialogs, navigation);
   the content pages and SEO (OG cards, JSON-LD).

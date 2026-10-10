@@ -25,6 +25,11 @@
   --blue-300: #408BC9;
   --blue-neon: #4DA3FF;
 
+  /* Violets (clx brand, from the logo) */
+  --violet-900: #3A34C8;
+  --violet-700: #4D48ED;
+  --violet-300: #8B87FF;
+
   /* Oranges (Cloudflare-ish family) */
   --orange-500: #F48120;
   --orange-700: #F38020;
@@ -197,8 +202,8 @@
      the browser to load a library and build it at runtime would buy nothing.
      Regenerate with:
        node -e "global.window={};require('trigons-lite/trigons-lite.min.js');
-                console.log(window.TrigonsLite.pattern({size:44,color:'#4DA3FF',opacity:0.07}))" */
-  --mesh-tile: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%20viewBox%3D%220%200%2044%2044%22%3E%3Cpath%20d%3D%22M0%200L44%200M0%2044L44%2044M0%200L0%2044M44%200L44%2044M44%200L0%2044%22%20fill%3D%22none%22%20stroke%3D%22%234DA3FF%22%20stroke-width%3D%221%22%20stroke-opacity%3D%220.07%22%2F%3E%3C%2Fsvg%3E");
+                console.log(window.TrigonsLite.pattern({size:44,color:'#8B87FF',opacity:0.07}))" */
+  --mesh-tile: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%20viewBox%3D%220%200%2044%2044%22%3E%3Cpath%20d%3D%22M0%200L44%200M0%2044L44%2044M0%200L0%2044M44%200L44%2044M44%200L0%2044%22%20fill%3D%22none%22%20stroke%3D%22%238B87FF%22%20stroke-width%3D%221%22%20stroke-opacity%3D%220.07%22%2F%3E%3C%2Fsvg%3E");
 
   /* Status panel fill strength — semantic corner glow over a neutral surface.
      Kept low so the status colour signals state without dominating the fill. */
@@ -228,12 +233,14 @@
   --shadow-subtle: 0 3px 6px  color-mix(in srgb, var(--gray-700) 12%, var(--blue-900) 10%),
                    0 1px 4px  color-mix(in srgb, var(--gray-700) 16%, var(--blue-900) 8%);
   /*
-    Primary uses blue-500:
-    - #3475C0 with white text ≈ 4.72:1 (AA for normal text).
+    Primary uses violet-700:
+    - #4D48ED with white text ≈ 6.06:1 (AA); on #111 only ≈ 3.12:1, so text
+      and the dark-theme logo use violet-300 (≈ 6.30:1 on #111).
   */
-  --primary: #3475C0;
-  --primary-soft: rgba(77, 163, 255, 0.1);
-  --primary-hover: #4DA3FF;
+  --primary: var(--violet-700);
+  --primary-soft: rgba(139, 135, 255, 0.12);
+  --primary-hover: var(--violet-300);
+  --logo: var(--violet-300); /* the mark on dark surfaces */
 
   --ok: var(--success);
 
@@ -252,7 +259,7 @@
 
   --input-bg: rgba(15, 16, 22, 0.9);
   --input-border: var(--border-strong);
-  --input-border-focus: rgba(77, 163, 255, 0.8);
+  --input-border-focus: rgba(139, 135, 255, 0.8);
 
   /* Search-hit highlight (<mark>) — warm amber, distinct from blue hover/selection */
   --mark-bg: rgba(240, 180, 70, 0.26);
@@ -278,7 +285,7 @@
 
   /* Same tile, darker stroke: a light-blue line is invisible on white. See the
      dark block for the regenerating command. */
-  --mesh-tile: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%20viewBox%3D%220%200%2044%2044%22%3E%3Cpath%20d%3D%22M0%200L44%200M0%2044L44%2044M0%200L0%2044M44%200L44%2044M44%200L0%2044%22%20fill%3D%22none%22%20stroke%3D%22%230055DC%22%20stroke-width%3D%221%22%20stroke-opacity%3D%220.05%22%2F%3E%3C%2Fsvg%3E");
+  --mesh-tile: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%20viewBox%3D%220%200%2044%2044%22%3E%3Cpath%20d%3D%22M0%200L44%200M0%2044L44%2044M0%200L0%2044M44%200L44%2044M44%200L0%2044%22%20fill%3D%22none%22%20stroke%3D%22%234D48ED%22%20stroke-width%3D%221%22%20stroke-opacity%3D%220.05%22%2F%3E%3C%2Fsvg%3E");
 
   /* Status panel fill — softer on light so the surface stays near-neutral
      (not a saturated alert plate). */
@@ -304,12 +311,13 @@
   --shadow-lg: var(--shadow-lg-light);
 
   /*
-    Primary uses blue-700:
-    - #0055DC with white text ≈ 6.30:1 (AA).
+    Primary uses violet-700:
+    - #4D48ED with white text ≈ 6.06:1 (AA).
   */
-  --primary: #0055DC;
-  --primary-soft: rgba(0, 85, 220, 0.08);
-  --primary-hover: #003682; /* even higher contrast */
+  --primary: var(--violet-700);
+  --primary-soft: rgba(77, 72, 237, 0.08);
+  --primary-hover: var(--violet-900); /* ≈ 8.38:1 on #FFF */
+  --logo: var(--violet-700);
 
   --brand: var(--primary);
 
@@ -339,7 +347,7 @@
   --mark-bg: rgba(255, 209, 64, 0.55);
   --mark-fg: var(--text-main);
   --input-border: var(--border-strong);
-  --input-border-focus: rgba(0, 85, 220, 0.8);
+  --input-border-focus: rgba(77, 72, 237, 0.8);
 
   --nav-bg: rgba(255, 255, 255, 0.92);
   --sidebar-bg: #FFFFFF;

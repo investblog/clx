@@ -33,7 +33,7 @@ function header(page: PageDef, locale: Locale): string {
   const s = STRINGS[locale];
   return `<header class="topbar">
   <div class="topbar__inner">
-    <p class="brand"><a href="${pathFor('/', locale)}">${icon('analytics', 'icon brand__mark')}<span>clx</span></a></p>
+    <p class="brand"><a href="${pathFor('/', locale)}">${icon('clx', 'icon brand__mark')}<span>clx</span></a></p>
     ${langSwitch(page, locale)}
     <button type="button" class="btn-close" id="theme" aria-label="${escapeHtml(s.theme)}" title="${escapeHtml(s.theme)}">${icon('theme-light-dark')}</button>
     <a class="btn btn--ghost btn--sm" href="${appPathFor(locale)}">${escapeHtml(s.signIn)}</a>
@@ -62,7 +62,9 @@ export function layout(input: LayoutInput): string {
     page.indexed
       ? [`<link rel="canonical" href="${urlFor(page.slug, locale)}" />`, ...alternatesFor(page.slug, page.locales).map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}" />`)].join('\n    ')
       : '<meta name="robots" content="noindex" />',
+    '<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml" />',
+    '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
     '<link rel="stylesheet" href="/app.css" />',
     '<script src="/theme.js"></script>',
     '<script src="/site.js" defer></script>',
