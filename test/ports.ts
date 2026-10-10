@@ -9,7 +9,7 @@ const FREE_ENOUGH = 1_500; // TIME_WAIT sockets a full run can start on top of (
 const CAP = 180_000;
 
 function timeWait(): number {
-  return execSync('netstat -ano -p tcp', { encoding: 'utf8' }).split('\n').filter((l) => l.includes('TIME_WAIT')).length;
+  return execSync('netstat -ano -p tcp', { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter((l) => l.includes('TIME_WAIT')).length;
 }
 
 export default async function setup(): Promise<void> {
