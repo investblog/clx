@@ -17,7 +17,6 @@ export interface Strings {
     start: string;
     source: string;
     note: string;
-    demo: { period: string; tiles: [string, string, string, string]; views: string; visitors: string; sourcesTitle: string; sources: [string, string, string, string, string]; devicesTitle: string; devices: [string, string]; note: string };
     how: { h2: string; steps: [string, string][] };
     tools: { h2: string; items: { h: string; p: string; points: string[] }[] };
     why: { h2: string; items: [string, string][] };
@@ -26,6 +25,24 @@ export interface Strings {
     faq: { h2: string; items: [string, string][] };
     final: string;
   };
+  /** The example report (site/demo.ts). */
+  demo: {
+    period: string;
+    tiles: [string, string, string, string];
+    views: string;
+    visitors: string;
+    sourcesTitle: string;
+    sources: [string, string, string, string, string];
+    devicesTitle: string;
+    devices: [string, string];
+    pagesTitle: string;
+    pages: [string, string, string, string, string];
+    countriesTitle: string;
+    countries: [string, string, string, string, string];
+    note: string;
+  };
+  /** The header's menu: a page's `nav` key → its name; `menu` names the phone's menu button. */
+  nav: { analytics: string; links: string; menu: string };
   notFound: { title: string; text: string; back: string };
   foot: { agents: string; api: string; privacy: string; terms: string; abuse: string; source: string };
 }
@@ -43,17 +60,6 @@ const en: Strings = {
     start: 'Start free',
     source: 'Source code',
     note: 'Free plan, no card. Open source under AGPL-3.0.',
-    demo: {
-      period: 'Last 14 days',
-      tiles: ['Visitors', 'Views', 'Per visitor', 'Bot share'],
-      views: 'Views',
-      visitors: 'Visitors',
-      sourcesTitle: 'Sources',
-      sources: ['Direct', 'google.com', 't.me', 'github.com', 'Other'],
-      devicesTitle: 'Devices',
-      devices: ['Phone', 'Computer'],
-      note: 'Example data, drawn by the same charts as the report in the app.',
-    },
     how: {
       h2: 'How it works',
       steps: [
@@ -109,8 +115,24 @@ const en: Strings = {
         ['Can I read the code?', 'All of it, on GitHub, under AGPL-3.0.'],
       ],
     },
-    final: 'Count visits and shorten links — the raw data stays in your account',
+    final: 'Count visits and shorten links — the details stay in your account',
   },
+  demo: {
+    period: 'Last 14 days',
+    tiles: ['Visitors', 'Views', 'Per visitor', 'Bot share'],
+    views: 'Views',
+    visitors: 'Visitors',
+    sourcesTitle: 'Sources',
+    sources: ['Direct', 'google.com', 't.me', 'github.com', 'Other'],
+    devicesTitle: 'Devices',
+    devices: ['Phone', 'Computer'],
+    pagesTitle: 'Pages',
+    pages: ['/', '/pricing', '/blog/cloudflare-d1-limits', '/docs/install', 'Other'],
+    countriesTitle: 'Countries',
+    countries: ['United States', 'Germany', 'United Kingdom', 'Brazil', 'Other'],
+    note: 'Example data, drawn by the same charts as the report in the app.',
+  },
+  nav: { analytics: 'Analytics', links: 'Short links', menu: 'Menu' },
   notFound: { title: 'Page not found', text: 'There is no such page on clx.cx.', back: 'To the home page' },
   foot: { agents: 'For AI agents', api: 'API', privacy: 'Privacy', terms: 'Terms', abuse: 'Abuse', source: 'Source code' },
 };
@@ -128,17 +150,6 @@ const ru: Strings = {
     start: 'Начать бесплатно',
     source: 'Исходный код',
     note: 'Бесплатный тариф, без карты. Открытый код под AGPL-3.0.',
-    demo: {
-      period: 'Последние 14 дней',
-      tiles: ['Посетители', 'Просмотры', 'На посетителя', 'Доля ботов'],
-      views: 'Просмотры',
-      visitors: 'Посетители',
-      sourcesTitle: 'Источники',
-      sources: ['Прямые заходы', 'google.com', 't.me', 'github.com', 'Прочее'],
-      devicesTitle: 'Устройства',
-      devices: ['Телефон', 'Компьютер'],
-      note: 'Пример данных — нарисован теми же графиками, что и отчёт в кабинете.',
-    },
     how: {
       h2: 'Как это работает',
       steps: [
@@ -194,8 +205,24 @@ const ru: Strings = {
         ['Можно посмотреть код?', 'Весь, на GitHub, под AGPL-3.0.'],
       ],
     },
-    final: 'Считайте посещения и сокращайте ссылки — сырые данные остаются в вашем аккаунте',
+    final: 'Считайте посещения и сокращайте ссылки — подробности остаются в вашем аккаунте',
   },
+  demo: {
+    period: 'Последние 14 дней',
+    tiles: ['Посетители', 'Просмотры', 'На посетителя', 'Доля ботов'],
+    views: 'Просмотры',
+    visitors: 'Посетители',
+    sourcesTitle: 'Источники',
+    sources: ['Прямые заходы', 'google.com', 't.me', 'github.com', 'Прочее'],
+    devicesTitle: 'Устройства',
+    devices: ['Телефон', 'Компьютер'],
+    pagesTitle: 'Страницы',
+    pages: ['/', '/pricing', '/blog/cloudflare-d1-limits', '/docs/install', 'Прочее'],
+    countriesTitle: 'Страны',
+    countries: ['Россия', 'Казахстан', 'Германия', 'Беларусь', 'Прочие'],
+    note: 'Пример данных — нарисован теми же графиками, что и отчёт в кабинете.',
+  },
+  nav: { analytics: 'Аналитика', links: 'Короткие ссылки', menu: 'Меню' },
   notFound: { title: 'Страница не найдена', text: 'Такой страницы на clx.cx нет.', back: 'На главную' },
   foot: { agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
 };

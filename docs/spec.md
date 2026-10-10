@@ -918,13 +918,15 @@ that adds a site and embeds its counter at build time.
 ## 16. The site and the app
 
 clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site-and-app.md)).
-- **Addresses.** The site at the root: `/`, `/privacy`, `/terms`, `/abuse` in English, the same
+- **Addresses.** The site at the root: `/`, `/analytics`, `/short-links`, `/privacy`, `/terms`, `/abuse` in English, the same
   under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` (and
   `/ru/app`, ADR 0015) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
-  canonical and hreflang (with `x-default` on English), the sitemap, robots.txt and the footer all
-  derive from it. The language comes from the address only.
+  canonical and hreflang (with `x-default` on English), the sitemap, robots.txt, the header's menu
+  and the footer all derive from it. The language comes from the address only. On a phone the menu
+  folds behind a button only when `/theme.js` ran (it marks the page and opens the menu); without
+  scripts it is a row of links.
 - **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`) and the site's script
   (`public/site.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
   result before every deploy. Nothing generated is committed.

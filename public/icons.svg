@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg">
 <!-- Icons from the 301.st UI sprite. -->
+<symbol id="i-mono-menu" viewBox="0 0 20 20"><path d="M2 4h16v2H2zm0 5h16v2H2zm0 5h16v2H2z" fill="currentColor"/></symbol>
 <!-- The clx mark, generated from one geometry with the logo. -->
 <symbol id="i-mono-clx" viewBox="0 0 100 100"><path d="M64 5H91Q95 5 95 9V36Q95 38 93.6 39.4L39.4 93.6Q38 95 36 95H9Q5 95 5 91V64Q5 62 6.4 60.6L60.6 6.4Q62 5 64 5Z" fill="none" stroke="currentColor" stroke-width="10" stroke-linejoin="round"/><g fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M46.58 1H20.34L1 20.34V46.58L9 38.58V23.66L23.66 9H38.58Z"/><path d="M46.58 1H20.34L1 20.34V46.58L9 38.58V23.66L23.66 9H38.58Z" transform="rotate(180 50 50)"/></g></symbol>
 <symbol id="i-mono-eye" viewBox="0 0 24 24"><path fill="currentColor" d="M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5 5 5 0 0 1 5-5 5 5 0 0 1 5 5 5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5"/></symbol>

@@ -2,8 +2,10 @@
 // the generator prints from them.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SITE_PAGES } from '../site/pages.ts';
+import { generateMatrix } from '../src/qr/generate';
 import { alternatesFor, fileFor, pathFor, urlFor } from '../site/urls.ts';
 
 describe('addresses', () => {
@@ -77,6 +79,72 @@ describe('generated pages', () => {
       expect(description.length).toBeGreaterThanOrEqual(120);
       expect(description.length).toBeLessThanOrEqual(160);
     }
+  });
+
+  it('the tools’ pages: in the menu of every page, marked where they are; sign-up, lengths, nothing inline', () => {
+    const tools = SITE_PAGES.filter((p) => p.nav);
+    expect(tools.map((p) => p.slug)).toEqual(['/analytics', '/short-links']);
+    for (const l of ['en', 'ru'] as const) {
+      expect(read(fileFor('/', l))).toMatch(new RegExp(tools.map((p) => `href="${pathFor(p.slug, l)}"`).join('[\\s\\S]*'), 'u'));
+      for (const p of tools) {
+        const html = read(fileFor(p.slug, l));
+        expect(html).toContain(`href="${pathFor(p.slug, l)}" aria-current="page"`);
+        expect(html).toContain(`#/signup"`);
+        expect(html.match(/<figure class="demo" aria-hidden="true">[\s\S]*?<\/figure>/u)?.[0]).not.toMatch(/style=|<style|<script/u);
+        expect(html.match(/<title>([^<]*)<\/title>/u)![1]!.length).toBeLessThanOrEqual(60);
+        const description = html.match(/<meta name="description" content="([^"]*)"/u)![1]!.replaceAll('&#39;', "'");
+        expect(description.length, `${l}${p.slug}`).toBeGreaterThanOrEqual(120);
+        expect(description.length, `${l}${p.slug}`).toBeLessThanOrEqual(160);
+      }
+    }
+  });
+
+  it('the menu: beside the brand, its button last in the header; only a page marked js folds it on a phone', () => {
+    const html = read('analytics.html');
+    const header = html.match(/<header[\s\S]*?<\/header>/u)![0];
+    expect(header.indexOf('id="site-nav"')).toBeLessThan(header.indexOf('id="theme"'));
+    expect(header.indexOf('id="site-nav-toggle"')).toBeGreaterThan(header.indexOf('href="/app"'));
+    expect(header).toMatch(/id="site-nav-toggle" aria-controls="site-nav" aria-expanded="false"/u);
+    // Folded only under .js (public/theme.js marks the page): without scripts the links stay a row.
+    // Every rule that hides the menu (the source, ui/css/app.css) is a .js one.
+    const css = fs.readFileSync('ui/css/app.css', 'utf8');
+    const hiding = [...css.matchAll(/([^{}]*)\{[^}]*\bdisplay:none/gu)].map((m) => m[1]!.trim()).filter((sel) => /\.site-nav(?![\w-])/u.test(sel));
+    expect(hiding).toEqual(['.js .site-nav']);
+  });
+
+  it('theme.js marks the page and opens the menu: false → true → false, focus into the menu', () => {
+    // A stand-in for the few DOM calls theme.js makes; the vitest suite runs in node, without a DOM.
+    let click: ((e: { target: unknown }) => void) | undefined;
+    const classes = new Set<string>();
+    const attrs = new Map<string, string>([['aria-expanded', 'false']]);
+    let navOpen = false;
+    let focused = false;
+    const button = { getAttribute: (k: string) => attrs.get(k) ?? null, setAttribute: (k: string, v: string) => attrs.set(k, v), closest: (sel: string) => (sel === '#site-nav-toggle' ? button : null) };
+    class Element {}
+    Object.setPrototypeOf(button, Element.prototype);
+    const nav = { toggleAttribute: (_k: string, on: boolean) => (navOpen = on), querySelector: () => ({ focus: () => (focused = true) }) };
+    const document = {
+      documentElement: { classList: { add: (c: string) => classes.add(c) }, dataset: {} },
+      addEventListener: (type: string, fn: (e: { target: unknown }) => void) => type === 'click' && (click = fn),
+      getElementById: (id: string) => (id === 'site-nav' ? nav : null),
+    };
+    vm.runInNewContext(read('theme.js'), { document, Element, localStorage: { getItem: () => null } });
+    expect(classes.has('js')).toBe(true);
+    click!({ target: button });
+    expect([attrs.get('aria-expanded'), navOpen, focused]).toEqual(['true', true, true]);
+    click!({ target: button });
+    expect([attrs.get('aria-expanded'), navOpen]).toEqual(['false', false]);
+    click!({ target: {} }); // a click elsewhere changes nothing
+    expect(attrs.get('aria-expanded')).toBe('false');
+  });
+
+  it('the example link’s QR code is the one the app would make for its address', () => {
+    const svg = read('short-links.html').match(/<div class="link-card__qr">(<svg[\s\S]*?<\/svg>)/u)![1]!;
+    const drawn = new Set([...svg.matchAll(/M(\d+) (\d+)h1v1h-1z/gu)].map((m) => `${Number(m[1]) - 4},${Number(m[2]) - 4}`));
+    const { data } = generateMatrix('https://go.example.com/spring?q', { ecc: 'M' });
+    const expected = new Set(data.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`${x},${y}`] : []))));
+    expect(drawn.size).toBeGreaterThan(100);
+    expect([...drawn].sort()).toEqual([...expected].sort());
   });
 
   it('the app has a page per language, which sets the language until sign-in (ADR 0015)', () => {

@@ -10,6 +10,7 @@ import { apiBody, apiJson, loadOpenapi } from './api.ts';
 import { ALL_LOCALES, LOCALES, ORIGIN, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
+import { analyticsPage, linksPage } from './products.ts';
 import { escapeHtml, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
 
@@ -29,13 +30,15 @@ function notFound(locale: Locale): { title: string; body: string } {
   return { title: `${s.title} — clx`, body: `<section class="narrow">\n<h1 class="h3">${escapeHtml(s.title)}</h1>\n<p>${escapeHtml(s.text)}</p>\n<p><a href="${pathFor('/', locale)}">${escapeHtml(s.back)}</a></p>\n</section>` };
 }
 
+const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage };
+
 const AGENT_PAGES: Record<string, () => { title: string; description: string; body: string }> = {
   '/agents': () => ({ title: 'clx for AI agents', description: "How an AI agent sets up clx for a person: connect their Cloudflare account, add sites and embed the counter, make short links and QR codes, read reports — through the API.", body: agentsBody() }),
   '/api': () => ({ title: 'clx management API', description: 'The clx management API: Cloudflare accounts, sites and counter snippets, short links with rules and QR codes, reports. Authentication, idempotency, errors and every endpoint.', body: apiBody(openapi.doc) }),
 };
 
 function render(page: PageDef, locale: Locale): string {
-  const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (AGENT_PAGES[page.slug]?.() ?? null);
+  const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? null);
   if (!content) throw new Error(`no template for ${page.slug}`);
   return layout({ page, locale, ...content });
 }

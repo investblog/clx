@@ -1,74 +1,11 @@
-// The home page (docs/spec.md §16): the hero, an example report, how it works, why clx, the two tools,
-// the API, the plans in short, a few questions. The example report is drawn here, at build time, by
-// the same library as the app's report (ADR 0016), so the page carries plain SVG and no script; it is
-// drawn once per theme and the stylesheet shows the one of the current theme.
-import Rank from 'affiliate-charts/charts-rank.js';
-import Series from 'affiliate-charts/charts-series.js';
-import Share from 'affiliate-charts/charts-share.js';
-import Spark from 'affiliate-charts/charts-spark.js';
-import { LOCALES, REPO, type Locale } from './pages.ts';
+// The home page (docs/spec.md §16): the hero, an example report, how it works, the two tools, why
+// clx, the API, the plans in short, a few questions. The example report is drawn at build time
+// (site/demo.ts, ADR 0016).
+import { REPO, type Locale } from './pages.ts';
+import { demoReport } from './demo.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml } from './layout.ts';
 import { appPathFor, pathFor } from './urls.ts';
-
-const BRAND = '#4D48ED'; // --violet-700, as in the app (ui/report.ts)
-const THEMES = ['dark', 'light'] as const;
-/** The series' left gutter (% of its width) keeps the axis labels off the columns; a static page
- *  cannot measure its width, so the series is drawn for a wide card (~1000 px) and a phone (~330 px)
- *  and the stylesheet shows one. */
-const SIZES = [['wide', 6], ['narrow', 16]] as const;
-
-/** Fourteen days of a made-up site: a weekly rhythm, a slow rise, a spike — the same every build. */
-function demoDays(): { views: number; visitors: number; bots: number }[] {
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  return Array.from({ length: 14 }, (_, i) => {
-    const weekday = (i + 3) % 7;
-    const base = 1700 + i * 45 + (weekday >= 5 ? -520 : 0) + (i === 10 ? 1300 : 0);
-    const views = Math.round(base + rnd() * 380);
-    return { views, visitors: Math.round(views / (2.2 + rnd() * 0.5)), bots: Math.round(170 + rnd() * 120) };
-  });
-}
-
-/** A chart in both themes; the stylesheet shows the one of the page's theme (`.themed`). */
-const themed = (cls: string, draw: (theme: 'light' | 'dark') => string) => THEMES.map((t) => `<div class="${cls} themed--${t}">${draw(t)}</div>`).join('');
-
-function demo(locale: Locale): string {
-  const s = STRINGS[locale].home.demo;
-  const nf = new Intl.NumberFormat(LOCALES[locale].htmlLang);
-  const num = (v: number) => nf.format(v);
-  const days = demoDays();
-  const sum = (k: 'views' | 'visitors' | 'bots') => days.reduce((a, d) => a + d[k], 0);
-  // The fourteen days end yesterday (UTC) of the build, so "last 14 days" stays true.
-  const today = new Date();
-  const date = (i: number) => {
-    const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 14 + i));
-    return `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-  };
-  const o = (theme: 'light' | 'dark') => ({ brand: BRAND, theme, classPrefix: 'cx', format: num });
-  const views = sum('views');
-  const visitors = sum('visitors');
-  const bots = sum('bots');
-  const tiles: { label: string; value: string; trend: number[] }[] = [
-    { label: s.tiles[0], value: num(visitors), trend: days.map((d) => d.visitors) },
-    { label: s.tiles[1], value: num(views), trend: days.map((d) => d.views) },
-    { label: s.tiles[2], value: (views / visitors).toLocaleString(LOCALES[locale].htmlLang, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), trend: days.map((d) => d.views / d.visitors) },
-    { label: s.tiles[3], value: `${Math.round((bots / (bots + views)) * 100)}%`, trend: days.map((d) => d.bots / (d.bots + d.views)) },
-  ];
-  const points = days.map((d, i) => ({ x: date(i), values: [d.views, d.visitors], display: [num(d.views), num(d.visitors)] }));
-  const sources = [4120, 3310, 1290, 760, 540].map((n, i) => ({ label: s.sources[i]!, value: n, display: `${num(n)} · ${Math.round((n / views) * 100)}%` }));
-  const devices = [12840, 8930].map((n, i) => ({ label: s.devices[i]!, value: n, display: num(n) }));
-  return `<figure class="demo" aria-hidden="true">
-  <div class="demo__bar"><span class="demo__dots"><i></i><i></i><i></i></span><span class="demo__site">example.com</span><span class="demo__period">${escapeHtml(s.period)}</span></div>
-  <div class="demo__tiles">${tiles.map((t) => themed('demo__tile', (theme) => Spark.tile(t, o(theme)))).join('')}</div>
-  <div class="demo__series">${SIZES.map(([size, gutter]) => `<div class="demo__size--${size}">${themed('demo__chart', (theme) => Series.series(points, { ...o(theme), names: [s.views, s.visitors], form: 'columns', second: 'tint', gutter }))}</div>`).join('')}</div>
-  <div class="demo__row">
-    <div class="demo__panel"><p class="demo__h">${escapeHtml(s.sourcesTitle)}</p>${themed('demo__chart', (theme) => Rank.rank(sources, o(theme)))}</div>
-    <div class="demo__panel"><p class="demo__h">${escapeHtml(s.devicesTitle)}</p>${themed('demo__chart', (theme) => Share.share(devices, { ...o(theme), form: 'donut' }))}</div>
-  </div>
-</figure>
-<p class="demo__note">${escapeHtml(s.note)}</p>`;
-}
 
 export function home(locale: Locale): { title: string; description: string; body: string } {
   const s = STRINGS[locale].home;
@@ -82,7 +19,7 @@ export function home(locale: Locale): { title: string; description: string; body
   <p class="hero__note">${escapeHtml(s.note)}</p>
 </section>
 <section class="home-demo">
-${demo(locale)}
+${demoReport(locale, 'sources')}
 </section>
 <section class="home-section">
   <h2>${escapeHtml(s.how.h2)}</h2>

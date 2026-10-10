@@ -32,6 +32,8 @@ export interface PageDef {
   locales: readonly Locale[];
   /** Key in `Strings.foot`: the page is linked from the footer. */
   foot?: 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
+  /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
+  nav?: 'analytics' | 'links';
   indexed: boolean;
   /** A legal text: its body is `site/legal/<locale><slug>.html`. */
   legal?: boolean;
@@ -44,6 +46,9 @@ export interface PageDef {
 
 export const SITE_PAGES: readonly PageDef[] = [
   { slug: '/', locales: ALL_LOCALES, indexed: true, priority: 1.0, changefreq: 'weekly', markdown: true },
+  // The two tools (site/products.ts).
+  { slug: '/analytics', locales: ALL_LOCALES, nav: 'analytics', indexed: true, priority: 0.9, changefreq: 'monthly' },
+  { slug: '/short-links', locales: ALL_LOCALES, nav: 'links', indexed: true, priority: 0.9, changefreq: 'monthly' },
   // For agents and integrators; English only — the reader is a program (site/agents.ts, site/api.ts).
   { slug: '/agents', locales: ['en'], foot: 'agents', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
@@ -59,6 +64,9 @@ export const STATIC_FILES: readonly string[] = ['_headers', 'favicon.svg', 'favi
 
 /** The footer of a language: its own pages, and the English-only ones (the agent docs) in English. */
 export const footPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.foot && (p.locales.includes(locale) || p.locales.length === 1));
+
+/** The header's menu of a language. */
+export const navPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.nav && p.locales.includes(locale));
 
 /** The markdown file of a page: `index.md`, `agents.md`. */
 export const markdownFile = (slug: string): string => (slug === '/' ? 'index.md' : `${slug.slice(1)}.md`);

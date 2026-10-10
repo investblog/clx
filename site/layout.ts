@@ -1,7 +1,7 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import { LOCALES, REPO, footPages, type Locale, type PageDef } from './pages.ts';
+import { LOCALES, REPO, footPages, navPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { alternatesFor, appPathFor, pathFor, urlFor } from './urls.ts';
 
@@ -29,14 +29,30 @@ function langSwitch(page: PageDef, locale: Locale): string {
   return items.join('');
 }
 
+/** The menu: the table's `nav` pages, printed in the page, beside the brand. On a phone it folds behind
+ *  the menu button — last in the header, where it shows — only once /theme.js has marked the page `js`
+ *  (that file also opens it and moves focus into it); without scripts it stays a row of links. */
+function nav(page: PageDef, locale: Locale): { menu: string; button: string } {
+  const s = STRINGS[locale];
+  const items = navPages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}"${p.slug === page.slug ? ' aria-current="page"' : ''}>${escapeHtml(s.nav[p.nav!])}</a>`);
+  if (!items.length) return { menu: '', button: '' };
+  return {
+    menu: `<nav class="site-nav" id="site-nav" aria-label="${escapeHtml(s.nav.menu)}">${items.join('')}</nav>`,
+    button: `<button type="button" class="btn-close site-nav__toggle" id="site-nav-toggle" aria-controls="site-nav" aria-expanded="false" aria-label="${escapeHtml(s.nav.menu)}">${icon('menu')}</button>`,
+  };
+}
+
 function header(page: PageDef, locale: Locale): string {
   const s = STRINGS[locale];
+  const { menu, button } = nav(page, locale);
   return `<header class="topbar">
   <div class="topbar__inner">
     <p class="brand"><a href="${pathFor('/', locale)}">${icon('clx', 'icon brand__mark')}<span>clx</span></a></p>
+    ${menu}
     ${langSwitch(page, locale)}
     <button type="button" class="btn-close" id="theme" aria-label="${escapeHtml(s.theme)}" title="${escapeHtml(s.theme)}">${icon('theme-light-dark')}</button>
     <a class="btn btn--ghost btn--sm" href="${appPathFor(locale)}">${escapeHtml(s.signIn)}</a>
+    ${button}
   </div>
 </header>`;
 }
