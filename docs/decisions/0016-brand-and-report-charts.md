@@ -36,6 +36,10 @@ lists with CSS bars.
   inline styles, so it works under the app's CSP. Every chart is drawn again when the theme
   changes; a ranking or a donut carries its rows as text in its description for screen readers.
   Its licence goes with the bundle, in full, at the end of `public/app.js`.
+- **The home page's example report** is drawn by the same library at build time, in Node
+  (`site/home.ts`): plain SVG, no script on the page. A static page knows neither its theme nor its
+  width, so each chart is drawn for both themes and the series also for a wide card and a phone;
+  the stylesheet shows one. The example's 14 days end the day before the build.
 
 **Rejected.** Keeping the 301 blue (clx would read as a 301 page). The opposite hue for the second
 series (the library's default): for violet it is olive, and visitors are a part of views, not a

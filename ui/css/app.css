@@ -118,8 +118,58 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .hero{margin:var(--space-6) 0}
 .hero h1{font-size:var(--fs-2xl);line-height:1.2;margin:0 0 var(--space-4)}
 .lead{font-size:var(--fs-lg);color:var(--text-muted)}
-.points{padding-left:var(--space-5);margin:var(--space-4) 0}
-.points li{margin-bottom:var(--space-2)}
+/* The home page (site/home.ts): a centred hero, the example report, then sections of cards. */
+.hero--home{max-width:820px;margin:var(--space-6) auto var(--space-5);text-align:center}
+.hero--home h1{font-size:clamp(32px,5vw,52px);line-height:1.1;letter-spacing:-.02em}
+.hero--home .actions{justify-content:center;gap:var(--space-3);margin:var(--space-5) 0 var(--space-3)}
+.hero__note{font-size:var(--fs-sm);color:var(--text-subtle)}
+.home-demo{position:relative;max-width:1040px;margin:0 auto}
+.home-demo::before{content:"";position:absolute;inset:-8% -4% 20%;z-index:-1;background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 28%,transparent),transparent);filter:blur(40px)}
+.demo{margin:0;padding-bottom:var(--space-4);border:1px solid var(--border-subtle);border-radius:var(--radius-xl);background:var(--bg-elevated);box-shadow:var(--shadow-lg);overflow:hidden}
+.demo__bar{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
+.demo__dots{display:inline-flex;gap:6px}
+.demo__dots i{width:10px;height:10px;border-radius:50%;background:var(--border-strong)}
+.demo__site{font-weight:var(--fw-semibold);color:var(--text-main)}
+.demo__period{margin-left:auto}
+.demo__tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3);padding:var(--space-4)}
+.demo__tile,.demo__panel{min-width:0;padding:var(--space-3);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg)}
+.demo__series{padding:0 var(--space-4)}
+.demo__row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:var(--space-3);padding:var(--space-4) var(--space-4) 0}
+.demo__h{margin:0 0 var(--space-2);font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-muted)}
+.demo__chart{min-width:0;color:var(--text-main)}
+.demo .cx-tick{stroke:none}
+.demo__size--narrow{display:none}
+.demo__note{margin:var(--space-3) 0 0;text-align:center;font-size:var(--fs-sm);color:var(--text-subtle)}
+/* A chart drawn at build time for each theme: only the current theme's copy shows. */
+.themed--light,:root[data-theme="light"] .themed--dark{display:none}
+:root[data-theme="light"] .themed--light{display:block}
+.home-section{max-width:1040px;margin:calc(var(--space-6) * 1.5) auto}
+.home-section>h2{margin:0 0 var(--space-5);font-size:clamp(24px,3vw,32px);text-align:center}
+.home-section h3{margin:0 0 var(--space-2);font-size:var(--fs-lg)}
+.home-section p{color:var(--text-muted)}
+.home-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4);margin:0;padding:0;list-style:none;counter-reset:step}
+.home-steps li{padding:var(--space-5);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg-elevated);counter-increment:step}
+.home-steps li::before{content:counter(step);display:grid;place-items:center;width:32px;height:32px;margin-bottom:var(--space-3);border-radius:50%;background:var(--primary);color:var(--btn-text-on-dark);font-weight:var(--fw-semibold)}
+.tools,.features,.plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-4)}
+.plans{max-width:760px;margin:0 auto var(--space-3)}
+.tool,.feature,.plan{padding:var(--space-5)}
+.ticks{margin:var(--space-3) 0 0;padding:0;list-style:none}
+.ticks li{margin-bottom:var(--space-2)}
+.ticks li::before{content:"✓";margin-right:var(--space-2);color:var(--primary-hover);font-weight:var(--fw-bold)}
+.home-section .plan__price{font-size:var(--fs-xl);font-weight:var(--fw-bold);color:var(--text-main)}
+.home-section>.muted{text-align:center}
+.home-api{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-5);align-items:center}
+.home-api h2{margin-top:0}
+.code{margin:0;padding:var(--space-4);border-radius:var(--radius-lg);background:var(--bg-soft);overflow-x:auto;font:13px/1.6 var(--font-mono)}
+.code code{font-family:inherit;white-space:pre}
+.faq{max-width:760px;margin:0 auto}
+.faq details{padding:var(--space-3) 0;border-bottom:1px solid var(--border-subtle)}
+.faq summary{cursor:pointer;font-weight:var(--fw-semibold)}
+.faq details p{margin:var(--space-2) 0 0}
+.home-final{max-width:820px;margin:calc(var(--space-6) * 1.5) auto;padding:var(--space-6) var(--space-4);border-radius:var(--radius-xl);background:radial-gradient(ellipse at top,color-mix(in srgb,var(--primary) 22%,transparent),transparent 70%),var(--bg-elevated);text-align:center}
+.home-final h2{margin:0 0 var(--space-4);font-size:clamp(22px,3vw,30px)}
+.home-final .actions{justify-content:center}
+@media (max-width:720px){.demo__tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.demo__row,.home-steps,.tools,.features,.plans,.home-api{grid-template-columns:minmax(0,1fr)}.demo__period,.demo__size--wide{display:none}.demo__size--narrow{display:block}}
 /* The docs for agents (site/agents.ts, site/api.ts): /agents, /api. */
 .doc{max-width:820px;margin:var(--space-5) 0}
 .doc h1{font-size:var(--fs-2xl);line-height:1.2;margin:0 0 var(--space-4)}

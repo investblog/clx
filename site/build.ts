@@ -9,23 +9,13 @@ import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, skillMd } from './agent
 import { apiBody, apiJson, loadOpenapi } from './api.ts';
 import { ALL_LOCALES, LOCALES, ORIGIN, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
+import { home } from './home.ts';
 import { escapeHtml, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
 
 const OUT = 'public';
 const here = import.meta.dirname;
 const openapi = loadOpenapi(path.join(here, '..'));
-
-function home(locale: Locale): { title: string; description: string; body: string } {
-  const s = STRINGS[locale].home;
-  const body = `<section class="hero narrow">
-  <h1>${escapeHtml(s.h1)}</h1>
-  <p class="lead">${escapeHtml(s.lead)}</p>
-  <ul class="points">${s.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
-  <p class="actions"><a class="btn btn--primary" href="${appPathFor(locale)}">${escapeHtml(s.cta)}</a></p>
-</section>`;
-  return { title: s.title, description: s.description, body };
-}
 
 function legal(page: PageDef, locale: Locale): { title: string; body: string } {
   const html = fs.readFileSync(path.join(here, 'legal', locale, `${page.slug.slice(1)}.html`), 'utf8');

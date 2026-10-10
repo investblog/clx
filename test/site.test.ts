@@ -60,6 +60,25 @@ describe('generated pages', () => {
     expect(read('index.html')).toContain('href="/ru" hreflang="ru"');
   });
 
+  it('the home page: sign-up first, an example report drawn for both themes and both widths, nothing inline', () => {
+    for (const [file, app] of [['index.html', '/app'], ['ru.html', '/ru/app']] as const) {
+      const html = read(file);
+      expect(html).toContain(`href="${app}#/signup"`);
+      const demo = html.match(/<figure class="demo" aria-hidden="true">[\s\S]*?<\/figure>/u)?.[0] ?? '';
+      for (const theme of ['dark', 'light']) expect(demo).toContain(`themed--${theme}`);
+      for (const size of ['wide', 'narrow']) expect(demo).toContain(`demo__size--${size}`);
+      // The CSP allows no inline style or script: the charts are attributes and classes only.
+      expect(demo).not.toMatch(/style=|<style|<script/u);
+      // Devices are what the worker reports (edge/contract.ts): a phone or a computer, nothing else.
+      expect(demo).not.toMatch(/Tablet|Планшет/u);
+      const title = html.match(/<title>([^<]*)<\/title>/u)![1]!;
+      const description = html.match(/<meta name="description" content="([^"]*)"/u)![1]!.replaceAll('&#39;', "'");
+      expect(title.length).toBeLessThanOrEqual(60);
+      expect(description.length).toBeGreaterThanOrEqual(120);
+      expect(description.length).toBeLessThanOrEqual(160);
+    }
+  });
+
   it('the app has a page per language, which sets the language until sign-in (ADR 0015)', () => {
     expect(read('app.html')).toContain('<html lang="en"');
     expect(read('ru/app.html')).toContain('<html lang="ru"');
