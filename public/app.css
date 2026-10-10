@@ -6,6 +6,7 @@ h2{font-size:var(--fs-xl);margin:var(--space-5) 0 var(--space-3)}
 main a:not(.btn){color:var(--primary-hover);text-decoration:none}
 main a:not(.btn):hover{text-decoration:underline}
 .muted{color:var(--text-muted)}
+.text-warning{color:var(--warning)}
 svg.icon{fill:currentColor;vertical-align:-0.125em}
 
 .topbar{position:sticky;top:0;z-index:var(--z-header);background:var(--nav-bg);border-bottom:1px solid var(--border-subtle);backdrop-filter:blur(6px)}

@@ -3,6 +3,7 @@
 import { ApiError, call, type Account, type Me } from './api';
 import { action, confirmAction, notice, when, type Live } from './accounts';
 import { h } from './dom';
+import { dropdown, zoneHost } from './pick';
 import { errorText } from './text';
 
 export interface Site {
@@ -62,8 +63,12 @@ export async function newSitePage(me: Me, go: (hash: string) => void): Promise<H
   const { accounts } = await call<{ accounts: Account[] }>('GET', '/v1/accounts');
   const usable = accounts.filter((a) => a.state === 'ready' || a.state === 'no_connection');
   if (!usable.length) return h('div', { class: 'narrow' }, h('h2', {}, 'Добавить сайт'), h('div', { class: 'card' }, h('p', {}, 'Нет аккаунта с установленным воркером. '), h('p', {}, h('a', { href: '#/' }, '← К аккаунтам'))));
-  const account = h('select', { class: 'select', id: 'site-account' }, ...usable.map((a) => h('option', { value: a.id }, a.name ?? a.cf_account_id)));
-  const host = h('input', { class: 'input', id: 'site-host', required: '', placeholder: 'example.com или blog.example.com', autocomplete: 'off', spellcheck: 'false' });
+  const account = dropdown(
+    usable.map((a) => ({ value: a.id, label: a.name ?? a.cf_account_id })),
+    { id: 'site-account', onChange: () => zones.refresh() },
+  );
+  const host = h('input', { class: 'input', id: 'site-host', required: '', placeholder: 'начните вводить домен', autocomplete: 'off', spellcheck: 'false' });
+  const zones = zoneHost(host, account.value);
   const excluded = h('input', { class: 'input', id: 'site-excluded', placeholder: '/admin, /preview', autocomplete: 'off', spellcheck: 'false' });
   return h(
     'div',
@@ -73,15 +78,15 @@ export async function newSitePage(me: Me, go: (hash: string) => void): Promise<H
     h(
       'div',
       { class: 'card stack stack--sm' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-account' }, 'Аккаунт Cloudflare'), account),
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-host' }, 'Хост сайта'), host, h('p', { class: 'field-hint' }, 'Зона хоста должна быть в этом аккаунте — clx найдёт её сам и поставит маршрут только на путь счётчика, страницы сайта он не трогает.')),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-account' }, 'Аккаунт Cloudflare'), account.el),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-host' }, 'Хост сайта'), zones.el, h('p', { class: 'field-hint' }, 'Выберите домен из зон этого аккаунта; поддомен (blog.example.com) допишите. clx поставит маршрут только на путь счётчика, страницы сайта он не трогает.')),
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-excluded' }, 'Не считать пути (необязательно)'), excluded, h('p', { class: 'field-hint' }, 'Начала путей через запятую, до 50.')),
       h(
         'div',
         { class: 'actions' },
         action('Добавить', 'btn--primary', async (key) => {
           if (!host.value.trim()) throw new ApiError(400, 'invalid_request', 'Укажите хост.');
-          const r = await call<{ site: Site }>('POST', '/v1/sites', { account_id: account.value, host: host.value.trim(), excluded_paths: paths(excluded.value) }, key);
+          const r = await call<{ site: Site }>('POST', '/v1/sites', { account_id: account.value(), host: host.value.trim(), excluded_paths: paths(excluded.value) }, key);
           go(`#/sites/${r.site.id}`);
         }),
       ),

@@ -46,8 +46,8 @@ export const fakeCf = {
   scripts: new Map<string, Script>(),
   dbs: new Map<string, { name: string; sql: string[]; db: DatabaseSync }>(),
   zones: [
-    { id: 'zone1', name: 'example.com' },
-    { id: 'zone2', name: 'shop.example.org' },
+    { id: 'zone1', name: 'example.com', status: 'active' },
+    { id: 'zone2', name: 'shop.example.org', status: 'pending' },
   ],
   routes: new Map<string, { id: string; pattern: string; script: string }[]>(),
 

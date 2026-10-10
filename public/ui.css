@@ -1595,3 +1595,142 @@ a.stat-card {
 .stat-card--primary .stat-card__value {
   color: var(--primary);
 }
+
+/* =========================
+   Dropdown and combobox — from 301-ui (static/css/tables.css .dropdown,
+   site.css .btn-chip--dropdown, drawers.css .locale-combobox, layout.css --menu-*)
+   ========================= */
+:root {
+  --menu-min: clamp(200px, 18vw, 240px);
+  --menu-max: min(92vw, 28rem);
+}
+
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown__menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  min-width: var(--menu-min);
+  max-width: var(--menu-max);
+  max-height: 320px;
+  overflow: hidden auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  padding: var(--space-2) 0;
+  display: none;
+  z-index: var(--z-dropdown, 20);
+}
+
+.dropdown__menu--fit-trigger {
+  left: 0;
+  width: 100%;
+  min-width: unset;
+  max-width: unset;
+}
+
+.dropdown--open .dropdown__menu {
+  display: block;
+}
+
+.dropdown__item {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-md), color var(--transition-md);
+}
+
+.dropdown__item:hover,
+.dropdown__item.is-active,
+.dropdown__item:focus-visible {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--text);
+  outline: none;
+}
+
+.dropdown__item--selected {
+  font-weight: var(--fw-semibold);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.btn-chip--dropdown {
+  color: var(--text);
+}
+
+.btn-chip--dropdown.is-open {
+  background: var(--panel);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+.btn-chip__chevron {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.dropdown__trigger[aria-expanded="true"] .btn-chip__chevron {
+  transform: rotate(180deg);
+}
+
+/* A form field: the chip as wide as the inputs, label left, chevron right (clx). */
+.dropdown--block {
+  display: block;
+}
+
+.dropdown--block .dropdown__trigger {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.dropdown--block .btn-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.combobox {
+  position: relative;
+}
+
+.combobox .input {
+  width: 100%;
+}
+
+.combobox__menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  padding: var(--space-1) 0;
+  z-index: var(--z-dropdown, 20);
+}
+
+.combobox__menu[hidden] {
+  display: none;
+}
+
+.combobox__menu .dropdown__item {
+  justify-content: space-between;
+}
+
+.combobox__empty {
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+}

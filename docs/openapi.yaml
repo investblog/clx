@@ -360,6 +360,30 @@ paths:
                   revoke_token: { type: [string, 'null'] }
                   left: { type: array, items: { type: string } }
         default: { $ref: '#/components/responses/Error' }
+  /v1/accounts/{id}/zones:
+    get:
+      summary: The account's zones (scope accounts or sites) — to pick a site's or link host's zone from
+      description: |
+        Read live from Cloudflare with the working token, sorted by name; at most 1,000, `truncated`
+        past that. A host is still checked against its zone when it is added.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zones:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        status: { type: string, description: "Cloudflare's zone status: active, pending, …" }
+                  truncated: { type: boolean }
+        default: { $ref: '#/components/responses/Error' }
   /v1/accounts/{id}/install:
     post:
       summary: Install clx-edge again (scope accounts) — after a failed install, or to reinstall

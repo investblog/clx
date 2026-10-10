@@ -79,6 +79,13 @@ async function viaWorker(url: string, init: RequestInit = {}): Promise<{ status:
 }
 
 describe('adding a site', () => {
+  it("lists the account's zones for the host picker; another user's account is not found", async () => {
+    const r = await call('GET', `/v1/accounts/${accountId}/zones`);
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ zones: [{ name: 'example.com', status: 'active' }, { name: 'shop.example.org', status: 'pending' }], truncated: false });
+    expect((await call('GET', `/v1/accounts/${accountId}/zones`, { auth: await session(2) })).status).toBe(404);
+  });
+
   it('makes no route while another operation holds the account (a disconnect would miss it); the cron does it after', async () => {
     const hold = (until: number | null) => env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(until).run();
     await hold(Date.now() + 60_000);

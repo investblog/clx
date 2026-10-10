@@ -90,6 +90,22 @@ export async function zoneFor(token: string, cfAccountId: string, host: string):
   return null;
 }
 
+/** At most this many zones are listed for the page's host picker (20 calls of 50). */
+const ZONES_MAX = 1000;
+
+/** The account's zones by name, for the page to suggest a host from; `truncated` past ZONES_MAX. */
+export async function listZones(token: string, cfAccountId: string): Promise<{ zones: { name: string; status: string }[]; truncated: boolean }> {
+  const zones: { name: string; status: string }[] = [];
+  for (let page = 1; zones.length < ZONES_MAX; page++) {
+    const batch = await cf<{ name: string; status: string }[]>(token, 'GET', `/zones?account.id=${cfAccountId}&per_page=50&page=${page}&order=name`);
+    zones.push(...batch.map((z) => ({ name: z.name, status: z.status })));
+    if (batch.length < 50) return { zones, truncated: false };
+  }
+  // Exactly ZONES_MAX is not truncated: the next page says whether there are more (per_page is 5–50).
+  const more = await cf<unknown[]>(token, 'GET', `/zones?account.id=${cfAccountId}&per_page=50&page=${ZONES_MAX / 50 + 1}&order=name`);
+  return { zones, truncated: more.length > 0 };
+}
+
 /** Create the route, or adopt it if it is clx's from an earlier attempt; someone else's is a conflict. */
 export async function ensureRoute(token: string, log: CallLog, zoneId: string, pattern: string): Promise<{ id: string } | { conflict: string }> {
   try {

@@ -4,6 +4,7 @@
 import { ApiError, call, text, type Account, type LinkHost, type Me } from './api';
 import { action, confirmAction, notice, num, when, type Live } from './accounts';
 import { h } from './dom';
+import { dropdown, zoneHost } from './pick';
 import { errorText } from './text';
 
 export interface Rule {
@@ -41,6 +42,7 @@ async function accountsWithHosts(): Promise<Account[]> {
 /** Set or replace an account's link host: the DNS record is the user's to make (§13 item 2). */
 function hostForm(a: Account, done: () => void): HTMLElement {
   const input = h('input', { class: 'input', placeholder: 'go.example.com', autocomplete: 'off', spellcheck: 'false', value: a.link_host?.host ?? '' });
+  const zones = zoneHost(input, () => a.id);
   return h(
     'div',
     { class: 'stack stack--sm' },
@@ -48,7 +50,7 @@ function hostForm(a: Account, done: () => void): HTMLElement {
     h(
       'div',
       { class: 'actions' },
-      input,
+      zones.el,
       action(a.link_host ? 'Сменить хост' : 'Задать хост', a.link_host ? 'btn--ghost' : 'btn--primary', async (key) => {
         if (!input.value.trim()) throw new ApiError(400, 'invalid_request', 'Укажите хост.');
         await call('PUT', `/v1/accounts/${a.id}/link-host`, { host: input.value.trim() }, key);
@@ -106,14 +108,20 @@ export async function linksBlock(redraw: () => void): Promise<HTMLElement> {
 /** The rules editor: one row per rule, the first match wins (§6). */
 function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } {
   const list = h('div', { class: 'stack stack--sm' });
-  const rows: { countries: HTMLInputElement; device: HTMLSelectElement; url: HTMLInputElement; el: HTMLElement }[] = [];
+  const rows: { countries: HTMLInputElement; device: () => string; url: HTMLInputElement; el: HTMLElement }[] = [];
   const add = (r?: Rule) => {
     const countries = h('input', { class: 'input', placeholder: 'DE, AT', value: r?.countries?.join(', ') ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Страны' });
-    const device = h('select', { class: 'select', 'aria-label': 'Устройство' }, h('option', { value: '' }, 'любое устройство'), h('option', { value: 'mobile' }, 'телефон'), h('option', { value: 'desktop' }, 'компьютер'));
-    device.value = r?.devices?.length === 1 ? r.devices[0]! : '';
+    const device = dropdown(
+      [
+        { value: '', label: 'любое устройство' },
+        { value: 'mobile', label: 'телефон' },
+        { value: 'desktop', label: 'компьютер' },
+      ],
+      { label: 'Устройство', value: r?.devices?.length === 1 ? r.devices[0]! : '' },
+    );
     const url = h('input', { class: 'input', placeholder: 'https://…', value: r?.url ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Куда' });
     const remove = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Убрать');
-    const row = { countries, device, url, el: h('div', { class: 'rule-row' }, countries, device, url, remove) };
+    const row = { countries, device: device.value, url, el: h('div', { class: 'rule-row' }, countries, device.el, url, remove) };
     remove.addEventListener('click', () => {
       rows.splice(rows.indexOf(row), 1);
       row.el.remove();
@@ -129,7 +137,7 @@ function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } 
     value: () =>
       rows.map((r) => {
         const countries = [...new Set(r.countries.value.toUpperCase().split(/[\s,]+/u).filter(Boolean))];
-        return { ...(countries.length ? { countries } : {}), ...(r.device.value ? { devices: [r.device.value as 'mobile' | 'desktop'] } : {}), url: r.url.value.trim() };
+        return { ...(countries.length ? { countries } : {}), ...(r.device() ? { devices: [r.device() as 'mobile' | 'desktop'] } : {}), url: r.url.value.trim() };
       }),
   };
 }
@@ -137,7 +145,7 @@ function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } 
 export async function newLinkPage(me: Me, go: (hash: string) => void): Promise<HTMLElement> {
   const accounts = (await accountsWithHosts()).filter((a) => a.link_host);
   if (!accounts.length) return h('div', { class: 'narrow' }, h('h2', {}, 'Новая ссылка'), h('div', { class: 'card' }, h('p', {}, 'Сначала задайте хост ссылок аккаунта на главной.'), h('p', {}, h('a', { href: '#/' }, '← На главную'))));
-  const account = h('select', { class: 'select', id: 'link-account' }, ...accounts.map((a) => h('option', { value: a.id }, `${a.link_host!.host} — ${a.name ?? a.cf_account_id}`)));
+  const account = dropdown(accounts.map((a) => ({ value: a.id, label: `${a.link_host!.host} — ${a.name ?? a.cf_account_id}` })), { id: 'link-account' });
   const code = h('input', { class: 'input', id: 'link-code', placeholder: 'promo (пусто — случайный)', autocomplete: 'off', spellcheck: 'false' });
   const url = h('input', { class: 'input', id: 'link-url', required: '', placeholder: 'https://example.com/landing', autocomplete: 'off', spellcheck: 'false' });
   const rules = rulesEditor([]);
@@ -149,7 +157,7 @@ export async function newLinkPage(me: Me, go: (hash: string) => void): Promise<H
     h(
       'div',
       { class: 'card stack stack--sm' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-account' }, 'Хост ссылок'), account),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-account' }, 'Хост ссылок'), account.el),
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-code' }, 'Код'), code, h('p', { class: 'field-hint' }, '3–32 знака: латиница, цифры, «_» и «-». Код потом не меняется — он напечатан в QR.')),
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-url' }, 'Куда ведёт'), url),
       rules.el,
@@ -158,7 +166,7 @@ export async function newLinkPage(me: Me, go: (hash: string) => void): Promise<H
         { class: 'actions' },
         action('Создать', 'btn--primary', async (key) => {
           if (!url.value.trim()) throw new ApiError(400, 'invalid_request', 'Укажите, куда ведёт ссылка.');
-          const r = await call<{ link: Link }>('POST', '/v1/links', { account_id: account.value, url: url.value.trim(), rules: rules.value(), ...(code.value.trim() ? { code: code.value.trim() } : {}) }, key);
+          const r = await call<{ link: Link }>('POST', '/v1/links', { account_id: account.value(), url: url.value.trim(), rules: rules.value(), ...(code.value.trim() ? { code: code.value.trim() } : {}) }, key);
           go(`#/links/${r.link.id}`);
         }),
       ),

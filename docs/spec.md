@@ -887,6 +887,7 @@ that adds a site and embeds its counter at build time.
 | `POST /v1/keys`, `GET /v1/keys`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
 | `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `bootstrap_lost`, `connected` — token ready, not yet installed, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), last push, versions, **upgrade advice** (§8) |
+| `GET /v1/accounts/{id}/zones` | the account's zones, read live with the working token (Zone Read), up to 1,000 — the pages suggest a site's or link host's host from them |
 | `POST /v1/accounts/{id}/token` `{bootstrap_token}` | renew the working token |
 | `POST /v1/accounts/{id}/install` | install `clx-edge` again — after a failed install, or a reinstall (§4) → `202` |
 | `DELETE /v1/accounts/{id}` | disconnect (§4) |

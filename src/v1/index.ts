@@ -3,10 +3,10 @@
 // Stage 4: sites and their reports. Stage 5: the link host and short links.
 import { Hono, type Context } from 'hono';
 import { CfError } from '../cf/api';
-import { accountView, connect, type EdgeAccount } from '../cf/connect';
+import { accountView, connect, workingToken, type EdgeAccount } from '../cf/connect';
 import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
 import { addLink, deleteLink, linkHostView, linkView, liveLinkHost, patchLink, setLinkHost, type LinkRow } from '../cf/links';
-import { addSite, deleteSite, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
+import { addSite, deleteSite, listZones, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { verifyPassword } from '../auth/password';
 import { sha256 } from '../lib/crypto';
 import { generateMatrix, renderSvg } from '../qr';
@@ -281,6 +281,15 @@ v1.get(
     const operation = op ? { kind: op.kind, state: op.state, step: op.step, error: (JSON.parse(op.data) as { error?: unknown }).error ?? null, updated_at: new Date(op.updated_at).toISOString() } : null;
     const host = await liveLinkHost(c.env.DB, edge.id);
     return { status: 200, body: { account: { ...accountView(edge), operation, link_host: host ? linkHostView(host, edge.synced_revision) : null } } };
+  }),
+);
+
+v1.get(
+  '/accounts/:id/zones',
+  handle({}, async (c, p) => {
+    requireAccountRead(p);
+    const edge = await accountOf(c, p);
+    return { status: 200, body: await listZones(await workingToken(c.env, edge), edge.cf_account_id) };
   }),
 );
 
