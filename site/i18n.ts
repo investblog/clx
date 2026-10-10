@@ -21,8 +21,8 @@ export interface Strings {
     tools: { h2: string; items: { h: string; p: string; points: string[] }[] };
     why: { h2: string; items: [string, string][] };
     api: { h2: string; p: string; agents: string; reference: string };
-    plans: { h2: string; items: { name: string; price: string; points: string[] }[]; note: string };
-    faq: { h2: string; items: [string, string][] };
+    plans: { h2: string; items: { name: string; price: string; points: string[] }[]; note: string; more: string };
+    faq: { h2: string; items: [string, string][]; more: string };
     final: string;
   };
   /** The example report (site/demo.ts). */
@@ -42,7 +42,7 @@ export interface Strings {
     note: string;
   };
   /** The header's menu: a page's `nav` key → its name; `menu` names the phone's menu button. */
-  nav: { analytics: string; links: string; menu: string };
+  nav: { analytics: string; links: string; generators: string; pricing: string; faq: string; menu: string };
   notFound: { title: string; text: string; back: string };
   foot: { agents: string; api: string; privacy: string; terms: string; abuse: string; source: string };
 }
@@ -105,6 +105,7 @@ const en: Strings = {
         { name: 'API', price: 'On request, free for now', points: ['50 Cloudflare accounts', '500 sites, 10,000 links', '5 API keys'] },
       ],
       note: 'Cloudflare’s Workers Paid plan is never required on any plan.',
+      more: 'Plans in detail',
     },
     faq: {
       h2: 'Questions',
@@ -114,6 +115,7 @@ const en: Strings = {
         ['Does it cost anything?', 'The free plan costs nothing and needs no card; the worker runs on your Cloudflare quotas.'],
         ['Can I read the code?', 'All of it, on GitHub, under AGPL-3.0.'],
       ],
+      more: 'All questions',
     },
     final: 'Count visits and shorten links — the details stay in your account',
   },
@@ -132,7 +134,7 @@ const en: Strings = {
     countries: ['United States', 'Germany', 'United Kingdom', 'Brazil', 'Other'],
     note: 'Example data, drawn by the same charts as the report in the app.',
   },
-  nav: { analytics: 'Analytics', links: 'Short links', menu: 'Menu' },
+  nav: { analytics: 'Analytics', links: 'Short links', generators: 'For site generators', pricing: 'Pricing', faq: 'Questions', menu: 'Menu' },
   notFound: { title: 'Page not found', text: 'There is no such page on clx.cx.', back: 'To the home page' },
   foot: { agents: 'For AI agents', api: 'API', privacy: 'Privacy', terms: 'Terms', abuse: 'Abuse', source: 'Source code' },
 };
@@ -195,6 +197,7 @@ const ru: Strings = {
         { name: 'API', price: 'По запросу, пока бесплатно', points: ['50 аккаунтов Cloudflare', '500 сайтов, 10 000 ссылок', '5 ключей API'] },
       ],
       note: 'Тариф Workers Paid у Cloudflare не нужен ни на одном тарифе.',
+      more: 'Тарифы подробно',
     },
     faq: {
       h2: 'Вопросы',
@@ -204,6 +207,7 @@ const ru: Strings = {
         ['Это платно?', 'Бесплатный тариф ничего не стоит и не требует карты; воркер работает в ваших квотах Cloudflare.'],
         ['Можно посмотреть код?', 'Весь, на GitHub, под AGPL-3.0.'],
       ],
+      more: 'Все вопросы',
     },
     final: 'Считайте посещения и сокращайте ссылки — подробности остаются в вашем аккаунте',
   },
@@ -222,7 +226,7 @@ const ru: Strings = {
     countries: ['Россия', 'Казахстан', 'Германия', 'Беларусь', 'Прочие'],
     note: 'Пример данных — нарисован теми же графиками, что и отчёт в кабинете.',
   },
-  nav: { analytics: 'Аналитика', links: 'Короткие ссылки', menu: 'Меню' },
+  nav: { analytics: 'Аналитика', links: 'Короткие ссылки', generators: 'Для генераторов сайтов', pricing: 'Тарифы', faq: 'Вопросы', menu: 'Меню' },
   notFound: { title: 'Страница не найдена', text: 'Такой страницы на clx.cx нет.', back: 'На главную' },
   foot: { agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
 };

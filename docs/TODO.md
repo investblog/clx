@@ -28,6 +28,17 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       snake_case (`cf_accounts`) — found by the live agent run of /agents (10.10). Pick snake_case
       before outside integrators rely on it, and document both objects in openapi.yaml.
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
+- [ ] **Rotation is not durable** (Codex, 10.10): `rotate()` in `src/cf/sites.ts` creates the new
+      Cloudflare route before it records the seed and route ID, outside an `operations` row. A crash
+      between the two leaves a route recorded nowhere, and a retry makes another seed and route —
+      against §15 ("recorded before the first Cloudflare call"). Record the seed and the operation
+      first, as the install does. Until then the site does not promise it.
+- [ ] **A link host's config read that fails falls through** (Codex, 10.10): in `edge/worker.ts`
+      an unreadable `linkhost:` entry (D1 down, the daily reads used up) becomes `null` and the request
+      goes to `fetch(request)` — the link host has no origin, so the visitor gets Cloudflare's error,
+      not the `503 Retry-After` of §8, which comes only when the host was readable and the link was
+      not. Answer 503 for a host routed to the worker whose config cannot be read; until then the
+      pricing page says only that links stop working.
 - [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published
       and `src/qr` gives way to the dependency (ADR 0009).
 

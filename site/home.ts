@@ -50,11 +50,12 @@ ${demoReport(locale, 'sources')}
 <section class="home-section">
   <h2>${escapeHtml(s.plans.h2)}</h2>
   <div class="plans">${s.plans.items.map((p) => `<div class="card plan"><h3>${escapeHtml(p.name)}</h3><p class="plan__price">${escapeHtml(p.price)}</p><ul class="ticks">${p.points.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`).join('')}</div>
-  <p class="muted">${escapeHtml(s.plans.note)}</p>
+  <p class="muted">${escapeHtml(s.plans.note)} <a href="${pathFor('/pricing', locale)}">${escapeHtml(s.plans.more)} →</a></p>
 </section>
 <section class="home-section">
   <h2>${escapeHtml(s.faq.h2)}</h2>
   <div class="faq">${s.faq.items.map(([q, a]) => `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`).join('')}</div>
+  <p class="faq__more"><a href="${pathFor('/faq', locale)}">${escapeHtml(s.faq.more)} →</a></p>
 </section>
 <section class="home-final">
   <h2>${escapeHtml(s.final)}</h2>

@@ -33,7 +33,7 @@ export interface PageDef {
   /** Key in `Strings.foot`: the page is linked from the footer. */
   foot?: 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
   /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
-  nav?: 'analytics' | 'links';
+  nav?: 'analytics' | 'links' | 'generators' | 'pricing' | 'faq';
   indexed: boolean;
   /** A legal text: its body is `site/legal/<locale><slug>.html`. */
   legal?: boolean;
@@ -46,9 +46,12 @@ export interface PageDef {
 
 export const SITE_PAGES: readonly PageDef[] = [
   { slug: '/', locales: ALL_LOCALES, indexed: true, priority: 1.0, changefreq: 'weekly', markdown: true },
-  // The two tools (site/products.ts).
+  // The two tools, who they are for, what they cost, the questions (site/products.ts, site/faq.ts).
   { slug: '/analytics', locales: ALL_LOCALES, nav: 'analytics', indexed: true, priority: 0.9, changefreq: 'monthly' },
   { slug: '/short-links', locales: ALL_LOCALES, nav: 'links', indexed: true, priority: 0.9, changefreq: 'monthly' },
+  { slug: '/for-site-generators', locales: ALL_LOCALES, nav: 'generators', indexed: true, priority: 0.8, changefreq: 'monthly' },
+  { slug: '/pricing', locales: ALL_LOCALES, nav: 'pricing', indexed: true, priority: 0.8, changefreq: 'monthly' },
+  { slug: '/faq', locales: ALL_LOCALES, nav: 'faq', indexed: true, priority: 0.7, changefreq: 'monthly' },
   // For agents and integrators; English only — the reader is a program (site/agents.ts, site/api.ts).
   { slug: '/agents', locales: ['en'], foot: 'agents', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },

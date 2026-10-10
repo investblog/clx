@@ -909,7 +909,7 @@ that adds a site and embeds its counter at build time.
 | `GET /v1/links/{id}/qr.svg` | the QR code |
 | `GET /v1/sites/{id}/report?period=`, `GET /v1/links/{id}/report?period=` | totals and series; `&breakdowns=1` adds the breakdowns (§7) |
 
-- **For a site generator** the whole path is three calls: `POST /v1/accounts` once per customer
+- **For a site generator** the whole path is three steps: `POST /v1/accounts` once per customer
   account (its bootstrap token comes from the customer — clx needs its own working token, with the
   rights of §3), `POST /v1/sites` per site, and the `snippet` from the answer embedded into every
   page at build time. The snippet is stable, so rebuilding a site needs no call; only `rotate`
@@ -918,7 +918,8 @@ that adds a site and embeds its counter at build time.
 ## 16. The site and the app
 
 clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site-and-app.md)).
-- **Addresses.** The site at the root: `/`, `/analytics`, `/short-links`, `/privacy`, `/terms`, `/abuse` in English, the same
+- **Addresses.** The site at the root: `/`, `/analytics`, `/short-links`, `/for-site-generators`, `/pricing`,
+  `/faq`, `/privacy`, `/terms`, `/abuse` in English, the same
   under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` (and
   `/ru/app`, ADR 0015) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).
@@ -949,5 +950,5 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
 - **Brand** ([ADR 0016](./decisions/0016-brand-and-report-charts.md)): the 301.st components in
   violet (`#4D48ED`, from the logo), the Onest typeface served from `public/fonts/`, the clx mark in
   the header, `favicon.svg`, `favicon.ico` (16/32/48) and `apple-touch-icon.png`.
-- **Planned** (the product plan, in parts): the app's design system (drawers, dialogs, navigation);
-  the content pages and SEO (OG cards, JSON-LD).
+- **Content pages**: the home page, the two tools, site generators, pricing and the questions
+  (`/faq` gathers the pages' own questions). **Planned:** comparison pages, OG cards and JSON-LD.

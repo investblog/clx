@@ -81,20 +81,41 @@ describe('generated pages', () => {
     }
   });
 
-  it('the tools’ pages: in the menu of every page, marked where they are; sign-up, lengths, nothing inline', () => {
+  it('the menu’s pages: in the menu of every page, marked where they are; sign-up, lengths, nothing inline', () => {
     const tools = SITE_PAGES.filter((p) => p.nav);
-    expect(tools.map((p) => p.slug)).toEqual(['/analytics', '/short-links']);
+    expect(tools.map((p) => p.slug)).toEqual(['/analytics', '/short-links', '/for-site-generators', '/pricing', '/faq']);
     for (const l of ['en', 'ru'] as const) {
       expect(read(fileFor('/', l))).toMatch(new RegExp(tools.map((p) => `href="${pathFor(p.slug, l)}"`).join('[\\s\\S]*'), 'u'));
       for (const p of tools) {
         const html = read(fileFor(p.slug, l));
         expect(html).toContain(`href="${pathFor(p.slug, l)}" aria-current="page"`);
         expect(html).toContain(`#/signup"`);
-        expect(html.match(/<figure class="demo" aria-hidden="true">[\s\S]*?<\/figure>/u)?.[0]).not.toMatch(/style=|<style|<script/u);
+        // The CSP allows no inline style or script: none in the page's content, charts included.
+        expect(html.match(/<main[\s\S]*?<\/main>/u)![0]).not.toMatch(/style=|<style|<script/u);
         expect(html.match(/<title>([^<]*)<\/title>/u)![1]!.length).toBeLessThanOrEqual(60);
         const description = html.match(/<meta name="description" content="([^"]*)"/u)![1]!.replaceAll('&#39;', "'");
         expect(description.length, `${l}${p.slug}`).toBeGreaterThanOrEqual(120);
         expect(description.length, `${l}${p.slug}`).toBeLessThanOrEqual(160);
+      }
+    }
+  });
+
+  it('the home page leads from its plans to /pricing and from its questions to /faq, not only through the menu', () => {
+    for (const l of ['en', 'ru'] as const) {
+      const main = read(fileFor('/', l)).match(/<main[\s\S]*?<\/main>/u)![0];
+      for (const slug of ['/pricing', '/faq']) expect(main, `${l} ${slug}`).toMatch(new RegExp(`<a href="${pathFor(slug, l)}">[^<]+ →</a>`, 'u'));
+    }
+  });
+
+  it('/faq holds every page’s questions, word for word, each group linking to its page', () => {
+    for (const l of ['en', 'ru'] as const) {
+      const faq = read(fileFor('/faq', l));
+      for (const slug of ['/', '/analytics', '/short-links', '/for-site-generators', '/pricing']) {
+        const page = read(fileFor(slug, l));
+        const questions = [...page.matchAll(/<summary>([^<]*)<\/summary>/gu)].map((m) => m[1]!);
+        expect(questions.length, `${l}${slug}`).toBeGreaterThan(2);
+        for (const q of questions) expect(faq, `${l}${slug}: ${q}`).toContain(`<summary>${q}</summary>`);
+        expect(faq).toContain(`<h2><a href="${pathFor(slug, l)}">`);
       }
     }
   });

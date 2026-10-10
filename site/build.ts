@@ -10,7 +10,8 @@ import { apiBody, apiJson, loadOpenapi } from './api.ts';
 import { ALL_LOCALES, LOCALES, ORIGIN, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
-import { analyticsPage, linksPage } from './products.ts';
+import { faqPage } from './faq.ts';
+import { analyticsPage, generatorsPage, linksPage, pricingPage } from './products.ts';
 import { escapeHtml, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
 
@@ -30,7 +31,7 @@ function notFound(locale: Locale): { title: string; body: string } {
   return { title: `${s.title} — clx`, body: `<section class="narrow">\n<h1 class="h3">${escapeHtml(s.title)}</h1>\n<p>${escapeHtml(s.text)}</p>\n<p><a href="${pathFor('/', locale)}">${escapeHtml(s.back)}</a></p>\n</section>` };
 }
 
-const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage };
+const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage, '/for-site-generators': generatorsPage, '/pricing': pricingPage, '/faq': faqPage };
 
 const AGENT_PAGES: Record<string, () => { title: string; description: string; body: string }> = {
   '/agents': () => ({ title: 'clx for AI agents', description: "How an AI agent sets up clx for a person: connect their Cloudflare account, add sites and embed the counter, make short links and QR codes, read reports — through the API.", body: agentsBody() }),

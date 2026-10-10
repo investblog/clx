@@ -16,7 +16,7 @@ interface ProductText {
   lead: string;
   start: string;
   sections: { h: string; p: string; points?: string[] }[];
-  setup: { h: string; p: string; code: string };
+  setup?: { h: string; p: string; code: string };
   faq: { h: string; items: [string, string][] };
   final: string;
 }
@@ -239,9 +239,208 @@ function linkCard(locale: Locale, c: LinkCard): string {
 <p class="demo__note">${escapeHtml(c.note)}</p>`;
 }
 
+const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
+  en: {
+    title: 'Visit counter and links API for site generators — clx',
+    description: 'Add a site through the API, embed a counter with no shared footprint at build time and read the totals back. clx runs in your customers’ Cloudflare accounts.',
+    h1: 'Analytics and short links for the sites you generate',
+    lead: 'A site generator adds a site through the API, puts its counter into the pages it builds and reads the totals back. Each counter runs in the Cloudflare account its site is served from.',
+    start: 'Start free',
+    flow: [
+      ['Your generator', 'adds the site and gets its snippet'],
+      ['clx API', 'installs the route in the customer’s account'],
+      ['The built pages', 'count their visits on their own domain'],
+    ],
+    sections: [
+      {
+        h: 'No shared footprint',
+        p: 'Every site gets its own path, file names and snippet code, generated from a random seed, and no third-party host appears: no signature in the page, the URLs or the answers is shared by clx sites or names clx. What stays visible, plainly: a same-origin POST on each page view, answered with an empty 204, and the browser’s own API names.',
+      },
+      {
+        h: 'Made for build pipelines',
+        p: 'Every write takes an idempotency key: a write that went through, sent again with the same key within 24 hours, does not make its change twice. A key gets only the scopes it needs — a pipeline needs sites and reports.',
+      },
+      {
+        h: 'Many customers, one integration',
+        p: 'The API plan covers 50 Cloudflare accounts, 500 sites and 10,000 links with five keys; a key can be limited to some accounts and client IPs, so one customer’s key cannot reach another’s.',
+      },
+      {
+        h: 'Works with Cloudflare Pages',
+        p: 'The counter’s route sits on the site’s own host, beside a Pages site, and passes everything else through. The account’s use is measured daily, and the API tells you when a customer should move to Workers Paid.',
+      },
+    ],
+    setup: {
+      h: 'Three steps in a build',
+      p: 'Once the customer’s Cloudflare account is connected: add the site once, embed its snippet in every page, read the report when you need it. The full contract is in the API reference.',
+      code: '# 1. add the site (scope: sites)\ncurl https://clx.cx/v1/sites \\\n  -H "Authorization: Bearer clx_…" \\\n  -H "Idempotency-Key: build-42-example.com" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"account_id":"…","host":"example.com"}\'\n# → 202 { "site": { "id": "…", "snippet": { "inline": "<script>…</script>", … } } }\n\n# 2. put snippet.inline into the <head> of every page you build\n\n# 3. read the totals (scope: reports)\ncurl "https://clx.cx/v1/sites/{id}/report?period=7d" -H "Authorization: Bearer clx_…"',
+    },
+    faq: {
+      h: 'Questions',
+      items: [
+        ['Do my customers need their own Cloudflare accounts?', 'Yes: a counter runs in the account its site is served from. A customer connects it once with a bootstrap token, by hand or through your integration.'],
+        ['Can footprint scanners or ad blockers spot clx?', 'No signature in the page, the URLs or the answers is shared by clx sites or names clx, beyond the browser’s own API names. Someone watching can still see the behaviour — a same-origin POST answered with an empty 204.'],
+        ['Is there an SDK?', 'No: the API is plain HTTP with an OpenAPI contract, and AI agents have a walkthrough of their own.'],
+        ['What does it cost?', 'The API plan is switched on by request and is free for now; Workers Paid is never required.'],
+      ],
+    },
+    final: 'Give every site you build its own counter',
+  },
+  ru: {
+    title: 'API счётчика и ссылок для генераторов сайтов — clx',
+    description: 'Добавьте сайт через API, вставьте при сборке счётчик без общего следа и читайте итоги. clx работает в аккаунтах Cloudflare ваших клиентов. Открытый API.',
+    h1: 'Статистика и короткие ссылки для сайтов, которые вы генерируете',
+    lead: 'Генератор сайтов добавляет сайт через API, вставляет его счётчик в собираемые страницы и читает итоги. Каждый счётчик работает в том аккаунте Cloudflare, где обслуживается его сайт.',
+    start: 'Начать бесплатно',
+    flow: [
+      ['Ваш генератор', 'добавляет сайт и получает сниппет'],
+      ['API clx', 'ставит маршрут в аккаунт клиента'],
+      ['Собранные страницы', 'считают посещения на своём домене'],
+    ],
+    sections: [
+      {
+        h: 'Без общего следа',
+        p: 'У каждого сайта свой путь, свои имена файлов и свой код сниппета — из случайного зерна, и нет чужого хоста: ни в странице, ни в адресах, ни в ответах нет сигнатуры, общей для сайтов clx или похожей на clx. Что остаётся видно, честно: POST на свой же сайт при каждом просмотре с пустым ответом 204 и имена API самого браузера.',
+      },
+      {
+        h: 'Для конвейеров сборки',
+        p: 'Каждая запись идёт с ключом идемпотентности: прошедшая запись, повторённая с тем же ключом в течение суток, не вносит изменение второй раз. Ключу даются только нужные права — конвейеру хватает сайтов и отчётов.',
+      },
+      {
+        h: 'Много клиентов, одна интеграция',
+        p: 'Тариф API — 50 аккаунтов Cloudflare, 500 сайтов и 10 000 ссылок, пять ключей; ключ можно ограничить аккаунтами и IP клиента, чтобы ключ одного клиента не дотянулся до другого.',
+      },
+      {
+        h: 'Работает с Cloudflare Pages',
+        p: 'Маршрут счётчика стоит на хосте самого сайта, рядом с сайтом на Pages, и пропускает всё остальное. Расход аккаунта измеряется ежедневно, и API подскажет, когда клиенту пора на Workers Paid.',
+      },
+    ],
+    setup: {
+      h: 'Три шага в сборке',
+      p: 'Когда аккаунт Cloudflare клиента подключён: добавьте сайт один раз, вставьте его сниппет в каждую страницу, читайте отчёт, когда нужно. Весь контракт — в справочнике API.',
+      code: '# 1. добавить сайт (права: sites)\ncurl https://clx.cx/v1/sites \\\n  -H "Authorization: Bearer clx_…" \\\n  -H "Idempotency-Key: build-42-example.com" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"account_id":"…","host":"example.com"}\'\n# → 202 { "site": { "id": "…", "snippet": { "inline": "<script>…</script>", … } } }\n\n# 2. вставить snippet.inline в <head> каждой собранной страницы\n\n# 3. прочитать итоги (права: reports)\ncurl "https://clx.cx/v1/sites/{id}/report?period=7d" -H "Authorization: Bearer clx_…"',
+    },
+    faq: {
+      h: 'Вопросы',
+      items: [
+        ['Нужны ли клиентам свои аккаунты Cloudflare?', 'Да: счётчик работает в том аккаунте, где обслуживается сайт. Клиент подключает его один раз bootstrap-токеном — сам или через вашу интеграцию.'],
+        ['Найдут ли clx сканеры футпринтов или блокировщики рекламы?', 'В странице, адресах и ответах нет сигнатуры, общей для сайтов clx или похожей на clx, кроме имён API самого браузера. Наблюдатель всё же может заметить поведение — POST на свой сайт с пустым ответом 204.'],
+        ['Есть ли SDK?', 'Нет: API — обычный HTTP с контрактом OpenAPI, а для ИИ-агентов есть отдельная пошаговая инструкция.'],
+        ['Сколько это стоит?', 'Тариф API включается по запросу и пока бесплатен; Workers Paid не нужен.'],
+      ],
+    },
+    final: 'Дайте каждому собранному сайту свой счётчик',
+  },
+};
+
+interface PricingText extends ProductText {
+  plans: { name: string; price: string; points: string[] }[];
+  note: string;
+}
+
+const PRICING: Record<Locale, PricingText> = {
+  en: {
+    title: 'clx pricing — free, on your own Cloudflare quotas',
+    description: 'clx is free: one Cloudflare account, 10 sites and 200 links on the free plan, higher limits on the API plan on request. Workers Paid is never required.',
+    h1: 'Free, on your own Cloudflare quotas',
+    lead: 'clx costs nothing today. The worker runs in your Cloudflare account, on its quotas, and the plans differ only in their limits.',
+    start: 'Start free',
+    plans: [
+      { name: 'Free', price: '$0', points: ['1 Cloudflare account', '10 sites', '200 links, 10 rules each', '1 API key'] },
+      { name: 'API', price: 'On request, free for now', points: ['50 Cloudflare accounts', '500 sites', '10,000 links, 10 rules each', '5 API keys, limited by account and IP'] },
+    ],
+    note: 'The API plan is switched on by request; the way to ask for it is coming.',
+    sections: [
+      {
+        h: 'What Cloudflare gives for free',
+        p: 'Workers Free allows 100,000 requests and 100,000 D1 writes a day per account, shared by all its workers. For a typical account that is about 11,000 counted events a day at worst, usually several times that.',
+      },
+      {
+        h: 'When to move to Workers Paid',
+        p: 'clx measures the account’s use once a day, forecasts it and warns you before a quota runs out. clx itself never requires Workers Paid.',
+      },
+      {
+        h: 'If a quota runs out',
+        p: 'Out of worker requests (100,000 a day), the counter’s path answers with an error and short links stop working; your pages themselves are not affected. Out of D1 writes, the counter stops counting and links keep redirecting. Out of D1 reads (5 million a day), links stop working too. Each lasts until the quota resets.',
+      },
+      {
+        h: 'Paid plans later',
+        p: 'Paid plans with higher limits are planned. Until then the API plan is free too.',
+      },
+    ],
+    faq: {
+      h: 'Questions',
+      items: [
+        ['Do I need a card?', 'No: signing up and the free plan need none.'],
+        ['Does clx charge for traffic?', 'No: your visits and clicks go through your own Cloudflare account and its quotas, not through clx.cx.'],
+        ['What counts towards the limits?', 'Connected Cloudflare accounts, sites, links and API keys; visits and clicks are limited only by your Cloudflare quotas.'],
+      ],
+    },
+    final: 'Start on the free plan',
+  },
+  ru: {
+    title: 'Тарифы clx — бесплатно, в квотах вашего Cloudflare',
+    description: 'clx бесплатен: один аккаунт Cloudflare, 10 сайтов и 200 ссылок на бесплатном тарифе, лимиты выше — на тарифе API по запросу. Workers Paid не нужен.',
+    h1: 'Бесплатно, в квотах вашего Cloudflare',
+    lead: 'Сегодня clx ничего не стоит. Воркер работает в вашем аккаунте Cloudflare, в его квотах, а тарифы различаются только лимитами.',
+    start: 'Начать бесплатно',
+    plans: [
+      { name: 'Free', price: 'Бесплатно', points: ['1 аккаунт Cloudflare', '10 сайтов', '200 ссылок, по 10 правил', '1 ключ API'] },
+      { name: 'API', price: 'По запросу, пока бесплатно', points: ['50 аккаунтов Cloudflare', '500 сайтов', '10 000 ссылок, по 10 правил', '5 ключей API с ограничением по аккаунтам и IP'] },
+    ],
+    note: 'Тариф API включается по запросу; способ запросить его скоро появится.',
+    sections: [
+      {
+        h: 'Что Cloudflare даёт бесплатно',
+        p: 'Workers Free даёт аккаунту 100 000 запросов и 100 000 записей D1 в сутки — на все его воркеры. Типичному аккаунту это ~11 000 учтённых событий в сутки в худшем случае, обычно в несколько раз больше.',
+      },
+      {
+        h: 'Когда переходить на Workers Paid',
+        p: 'clx раз в сутки измеряет расход аккаунта, строит прогноз и предупреждает, пока квота не кончилась. Сам clx Workers Paid не требует никогда.',
+      },
+      {
+        h: 'Если квота кончилась',
+        p: 'Кончились запросы к воркерам (100 000 в сутки) — путь счётчика отвечает ошибкой, а короткие ссылки перестают работать; сами страницы сайта не затронуты. Кончились записи D1 — счётчик перестаёт считать, ссылки переадресуют. Кончились чтения D1 (5 млн в сутки) — ссылки тоже перестают работать. Всё это — до сброса квоты.',
+      },
+      {
+        h: 'Платные тарифы позже',
+        p: 'Платные тарифы с лимитами выше запланированы. До тех пор тариф API тоже бесплатен.',
+      },
+    ],
+    faq: {
+      h: 'Вопросы',
+      items: [
+        ['Нужна ли карта?', 'Нет: для регистрации и бесплатного тарифа она не нужна.'],
+        ['Берёт ли clx деньги за трафик?', 'Нет: посещения и клики идут через ваш аккаунт Cloudflare и его квоты, а не через clx.cx.'],
+        ['Что входит в лимиты?', 'Подключённые аккаунты Cloudflare, сайты, ссылки и ключи API; посещения и клики ограничены только квотами вашего Cloudflare.'],
+      ],
+    },
+    final: 'Начните с бесплатного тарифа',
+  },
+};
+
+/** Who does what in a site generator's build: three boxes in a row. */
+function flow(steps: [string, string][]): string {
+  return `<figure class="flow" aria-hidden="true">${steps.map(([h, p]) => `<div class="flow__step"><p class="flow__h">${escapeHtml(h)}</p><p>${escapeHtml(p)}</p></div>`).join('<span class="flow__arrow">→</span>')}</figure>`;
+}
+
+function plansBlock(t: PricingText): string {
+  return `<div class="plans">${t.plans.map((p) => `<div class="card plan"><h2 class="h3">${escapeHtml(p.name)}</h2><p class="plan__price">${escapeHtml(p.price)}</p><ul class="ticks">${p.points.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`).join('')}</div>
+<p class="demo__note">${escapeHtml(t.note)}</p>`;
+}
+
 function page(locale: Locale, t: ProductText, illustration: string): { title: string; description: string; body: string } {
   const start = `<a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a>`;
   const features = t.sections.length === 3 ? 'features features--3' : 'features';
+  const setup = t.setup
+    ? `<section class="home-section home-api">
+  <div>
+    <h2>${escapeHtml(t.setup.h)}</h2>
+    <p>${escapeHtml(t.setup.p)}</p>
+  </div>
+  <pre class="code"><code>${escapeHtml(t.setup.code)}</code></pre>
+</section>
+`
+    : '';
   const body = `<section class="hero hero--home">
   <h1>${escapeHtml(t.h1)}</h1>
   <p class="lead">${escapeHtml(t.lead)}</p>
@@ -253,14 +452,7 @@ ${illustration}
 <section class="home-section">
   <div class="${features}">${t.sections.map((x) => `<div class="card feature"><h2 class="h3">${escapeHtml(x.h)}</h2><p>${escapeHtml(x.p)}</p>${x.points ? `<ul class="ticks">${x.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</div>
 </section>
-<section class="home-section home-api">
-  <div>
-    <h2>${escapeHtml(t.setup.h)}</h2>
-    <p>${escapeHtml(t.setup.p)}</p>
-  </div>
-  <pre class="code"><code>${escapeHtml(t.setup.code)}</code></pre>
-</section>
-<section class="home-section">
+${setup}<section class="home-section">
   <h2>${escapeHtml(t.faq.h)}</h2>
   <div class="faq">${t.faq.items.map(([q, a]) => `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`).join('')}</div>
 </section>
@@ -273,3 +465,13 @@ ${illustration}
 
 export const analyticsPage = (locale: Locale) => page(locale, ANALYTICS[locale], demoReport(locale, 'pages'));
 export const linksPage = (locale: Locale) => page(locale, LINKS[locale], linkCard(locale, LINKS[locale].card));
+export const generatorsPage = (locale: Locale) => page(locale, GENERATORS[locale], flow(GENERATORS[locale].flow));
+export const pricingPage = (locale: Locale) => page(locale, PRICING[locale], plansBlock(PRICING[locale]));
+
+/** The questions of each page, for /faq (site/faq.ts): one source, so a page and /faq cannot differ. */
+export const pageQuestions = (locale: Locale) => ({
+  analytics: ANALYTICS[locale].faq.items,
+  links: LINKS[locale].faq.items,
+  generators: GENERATORS[locale].faq.items,
+  pricing: PRICING[locale].faq.items,
+});
