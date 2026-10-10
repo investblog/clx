@@ -22,7 +22,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       DKIM, SPF and DMARC.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
 - [ ] A way to ask for the `api` plan: /agents, /api and auth.md say clx switches it on "by
-      request" but name no address or form (10.10).
+      request" but name no address or form (10.10). The channel will be a Telegram support bot, as
+      on the owner's other projects; then link it from those pages and the keys page.
 - [ ] `GET /v1/me` mixes field styles: `limits` is camelCase (`cfAccounts`, `rulesPerLink`), `use`
       snake_case (`cf_accounts`) — found by the live agent run of /agents (10.10). Pick snake_case
       before outside integrators rely on it, and document both objects in openapi.yaml.
