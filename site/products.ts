@@ -15,6 +15,8 @@ interface ProductText {
   h1: string;
   lead: string;
   start: string;
+  /** How to begin, shown under the call to sign up as the 301.st step flow. */
+  steps?: string[];
   sections: { h: string; p: string; points?: string[] }[];
   setup?: { h: string; p: string; code: string };
   faq: { h: string; items: [string, string][] };
@@ -39,6 +41,7 @@ const ANALYTICS: Record<Locale, ProductText> = {
     h1: 'Cookieless website analytics in your own Cloudflare account',
     lead: 'A one-line snippet counts the views and visitors of your site. The counter is a worker in your Cloudflare account, the data sits in your D1 database, and clx.cx keeps only the totals.',
     start: 'Start free',
+    steps: ['Connect Cloudflare', 'Add your site', 'Put in the snippet'],
     sections: [
       {
         h: 'No cookies, nothing third-party',
@@ -76,6 +79,7 @@ const ANALYTICS: Record<Locale, ProductText> = {
     h1: 'Статистика сайта без cookie — в вашем аккаунте Cloudflare',
     lead: 'Сниппет в одну строку считает просмотры и посетителей сайта. Счётчик — воркер в вашем аккаунте Cloudflare, данные лежат в вашей базе D1, а на clx.cx хранятся только итоги.',
     start: 'Начать бесплатно',
+    steps: ['Подключите Cloudflare', 'Добавьте сайт', 'Вставьте сниппет'],
     sections: [
       {
         h: 'Без cookie и без чужих скриптов',
@@ -116,6 +120,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     h1: 'A URL shortener on your own domain',
     lead: 'Pick a host like go.example.com, and clx serves short links on it from a worker in your Cloudflare account — with a QR code for every link, rules by country and device, and click tracking.',
     start: 'Start free',
+    steps: ['Connect Cloudflare', 'Choose a link host', 'Make a link'],
     sections: [
       {
         h: 'Your domain, not ours',
@@ -166,6 +171,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     h1: 'Сокращатель ссылок на вашем домене',
     lead: 'Выберите хост вроде go.example.com — и clx будет обслуживать на нём короткие ссылки из воркера в вашем аккаунте Cloudflare: с QR-кодом для каждой ссылки, правилами по стране и устройству и статистикой кликов.',
     start: 'Начать бесплатно',
+    steps: ['Подключите Cloudflare', 'Выберите хост ссылок', 'Создайте ссылку'],
     sections: [
       {
         h: 'Ваш домен, а не наш',
@@ -428,6 +434,14 @@ function plansBlock(t: PricingText): string {
 <p class="demo__note">${escapeHtml(t.note)}</p>`;
 }
 
+/** The 301.st step flow (ui/css/components.css): numbered pills with arrows between them. A list, so
+ *  a screen reader hears steps; the arrows are hidden from it. */
+function stepFlow(steps: string[] | undefined): string {
+  if (!steps?.length) return '';
+  const items = steps.map((s, i) => `<li class="step-pill"><span class="step-number">${i + 1}</span><span class="step-text">${escapeHtml(s)}</span></li>`);
+  return `  <ol class="step-flow hero__steps">${items.join('<li class="step-separator" aria-hidden="true">→</li>')}</ol>\n`;
+}
+
 function page(locale: Locale, t: ProductText, illustration: string): { title: string; description: string; body: string } {
   const start = `<a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a>`;
   const features = t.sections.length === 3 ? 'features features--3' : 'features';
@@ -445,7 +459,7 @@ function page(locale: Locale, t: ProductText, illustration: string): { title: st
   <h1>${escapeHtml(t.h1)}</h1>
   <p class="lead">${escapeHtml(t.lead)}</p>
   <p class="actions">${start}</p>
-</section>
+${stepFlow(t.steps)}</section>
 <section class="home-demo">
 ${illustration}
 </section>
