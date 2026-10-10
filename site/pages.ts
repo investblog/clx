@@ -31,16 +31,22 @@ export interface PageDef {
   slug: string;
   locales: readonly Locale[];
   /** Key in `Strings.foot`: the page is linked from the footer. */
-  foot?: 'privacy' | 'terms' | 'abuse';
+  foot?: 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
   indexed: boolean;
   /** A legal text: its body is `site/legal/<locale><slug>.html`. */
   legal?: boolean;
+  /** Also served as markdown: `<slug>.md` (`index.md` for "/"), and to `Accept: text/markdown` at
+   *  the page's own address (src/markdown.ts). The English page only. */
+  markdown?: boolean;
   priority?: number;
   changefreq?: 'weekly' | 'monthly' | 'yearly';
 }
 
 export const SITE_PAGES: readonly PageDef[] = [
-  { slug: '/', locales: ALL_LOCALES, indexed: true, priority: 1.0, changefreq: 'weekly' },
+  { slug: '/', locales: ALL_LOCALES, indexed: true, priority: 1.0, changefreq: 'weekly', markdown: true },
+  // For agents and integrators; English only — the reader is a program (site/agents.ts, site/api.ts).
+  { slug: '/agents', locales: ['en'], foot: 'agents', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
+  { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/privacy', locales: ALL_LOCALES, foot: 'privacy', legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   { slug: '/terms', locales: ALL_LOCALES, foot: 'terms', legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   { slug: '/abuse', locales: ALL_LOCALES, foot: 'abuse', legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
@@ -51,4 +57,8 @@ export const SITE_PAGES: readonly PageDef[] = [
 /** Hand-written files in public/ every build needs (the rest is generated). */
 export const STATIC_FILES: readonly string[] = ['_headers', 'favicon.svg', 'icons.svg', 'theme.js', 'ui.css', 'app.css'];
 
-export const footPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.foot && p.locales.includes(locale));
+/** The footer of a language: its own pages, and the English-only ones (the agent docs) in English. */
+export const footPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.foot && (p.locales.includes(locale) || p.locales.length === 1));
+
+/** The markdown file of a page: `index.md`, `agents.md`. */
+export const markdownFile = (slug: string): string => (slug === '/' ? 'index.md' : `${slug.slice(1)}.md`);

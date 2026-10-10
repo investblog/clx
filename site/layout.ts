@@ -43,7 +43,11 @@ function header(page: PageDef, locale: Locale): string {
 
 function footer(locale: Locale): string {
   const s = STRINGS[locale];
-  const links = footPages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(s.foot[p.foot!])}</a>`);
+  const links = footPages(locale).map((p) =>
+    p.locales.includes(locale)
+      ? `<a href="${pathFor(p.slug, locale)}">${escapeHtml(s.foot[p.foot!])}</a>`
+      : `<a href="${pathFor(p.slug, p.locales[0]!)}" hreflang="${LOCALES[p.locales[0]!].htmlLang}">${escapeHtml(s.foot[p.foot!])}</a>`,
+  );
   links.push(`<a href="${REPO}" rel="noopener">${escapeHtml(s.foot.source)}</a>`);
   return `<footer class="site-foot">${links.join(' · ')}</footer>`;
 }

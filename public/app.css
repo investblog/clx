@@ -97,6 +97,19 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .lead{font-size:var(--fs-lg);color:var(--text-muted)}
 .points{padding-left:var(--space-5);margin:var(--space-4) 0}
 .points li{margin-bottom:var(--space-2)}
+/* The docs for agents (site/agents.ts, site/api.ts): /agents, /api. */
+.doc{max-width:820px;margin:var(--space-5) 0}
+.doc h1{font-size:var(--fs-2xl);line-height:1.2;margin:0 0 var(--space-4)}
+.doc h2{margin:var(--space-6) 0 var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-subtle)}
+.doc h3{font-size:var(--fs-lg);margin:var(--space-5) 0 var(--space-2)}
+.doc ul,.doc ol{padding-left:var(--space-5)}
+.doc li{margin-bottom:var(--space-2)}
+.doc pre{margin:var(--space-3) 0;padding:var(--space-3);border-radius:var(--radius-xs);background:var(--bg-soft);overflow-x:auto;font-size:var(--fs-sm);line-height:1.5}
+.doc pre code{font-family:var(--font-mono);white-space:pre}
+.doc .endpoint{scroll-margin-top:72px}
+.doc .hint{margin:var(--space-2) 0 var(--space-1);font-size:var(--fs-sm);color:var(--text-muted)}
+.doc .fields{margin:0 0 var(--space-2);font-size:var(--fs-sm)}
+.doc .fields li{margin-bottom:var(--space-1);overflow-wrap:anywhere}
 .lang-switch{font-size:var(--fs-sm);color:var(--text-muted);text-decoration:none}
 .lang-switch:hover{color:var(--text)}
 .site-foot{max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}

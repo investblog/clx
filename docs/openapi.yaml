@@ -224,7 +224,7 @@ components:
         unavailable:
           type: string
           enum: [not_installed, cloudflare, rate_limited]
-          description: 'why breakdowns (and a link''s today) are not there: the worker is not installed or the token is gone; Cloudflare failed or took over 5 s; over 30 requests to the account''s database a minute'
+          description: 'why breakdowns (and a link''s today) are not there: the worker is not installed or the token is gone; Cloudflare failed or took over 5 s; over 30 reads of the account databases a minute for this clx user (each cached 5 minutes)'
   responses:
     Error:
       description: An error

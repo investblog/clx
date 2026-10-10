@@ -9,6 +9,7 @@ import { runLinkHosts } from './cf/links';
 import { runSites } from './cf/sites';
 import { hook } from './hook';
 import { appOrigin, sendNotice } from './mail';
+import { MARKDOWN_PAGES, servePage } from './markdown';
 import type { Env } from './types';
 import { IDEM_TTL } from './v1/idempotency';
 import { v1 } from './v1/index';
@@ -75,6 +76,8 @@ app.route('/auth', signup);
 app.route('/v1', v1);
 app.route('/admin', admin);
 app.route('/hook', hook);
+// The pages with a markdown copy: markdown to `Accept: text/markdown`, else the HTML file (§16).
+for (const path of Object.keys(MARKDOWN_PAGES)) app.on(['GET', 'HEAD'], path, (c) => servePage(c.req.raw, c.env, path));
 
 export default {
   fetch: app.fetch,

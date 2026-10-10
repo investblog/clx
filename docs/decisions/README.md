@@ -18,3 +18,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0010](./0010-session-version-starts-at-sign-up.md) | A new user's session version starts at the sign-up time | 07.10.2026 | §9 |
 | [0011](./0011-zone-picker.md) | The host fields suggest the account's zones | 10.10.2026 | §10, §15 |
 | [0012](./0012-site-and-app.md) | A site at the root, the app at /app; English and Russian | 10.10.2026 | §9, §10, §16 |
+| [0013](./0013-docs-for-agents.md) | Docs for agents, with the API reference generated from the contract | 10.10.2026 | §15, §16 |

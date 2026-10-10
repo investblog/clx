@@ -924,6 +924,15 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   result before every deploy. Nothing generated is committed.
 - **Languages.** English and Russian for the site; the app and the e-mails follow, with the user's
   language kept with the account. Legal texts exist in both, English is the original.
-- **Planned** (the product plan, in parts): docs for agents and the API reference built from
-  `docs/openapi.yaml` (`/api`, `/agents`, `llms.txt`, markdown on `Accept: text/markdown`); the
-  app's design system (drawers, dialogs, navigation); the content pages and SEO (OG cards, JSON-LD).
+- **For agents** ([ADR 0013](./decisions/0013-docs-for-agents.md)), English only: `/agents` — the
+  walkthrough an agent follows with a key from its person; `/api` — the reference, generated from
+  `docs/openapi.yaml`, which is also served (`/openapi.yaml`, `/openapi.json`). Both and the home page
+  have a markdown copy (`/agents.md`, `/api.md`, `/index.md` = `llms.txt`), also served at the page's
+  own address to `Accept: text/markdown` (those paths run the Worker first; `Vary: Accept`). Beside
+  them: `llms.txt`, `auth.md` (root and `/.well-known/`), `/.well-known/api-catalog` (RFC 9727,
+  `application/linkset+json`), the skill `clx-sites` (`/.well-known/agent-skills/`, index with its
+  sha256 digest), `Link: …rel="api-catalog", …rel="describedby"` on every page but the app, and
+  `Content-Signal: search=yes, ai-input=yes, ai-train=yes` in robots.txt. The zone's Browser
+  Integrity Check is off: it refused `Python-urllib` on every path, `/v1` included.
+- **Planned** (the product plan, in parts): the app's design system (drawers, dialogs, navigation);
+  the content pages and SEO (OG cards, JSON-LD).

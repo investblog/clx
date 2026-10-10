@@ -1,15 +1,20 @@
 // node site/build.ts — prints every page of the table (site/pages.ts) × its languages into public/,
 // copies the app's page to public/app.html, and writes robots.txt and sitemap.xml. Run by
 // scripts/build-ui.mjs; the output is not committed. Node runs this file as is (type stripping).
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ALL_LOCALES, APP_PATH, ORIGIN, SITE_PAGES, type Locale, type PageDef } from './pages.ts';
+import TurndownService from 'turndown';
+import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, skillMd } from './agents.ts';
+import { apiBody, apiJson, loadOpenapi } from './api.ts';
+import { ALL_LOCALES, APP_PATH, ORIGIN, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, layout } from './layout.ts';
 import { alternatesFor, fileFor, pathFor, urlFor } from './urls.ts';
 
 const OUT = 'public';
 const here = import.meta.dirname;
+const openapi = loadOpenapi(path.join(here, '..'));
 
 function home(locale: Locale): { title: string; description: string; body: string } {
   const s = STRINGS[locale].home;
@@ -34,8 +39,13 @@ function notFound(locale: Locale): { title: string; body: string } {
   return { title: `${s.title} — clx`, body: `<section class="narrow">\n<h1 class="h3">${escapeHtml(s.title)}</h1>\n<p>${escapeHtml(s.text)}</p>\n<p><a href="${pathFor('/', locale)}">${escapeHtml(s.back)}</a></p>\n</section>` };
 }
 
+const AGENT_PAGES: Record<string, () => { title: string; description: string; body: string }> = {
+  '/agents': () => ({ title: 'clx for AI agents', description: "How an AI agent sets up clx for a person: connect their Cloudflare account, add sites and embed the counter, make short links and QR codes, read reports — through the API.", body: agentsBody() }),
+  '/api': () => ({ title: 'clx management API', description: 'The clx management API: Cloudflare accounts, sites and counter snippets, short links with rules and QR codes, reports. Authentication, idempotency, errors and every endpoint.', body: apiBody(openapi.doc) }),
+};
+
 function render(page: PageDef, locale: Locale): string {
-  const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : null;
+  const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (AGENT_PAGES[page.slug]?.() ?? null);
   if (!content) throw new Error(`no template for ${page.slug}`);
   return layout({ page, locale, ...content });
 }
@@ -46,12 +56,50 @@ function write(file: string, text: string): void {
   fs.writeFileSync(full, text);
 }
 
-for (const page of SITE_PAGES) for (const locale of page.locales) write(fileFor(page.slug, locale), render(page, locale));
+const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+
+/** The markdown of a rendered page: its <main> only, links made absolute. One source, so the HTML and
+ *  the markdown cannot drift (catchall.in's way). */
+function toMarkdown(html: string): string {
+  const main = html.match(/<main[^>]*>([\s\S]*)<\/main>/u)?.[1];
+  if (!main) throw new Error('a page without <main>');
+  return `${turndown.turndown(main).replace(/\]\(\//gu, `](${ORIGIN}/`)}\n`;
+}
+
+for (const page of SITE_PAGES)
+  for (const locale of page.locales) {
+    const html = render(page, locale);
+    write(fileFor(page.slug, locale), html);
+    // The home page's markdown is the index of the docs (llms.txt), not its marketing text.
+    if (page.markdown && locale === 'en') write(markdownFile(page.slug), page.slug === '/' ? llmsTxt() : toMarkdown(html));
+  }
 fs.copyFileSync(path.join(here, 'app.html'), path.join(OUT, 'app.html'));
+
+// For agents (docs/spec.md §16): the docs index, how auth works (Cloudflare's scanner reads the root
+// copy), the API catalog (RFC 9727), the skill with its digest (Agent Skills Discovery 0.2), the contract.
+write('llms.txt', llmsTxt());
+write('auth.md', authMd());
+write('.well-known/auth.md', authMd());
+write('.well-known/api-catalog', apiCatalog());
+const skill = skillMd();
+write(`.well-known/agent-skills/${SKILL.name}/SKILL.md`, skill);
+write(
+  '.well-known/agent-skills/index.json',
+  `${JSON.stringify(
+    {
+      $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
+      skills: [{ name: SKILL.name, type: 'skill-md', description: SKILL.description, url: `/.well-known/agent-skills/${SKILL.name}/SKILL.md`, digest: `sha256:${crypto.createHash('sha256').update(skill).digest('hex')}` }],
+    },
+    null,
+    2,
+  )}\n`,
+);
+write('openapi.yaml', openapi.text);
+write('openapi.json', apiJson(openapi.doc));
 
 write(
   'robots.txt',
-  ['User-agent: *', `Disallow: ${APP_PATH}$`, 'Disallow: /v1/', 'Disallow: /auth/', 'Disallow: /admin/', 'Disallow: /hook/', '', `Sitemap: ${ORIGIN}/sitemap.xml`, ''].join('\n'),
+  ['User-agent: *', 'Content-Signal: search=yes, ai-input=yes, ai-train=yes', `Disallow: ${APP_PATH}$`, 'Disallow: /v1/', 'Disallow: /auth/', 'Disallow: /admin/', 'Disallow: /hook/', '', `Sitemap: ${ORIGIN}/sitemap.xml`, ''].join('\n'),
 );
 
 const urls = SITE_PAGES.filter((p) => p.indexed).flatMap((p) =>

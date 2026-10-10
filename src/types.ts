@@ -19,6 +19,8 @@ export interface Env {
   TURNSTILE_SECRET?: string;
   /** Sign-up and reset requests per IP (§9): a first line against floods, per location. */
   SIGNUP_LIMIT: RateLimit;
+  /** Workers Static Assets (public/): the pages with a markdown copy are served through the Worker (§16). */
+  ASSETS: Fetcher;
 }
 
 /** Who makes a /v1 call: a page session (all scopes) or an API key. */

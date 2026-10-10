@@ -11,7 +11,7 @@ export interface Strings {
   language: string;
   home: { title: string; description: string; h1: string; lead: string; points: string[]; cta: string; source: string };
   notFound: { title: string; text: string; back: string };
-  foot: { privacy: string; terms: string; abuse: string; source: string };
+  foot: { agents: string; api: string; privacy: string; terms: string; abuse: string; source: string };
 }
 
 const en: Strings = {
@@ -34,7 +34,7 @@ const en: Strings = {
     source: 'Source code',
   },
   notFound: { title: 'Page not found', text: 'There is no such page on clx.cx.', back: 'To the home page' },
-  foot: { privacy: 'Privacy', terms: 'Terms', abuse: 'Abuse', source: 'Source code' },
+  foot: { agents: 'For AI agents', api: 'API', privacy: 'Privacy', terms: 'Terms', abuse: 'Abuse', source: 'Source code' },
 };
 
 const ru: Strings = {
@@ -57,7 +57,7 @@ const ru: Strings = {
     source: 'Исходный код',
   },
   notFound: { title: 'Страница не найдена', text: 'Такой страницы на clx.cx нет.', back: 'На главную' },
-  foot: { privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
+  foot: { agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
 };
 
 export const STRINGS: Record<Locale, Strings> = { en, ru };

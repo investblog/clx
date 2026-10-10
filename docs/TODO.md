@@ -21,6 +21,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       sign-in with the new password, the account deleted with nothing of it left in D1. Mail passed
       DKIM, SPF and DMARC.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
+- [ ] A way to ask for the `api` plan: /agents, /api and auth.md say clx switches it on "by
+      request" but name no address or form (10.10).
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
 - [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published
       and `src/qr` gives way to the dependency (ADR 0009).

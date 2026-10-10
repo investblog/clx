@@ -19,11 +19,14 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260926.1",
     "@types/node": "^24.13.6",
+    "@types/turndown": "^5.0.6",
     "esbuild": "0.28.1",
     "jsqr": "^1.4.0",
+    "turndown": "^7.2.4",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
-    "wrangler": "^4.141.0"
+    "wrangler": "^4.141.0",
+    "yaml": "^2.9.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
