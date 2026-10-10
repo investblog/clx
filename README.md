@@ -1,5 +1,10 @@
 # clx
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark.svg">
+  <img src="docs/brand/logo.svg" alt="clx" height="56">
+</picture>
+
 A free, open visit counter and short-link service for sites on Cloudflare, at [clx.cx](https://clx.cx).
 
 - **Counter** — no cookies, no third-party address in the page: the beacon goes to a path on your own

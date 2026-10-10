@@ -7,10 +7,10 @@ import path from 'node:path';
 import TurndownService from 'turndown';
 import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, skillMd } from './agents.ts';
 import { apiBody, apiJson, loadOpenapi } from './api.ts';
-import { ALL_LOCALES, LOCALES, ORIGIN, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
+import { ALL_LOCALES, LOCALES, ORIGIN, REPO, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
-import { faqPage } from './faq.ts';
+import { faqGroups, faqPage } from './faq.ts';
 import { analyticsPage, generatorsPage, linksPage, pricingPage } from './products.ts';
 import { escapeHtml, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
@@ -38,10 +38,40 @@ const AGENT_PAGES: Record<string, () => { title: string; description: string; bo
   '/api': () => ({ title: 'clx management API', description: 'The clx management API: Cloudflare accounts, sites and counter snippets, short links with rules and QR codes, reports. Authentication, idempotency, errors and every endpoint.', body: apiBody(openapi.doc) }),
 };
 
+/**
+ * The page's schema.org nodes: the site, its maker and the product on the home page; every other page
+ * a breadcrumb from home; /faq its questions (the same lists the pages show).
+ */
+function structuredData(page: PageDef, locale: Locale, content: { title: string; description?: string }): Record<string, unknown>[] {
+  const lang = LOCALES[locale].htmlLang;
+  const home = urlFor('/', locale);
+  if (page.slug === '/')
+    return [
+      { '@type': 'Organization', '@id': `${ORIGIN}/#org`, name: 'clx', url: ORIGIN, logo: `${ORIGIN}/apple-touch-icon.png`, sameAs: [REPO] },
+      { '@type': 'WebSite', '@id': `${home}#site`, name: 'clx', url: home, inLanguage: lang, publisher: { '@id': `${ORIGIN}/#org` } },
+      {
+        '@type': 'SoftwareApplication',
+        name: 'clx',
+        url: home,
+        description: content.description,
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web',
+        inLanguage: lang,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        publisher: { '@id': `${ORIGIN}/#org` },
+      },
+    ];
+  const name = page.nav ? STRINGS[locale].nav[page.nav] : content.title.split(' — ')[0]!;
+  const crumbs = { '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'clx', item: home }, { '@type': 'ListItem', position: 2, name, item: urlFor(page.slug, locale) }] };
+  if (page.slug !== '/faq') return [crumbs];
+  const questions = faqGroups(locale).flatMap((g) => g.items);
+  return [crumbs, { '@type': 'FAQPage', inLanguage: lang, mainEntity: questions.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }];
+}
+
 function render(page: PageDef, locale: Locale): string {
   const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? null);
   if (!content) throw new Error(`no template for ${page.slug}`);
-  return layout({ page, locale, ...content });
+  return layout({ page, locale, ...content, jsonLd: page.indexed ? structuredData(page, locale, content) : undefined });
 }
 
 function write(file: string, text: string): void {

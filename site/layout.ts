@@ -1,9 +1,9 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import { LOCALES, REPO, footPages, navPages, type Locale, type PageDef } from './pages.ts';
+import { LOCALES, ORIGIN, REPO, footPages, navPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
-import { alternatesFor, appPathFor, pathFor, urlFor } from './urls.ts';
+import { alternatesFor, appPathFor, ogImagePath, pathFor, urlFor } from './urls.ts';
 
 export function escapeHtml(v: string): string {
   return v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -16,7 +16,35 @@ export interface LayoutInput {
   description?: string;
   /** Markup inside <main>. */
   body: string;
+  /** schema.org nodes for the page's JSON-LD (site/build.ts `structuredData`). */
+  jsonLd?: Record<string, unknown>[];
 }
+
+/** Open Graph and the Twitter card of an indexed page; its image is drawn by scripts/build-og.mjs. */
+function social(page: PageDef, locale: Locale, title: string, description: string | undefined): string[] {
+  const others = page.locales.filter((l) => l !== locale);
+  return [
+    '<meta property="og:type" content="website" />',
+    '<meta property="og:site_name" content="clx" />',
+    `<meta property="og:title" content="${escapeHtml(title)}" />`,
+    description ? `<meta property="og:description" content="${escapeHtml(description)}" />` : '',
+    `<meta property="og:url" content="${urlFor(page.slug, locale)}" />`,
+    `<meta property="og:locale" content="${LOCALES[locale].ogLocale}" />`,
+    ...others.map((l) => `<meta property="og:locale:alternate" content="${LOCALES[l].ogLocale}" />`),
+    `<meta property="og:image" content="${ORIGIN}${ogImagePath(page.slug, locale)}" />`,
+    '<meta property="og:image:width" content="1200" />',
+    '<meta property="og:image:height" content="630" />',
+    // The card shows the page's heading and description: its title is a fair description of it.
+    `<meta property="og:image:alt" content="${escapeHtml(title)}" />`,
+    '<meta name="twitter:card" content="summary_large_image" />',
+    `<meta name="twitter:image:alt" content="${escapeHtml(title)}" />`,
+  ].filter(Boolean);
+}
+
+/** JSON-LD is data, not script: the CSP does not run it, search engines read it. `<` is escaped so
+ *  no text in it can close the element. */
+const jsonLdBlock = (nodes: Record<string, unknown>[]): string =>
+  `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@graph': nodes }).replaceAll('<', '\\u003c')}</script>`;
 
 const icon = (name: string, cls = 'icon') => `<svg class="${cls}" aria-hidden="true"><use href="/icons.svg#i-mono-${name}"></use></svg>`;
 
@@ -69,7 +97,7 @@ function footer(locale: Locale): string {
 }
 
 export function layout(input: LayoutInput): string {
-  const { page, locale, title, description, body } = input;
+  const { page, locale, title, description, body, jsonLd } = input;
   const head = [
     '<meta charset="UTF-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
@@ -78,6 +106,8 @@ export function layout(input: LayoutInput): string {
     page.indexed
       ? [`<link rel="canonical" href="${urlFor(page.slug, locale)}" />`, ...alternatesFor(page.slug, page.locales).map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}" />`)].join('\n    ')
       : '<meta name="robots" content="noindex" />',
+    ...(page.indexed ? social(page, locale, title, description) : []),
+    page.indexed && jsonLd?.length ? jsonLdBlock(jsonLd) : '',
     '<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml" />',
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',

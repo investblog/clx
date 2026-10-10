@@ -54,6 +54,7 @@ public/*.md
 public/llms.txt
 public/openapi.*
 public/.well-known/
+public/og/
 
 # agent infrastructure — this is a public repository: it holds the product only. The agent's rules,
 # plans, hooks, settings and memory stay on the maintainer's machine (canon BOOTSTRAP step 5).

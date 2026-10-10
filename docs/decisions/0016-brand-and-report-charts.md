@@ -41,6 +41,16 @@ lists with CSS bars.
   width, so each chart is drawn for both themes and the series also for a wide card and a phone;
   the stylesheet shows one. The example's 14 days end the day before the build.
 
+- **Logo, cards, structured data.** The logo is the mark beside "clx" in Onest 600 turned into
+  outlines (`docs/brand/`, with the scripts that make it), so it looks the same where Onest is not
+  installed. Every indexed page has an Open Graph card, 1200×630, drawn at build time from its own
+  <h1> and description (`scripts/build-og.mjs`): SVG → sharp → PNG with the text as outlines from
+  two static cuts of Onest kept in `site/brand/` (400 and 600; opentype.js reads a variable font only
+  at its default weight), so a build gives the same cards on any machine. JSON-LD: the home page
+  says Organization, WebSite and SoftwareApplication (free); every other page a BreadcrumbList; /faq
+  also a FAQPage made from the same questions it shows. `scripts/check-site.mjs` refuses a page
+  whose card is missing or not 1200×630, or whose JSON-LD does not parse.
+
 **Rejected.** Keeping the 301 blue (clx would read as a 301 page). The opposite hue for the second
 series (the library's default): for violet it is olive, and visitors are a part of views, not a
 rival measure. The hand-drawn chart: no axis values, no tiles, and one more chart code to keep.

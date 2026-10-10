@@ -1,5 +1,6 @@
 allowBuilds:
   esbuild: true
+  sharp: false
   workerd: true
 minimumReleaseAgeExclude:
   - affiliate-charts@1.1.0

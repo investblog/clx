@@ -27,6 +27,9 @@ export function fileFor(slug: string, locale: Locale): string {
   return `${prefixFor(locale).slice(1)}${locale === 'en' ? '' : '/'}${slug.slice(1)}.html`;
 }
 
+/** The page's Open Graph card (scripts/build-og.mjs draws it): `/og/en/home.png`, `/og/ru/pricing.png`. */
+export const ogImagePath = (slug: string, locale: Locale): string => `/og/${locale}/${slug === '/' ? 'home' : slug.slice(1)}.png`;
+
 export interface Alternate {
   hreflang: string;
   href: string;

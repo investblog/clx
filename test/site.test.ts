@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SITE_PAGES } from '../site/pages.ts';
 import { generateMatrix } from '../src/qr/generate';
-import { alternatesFor, fileFor, pathFor, urlFor } from '../site/urls.ts';
+import { alternatesFor, fileFor, ogImagePath, pathFor, urlFor } from '../site/urls.ts';
 
 describe('addresses', () => {
   it('English at the root, Russian under /ru, no trailing slash on a home page', () => {
@@ -105,6 +105,27 @@ describe('generated pages', () => {
       const main = read(fileFor('/', l)).match(/<main[\s\S]*?<\/main>/u)![0];
       for (const slug of ['/pricing', '/faq']) expect(main, `${l} ${slug}`).toMatch(new RegExp(`<a href="${pathFor(slug, l)}">[^<]+ →</a>`, 'u'));
     }
+  });
+
+  it('every indexed page: Open Graph and the Twitter card, and JSON-LD of its kind', () => {
+    const graph = (html: string) => (JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/u)![1]!) as { '@graph': { '@type': string; mainEntity?: unknown[] }[] })['@graph'];
+    for (const p of SITE_PAGES.filter((x) => x.indexed))
+      for (const l of p.locales) {
+        const html = read(fileFor(p.slug, l));
+        const head = html.match(/<head>[\s\S]*?<\/head>/u)![0];
+        expect(head, `${l}${p.slug}`).toContain(`<meta property="og:url" content="${urlFor(p.slug, l)}" />`);
+        expect(head).toContain(`<meta property="og:image" content="https://clx.cx${ogImagePath(p.slug, l)}" />`);
+        expect(head).toContain('<meta name="twitter:card" content="summary_large_image" />');
+        expect(head).toMatch(/<meta property="og:title" content="[^"]+" \/>/u);
+        const types = graph(head).map((n) => n['@type']);
+        if (p.slug === '/') expect(types).toEqual(['Organization', 'WebSite', 'SoftwareApplication']);
+        else expect(types[0]).toBe('BreadcrumbList');
+        if (p.slug === '/faq') {
+          const faq = graph(head).find((n) => n['@type'] === 'FAQPage')!;
+          expect(faq.mainEntity!.length).toBe([...html.matchAll(/<summary>/gu)].length);
+        }
+      }
+    expect(read('404.html')).not.toContain('og:image');
   });
 
   it('/faq holds every page’s questions, word for word, each group linking to its page', () => {

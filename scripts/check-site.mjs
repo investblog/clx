@@ -5,7 +5,7 @@
 //     pages aside), so a page dropped from the table does not linger on the site;
 //   - the app's and site's scripts, robots.txt, sitemap.xml and the hand-written files are there;
 //   - no page has an inline script or style (the CSP would block it — a page that only works in
-//     development);
+//     development); its JSON-LD parses, and its Open Graph card is there at 1200×630;
 //   - every link to a path of clx.cx in a page, or in a file for agents, leads to a file;
 //   - the files for agents are there, each page with a markdown copy runs the Worker first (both
 //     wrangler configs, else `Accept: text/markdown` never reaches src/markdown.ts), and the
@@ -42,6 +42,7 @@ if (exists('.well-known/agent-skills/index.json')) {
   }
 }
 
+const indexedFiles = new Set(SITE_PAGES.filter((p) => p.indexed).flatMap((p) => p.locales.map((l) => fileFor(p.slug, l))));
 const pages = fs.readdirSync(OUT, { recursive: true }).map((f) => String(f).replaceAll('\\', '/')).filter((f) => f.endsWith('.html'));
 for (const f of pages) if (!expected.has(f)) problems.push(`public/${f} is not in site/pages.ts`);
 
@@ -54,7 +55,30 @@ const served = (p) => {
 
 for (const f of pages) {
   const html = fs.readFileSync(path.join(OUT, f), 'utf8');
-  if (/<script(?![^>]*\ssrc=)[^>]*>/iu.test(html)) problems.push(`public/${f}: inline <script>`);
+  // JSON-LD is a data block the browser never runs (and the CSP does not block): not an inline script.
+  if (/<script(?![^>]*\ssrc=)(?![^>]*type="application\/ld\+json")[^>]*>/iu.test(html)) problems.push(`public/${f}: inline <script>`);
+  // At most one block, whole (an unclosed one is counted as opened but not as whole), and it parses.
+  const ldOpened = html.split('<script type="application/ld+json">').length - 1;
+  const ldBlocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gu)].map((m) => m[1]);
+  if (ldOpened !== ldBlocks.length || ldBlocks.length > 1) problems.push(`public/${f}: ${ldOpened} JSON-LD blocks opened, ${ldBlocks.length} whole — one whole block expected`);
+  for (const ld of ldBlocks)
+    try {
+      JSON.parse(ld);
+    } catch {
+      problems.push(`public/${f}: JSON-LD that does not parse`);
+    }
+  // An indexed page of the table must carry both; and its Open Graph card is there, a 1200×630 PNG
+  // (scripts/build-og.mjs). The app's pages and the 404 carry neither.
+  const og = html.match(/<meta property="og:image" content="https:\/\/[^/]+(\/og\/[^"]+\.png)"/u)?.[1];
+  if (indexedFiles.has(f)) {
+    if (!og) problems.push(`public/${f}: an indexed page without og:image`);
+    if (ldBlocks.length !== 1) problems.push(`public/${f}: an indexed page without its JSON-LD block`);
+  }
+  if (og) {
+    const png = exists(og.slice(1)) ? fs.readFileSync(path.join(OUT, og.slice(1))) : null;
+    if (!png) problems.push(`public/${f}: missing its card ${og}`);
+    else if (png.readUInt32BE(16) !== 1200 || png.readUInt32BE(20) !== 630) problems.push(`public/${f}: ${og} is not 1200×630`);
+  }
   if (/<style[\s>]/iu.test(html) || /\sstyle=/iu.test(html)) problems.push(`public/${f}: inline style`);
   for (const [, href] of html.matchAll(/\s(?:href|src)="(\/[^"/][^"]*|\/)"/gu)) if (!served(href)) problems.push(`public/${f}: ${href} leads nowhere`);
 }
