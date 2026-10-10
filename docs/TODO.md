@@ -43,18 +43,17 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       is lost — the state it reports is still on the account's page.
 - [ ] The API's share of the per-account write budget (§8): idempotency rows and changes made
       through `/v1` are not counted yet — only the receiver's writes are (stage 4c).
-- [ ] Flaky tests — Windows runs out of outgoing ports. **07.10 evening: the wait below is not
-      enough** — one run now needs ~14,000 ports, and with other programs on the machine a pre-push
-      failed with `EADDRINUSE` in the middle of a run after starting below 1,500. The fix is the
-      wider range (the owner's admin command below) or a D1 for tests without the proxy. Miniflare closes the connection after every
+- [x] Flaky tests — Windows runs out of outgoing ports. **10.10: the owner widened the range on the
+      dev machine** (`netsh int ipv4 set dynamicport tcp start=10000 num=55000`); `test/ports.ts` now
+      waits only while fewer than 15,000 of the range's ports are free, so there it does not wait. A
+      machine on the default range still waits; the lasting fix there is a D1 for tests without the
+      proxy. History: 07.10 evening a pre-push failed with `EADDRINUSE` in the middle of a run after
+      starting below 1,500 TIME_WAIT sockets, and 10.10 twice more. Miniflare closes the connection after every
       proxied call (`options.reset = true` in its `DispatchFetchDispatcher`), so each D1 call takes a
       port; a full run leaves ~11,000–13,000 sockets in TIME_WAIT (of 16,384 dynamic ports, ~2 min),
-      and a second run soon after failed random tests with `connect EADDRINUSE`. Now `test/ports.ts`
-      (vitest globalSetup) waits, on Windows, until fewer than 1,500 are left — up to 180 s. (07.10:
-      first set at 4,000, a pre-push failed 2 tests once the suite grew to ~14,000 sockets a run.) Batching the tests' own setup
-      calls saved ~3%: the app's calls are the bulk. Not patched in miniflare (a pinned alpha of
-      wrangler). To remove the wait on a dev machine, widen the range (admin, the owner's call):
-      `netsh int ipv4 set dynamicport tcp start=10000 num=55000`.
+      and a second run soon after failed random tests with `connect EADDRINUSE`. Batching the tests'
+      own setup calls saved ~3%: the app's calls are the bulk. Not patched in miniflare (a pinned
+      alpha of wrangler).
 - [x] A site added while its account is being disconnected: the route made in that moment was
       dropped by `placeRoute` when the row was gone, but only if that call worked. Now a route is
       made and recorded under the account's lease, which disconnect takes too (sites, link hosts,

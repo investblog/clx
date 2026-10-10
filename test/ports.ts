@@ -1,26 +1,31 @@
 // vitest globalSetup: on Windows, wait for the ports of the previous run to come back.
 // Miniflare closes the connection after every proxied call (`options.reset = true` in its
 // DispatchFetchDispatcher), so each D1 call of a test takes one outgoing port, held ~2 min in
-// TIME_WAIT after it. A full run takes ~14,000 of the 16,384 dynamic ports (07.10); a second run
-// started sooner fails random tests with `connect EADDRINUSE`. Waiting turns that into a pause.
+// TIME_WAIT after it. A full run takes ~14,000 ports (07.10): with Windows' default 16,384 dynamic
+// ports a second run started sooner fails random tests with `connect EADDRINUSE`. Waiting turns that
+// into a pause; a wider range (`netsh int ipv4 set dynamicport tcp start=10000 num=55000`, this
+// machine since 10.10) makes it unneeded.
 import { execSync } from 'node:child_process';
 
-const FREE_ENOUGH = 1_500; // TIME_WAIT sockets a full run can start on top of (other programs use ports too)
+const NEEDED = 15_000; // free ports a full run needs, with room for other programs
 const CAP = 180_000;
+const run = (cmd: string) => execSync(cmd, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
-function timeWait(): number {
-  return execSync('netstat -ano -p tcp', { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter((l) => l.includes('TIME_WAIT')).length;
+function free(range: number): number {
+  return range - run('netstat -ano -p tcp').split('\n').filter((l) => l.includes('TIME_WAIT')).length;
 }
 
 export default async function setup(): Promise<void> {
   if (process.platform !== 'win32') return;
+  // The output's last number is the count of ports (the line names are localized).
+  const range = Number([...run('netsh int ipv4 show dynamicport tcp').matchAll(/(\d+)/gu)].at(-1)?.[1] ?? 16_384);
   const end = Date.now() + CAP;
-  let n = timeWait();
-  if (n <= FREE_ENOUGH) return;
-  console.log(`waiting for ${n} TIME_WAIT sockets of the last run to close (up to ${CAP / 1000} s)…`);
-  while (n > FREE_ENOUGH && Date.now() < end) {
+  let n = free(range);
+  if (n >= NEEDED) return;
+  console.log(`waiting for ports: ${n} of ${range} free, a run needs ${NEEDED} (up to ${CAP / 1000} s)…`);
+  while (n < NEEDED && Date.now() < end) {
     await new Promise((r) => setTimeout(r, 3_000));
-    n = timeWait();
+    n = free(range);
   }
-  if (n > FREE_ENOUGH) console.warn(`still ${n} TIME_WAIT sockets: tests may fail with EADDRINUSE`);
+  if (n < NEEDED) console.warn(`still only ${n} ports free: tests may fail with EADDRINUSE`);
 }
