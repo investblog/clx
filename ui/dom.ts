@@ -12,6 +12,29 @@ export function s(tag: string, attrs: Record<string, string | number> = {}, ...c
   return el;
 }
 
+const icon = (name: string) => s('svg', { class: 'icon', 'aria-hidden': 'true' }, s('use', { href: `/icons.svg#i-mono-${name}` }));
+
+/** 301-ui's copy button: an icon that turns into a green tick for two seconds once copied. */
+export function copyButton(text: string, label = 'Скопировать'): HTMLButtonElement {
+  const btn = h('button', { type: 'button', class: 'btn-icon btn-icon--ghost btn-icon--sm', title: label, 'aria-label': label }, icon('copy'));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  btn.addEventListener('click', () =>
+    void navigator.clipboard?.writeText(text).then(() => {
+      btn.replaceChildren(icon('check'));
+      btn.classList.add('text-ok');
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        btn.replaceChildren(icon('copy'));
+        btn.classList.remove('text-ok');
+      }, 2000);
+    }),
+  );
+  return btn;
+}
+
+/** A block of code to copy whole: the copy button sits in its corner. */
+export const codeBlock = (text: string, label?: string) => h('div', { class: 'code-copy' }, h('code', { class: 'secret' }, text), copyButton(text, label));
+
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);

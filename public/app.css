@@ -73,6 +73,10 @@ main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
 .masked{-webkit-text-security:disc}
 .secret-card{align-items:flex-start}
 code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radius:var(--radius-xs);background:var(--bg-soft);overflow-wrap:anywhere;user-select:all}
+.code-copy{position:relative;align-self:stretch}
+.code-copy code.secret{padding-right:calc(var(--space-2) + 2.25rem)}
+.code-copy .btn-icon{position:absolute;top:var(--space-1);right:var(--space-1)}
+.text-ok{color:var(--ok)}
 
 /* Pages of stage 5b: links. */
 .truncate{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}

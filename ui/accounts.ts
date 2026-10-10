@@ -1,7 +1,7 @@
 // Pages of stage 4e-1 (docs/spec.md §10): connected Cloudflare accounts, connecting one, an
 // account's status with its actions, and API keys. Every action is a /v1 call (§15).
 import { ApiError, call, SignedOut, type Account, type Key, type Me } from './api';
-import { h } from './dom';
+import { codeBlock, copyButton, h } from './dom';
 import { ACCOUNT_STATE, ADVICE_LEVEL, DROP, errorText, METRIC, OPERATION, SCOPE, STEP, warningText } from './text';
 
 /** Whether the page that drew this is still the one on screen (a newer route bumps it). */
@@ -26,9 +26,7 @@ export function failure(e: unknown): string {
 }
 /** A value the reader copies into another site, with its own copy button. */
 function copyable(text: string): HTMLElement {
-  const copy = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Скопировать');
-  copy.addEventListener('click', () => void navigator.clipboard?.writeText(text).then(() => (copy.textContent = 'Скопировано')));
-  return h('span', { class: 'copyable' }, h('code', {}, text), copy);
+  return h('span', { class: 'copyable' }, h('code', {}, text), copyButton(text));
 }
 const rows = (pairs: [string, Node | string][]) => h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
 
@@ -407,9 +405,7 @@ export async function keysPage(me: Me, redraw: (message?: string) => void): Prom
             if (e instanceof ApiError && e.code === 'key_already_issued') redraw(failure(e));
             throw e;
           });
-          const copy = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Скопировать');
-          copy.addEventListener('click', () => void navigator.clipboard?.writeText(issued.key).then(() => (copy.textContent = 'Скопировано')));
-          shown.replaceChildren(h('div', { class: 'card stack stack--sm secret-card' }, h('strong', {}, 'Ключ выпущен — сохраните его сейчас, больше он не покажется:'), h('code', { class: 'secret' }, issued.key), copy));
+          shown.replaceChildren(h('div', { class: 'card stack stack--sm secret-card' }, h('strong', {}, 'Ключ выпущен — сохраните его сейчас, больше он не покажется:'), codeBlock(issued.key, 'Скопировать ключ')));
           // The new key joins the list (without its secret), so it can be revoked from here.
           tbody.append(row(issued));
           if (list !== tableCard) {

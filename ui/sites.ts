@@ -2,7 +2,7 @@
 // page with its snippet, excluded paths, route state, rotate and delete. Every action is a /v1 call.
 import { ApiError, call, type Account, type Me } from './api';
 import { action, confirmAction, notice, when, type Live } from './accounts';
-import { h } from './dom';
+import { codeBlock, h } from './dom';
 import { dropdown, zoneHost } from './pick';
 import { errorText } from './text';
 
@@ -100,9 +100,7 @@ export async function newSitePage(me: Me, go: (hash: string) => void): Promise<H
 function snippetCard(s: Site): HTMLElement {
   if (!s.snippet) return h('section', { class: 'card' }, h('h3', { class: 'h4' }, 'Сниппет'), h('p', { class: 'muted' }, 'Появится, когда маршрут будет создан.'));
   const block = (title: string, hint: string, code: string) => {
-    const copy = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Скопировать');
-    copy.addEventListener('click', () => void navigator.clipboard?.writeText(code).then(() => (copy.textContent = 'Скопировано')));
-    return h('div', { class: 'stack stack--sm secret-card' }, h('strong', {}, title), h('p', { class: 'muted text-sm' }, hint), h('code', { class: 'secret' }, code), copy);
+    return h('div', { class: 'stack stack--sm secret-card' }, h('strong', {}, title), h('p', { class: 'muted text-sm' }, hint), codeBlock(code, 'Скопировать сниппет'));
   };
   return h(
     'section',

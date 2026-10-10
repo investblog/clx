@@ -3,7 +3,7 @@
 // /v1 call.
 import { ApiError, call, text, type Account, type LinkHost, type Me } from './api';
 import { action, confirmAction, notice, num, when, type Live } from './accounts';
-import { h } from './dom';
+import { codeBlock, h } from './dom';
 import { dropdown, zoneHost } from './pick';
 import { errorText } from './text';
 
@@ -205,8 +205,6 @@ export async function linkPage(id: string, live: Live, redraw: (message?: string
   const deleted = l.state === 'deleted';
   const url = h('input', { class: 'input', value: l.url, autocomplete: 'off', spellcheck: 'false' });
   const rules = rulesEditor(l.rules);
-  const copy = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Скопировать');
-  copy.addEventListener('click', () => void navigator.clipboard?.writeText(l.short_url ?? '').then(() => (copy.textContent = 'Скопировано')));
   return h(
     'div',
     { class: 'stack stack--md' },
@@ -218,7 +216,7 @@ export async function linkPage(id: string, live: Live, redraw: (message?: string
       : h(
           'section',
           { class: 'card stack stack--sm' },
-          h('div', { class: 'actions' }, h('code', { class: 'secret' }, l.short_url ?? ''), copy),
+          codeBlock(l.short_url ?? '', 'Скопировать ссылку'),
           h('p', { class: 'muted text-sm' }, `Создана ${when(l.created_at)}. Переход — сразу на адрес назначения (302); каждый клик считается в базе вашего аккаунта.`),
           h('div', { class: 'field-label' }, 'Куда ведёт'),
           url,
