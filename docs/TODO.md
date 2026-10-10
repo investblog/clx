@@ -63,7 +63,10 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       disconnect got no `setup_ok` in 4 of 4, 6+ min after got one in 6 of 7; see
       `docs/cloudflare-facts.md`). Not a controlled test. To check: two installs, 1 and 10 min
       after a disconnect. If it holds — hold a reinstall back for ~5 min after a disconnect, or say
-      so in the UI. Until then the heartbeat (26 h) is the backstop.
+      so in the UI. Until then the heartbeat (26 h) is the backstop. 10.10 a counterexample: an
+      install three days after the last delete got no cron for 80 min either (`probe-totals`; the
+      upgrade advice passed, the report and the push were not reached). So the delay is not only
+      about quick reinstalls — what triggers it is unknown.
 - [x] Check the pages at phone width (stage 4e): 10.10, emulated 390 px through chrome-devtools —
       home, connect, keys, new site, new link, account, site, report and /privacy have no horizontal
       scroll and nothing past the screen.
