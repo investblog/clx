@@ -64,6 +64,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       `docs/cloudflare-facts.md`). Not a controlled test. To check: two installs, 1 and 10 min
       after a disconnect. If it holds — hold a reinstall back for ~5 min after a disconnect, or say
       so in the UI. Until then the heartbeat (26 h) is the backstop.
-- [ ] Check the pages at phone width (stage 4e; the browser window did not shrink on 06.10).
+- [x] Check the pages at phone width (stage 4e): 10.10, emulated 390 px through chrome-devtools —
+      home, connect, keys, new site, new link, account, site, report and /privacy have no horizontal
+      scroll and nothing past the screen.
 - [ ] Nightly backup of the clx.cx D1 to R2 (as 301 does) — after the release: R2 needs a paid
       plan switched on in the clx.cx account (owner's decision 06.10.2026).
