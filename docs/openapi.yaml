@@ -77,7 +77,7 @@ components:
         state:
           type: string
           enum: [pending, bootstrap_lost, connected, installing, ready, permission_error, revoked, resource_drift, no_connection]
-          description: 'connected — token ready, clx-edge not installed; installing — the install runs; ready — installed and serving (confirmed by the worker once its first cron runs; until then, or if it never does, error.warnings may say not_confirmed); no_connection — installed, but no push from the worker for 26 hours (sites can still be added; its next push makes it ready again)'
+          description: 'pending — the connect is running, or stopped on a passing failure (5xx other than token_rights_mismatch, token_check_failed, permission_catalog, which end it) and waits for the same request again (same Idempotency-Key); bootstrap_lost — a connect left pending for an hour, or one that died before clx stored its working token: revoke the token its error names and connect again; connected — token ready, clx-edge not installed; installing — the install runs; ready — installed and serving, go on (the worker confirms itself on its first cron: meanwhile `operation` shows the install at step selfcheck, for up to 15 minutes, and if no confirmation comes error.warnings says not_confirmed — nothing to wait for either way); no_connection — installed, but no push from the worker for 26 hours (sites can still be added; its next push makes it ready again)'
         token:
           type: [object, 'null']
           properties:
@@ -86,7 +86,7 @@ components:
         error: { type: [object, 'null'], description: 'code and details, or warnings such as bootstrap_not_deleted' }
         edge:
           type: [object, 'null']
-          description: The installed clx-edge, once confirmed
+          description: The installed clx-edge, from its upload on (the worker's own confirmation is not needed)
           properties:
             bundle: { type: string, description: sha256 of the bundle }
             up_to_date: { type: boolean }
@@ -181,7 +181,7 @@ components:
           description: Embed one of the two at build time; stable until rotate
           properties:
             inline: { type: string, description: '<script>…</script>, under 600 bytes' }
-            script_tag: { type: string, description: '<script defer src="/<path>/<s>.js"></script>' }
+            script_tag: { type: string, description: '<script src="/<path>/<s>.js"> with defer (the order of the attributes varies by site)' }
         excluded_paths: { type: array, items: { type: string } }
         config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the site yet' }
         retiring: { type: array, items: { type: object, properties: { path: { type: string }, until: { type: string, format: date-time } } }, description: 'old paths still counted after a rotation' }
@@ -198,7 +198,7 @@ components:
         period: { type: string, enum: [today, 7d, 30d] }
         from: { type: string, format: date, description: first UTC day }
         to: { type: string, format: date, description: last UTC day — today }
-        as_of: { type: [string, 'null'], format: date-time, description: 'today is counted up to this moment (the end of the latest closed hour the worker sent); hours arrive up to an hour late' }
+        as_of: { type: [string, 'null'], format: date-time, description: 'today is counted up to this moment. A site: the end of the latest closed hour the worker sent (hours arrive up to an hour late), null before its first push. A link: the moment of the live read of the account''s database' }
         totals:
           type: object
           properties:
@@ -316,7 +316,8 @@ paths:
     post:
       summary: Connect a Cloudflare account with a bootstrap token (scope accounts)
       description: |
-        The bootstrap token (Account Settings Read + Account API Tokens Write, one day) is used
+        The bootstrap token (Account Settings — Read + Account API Tokens — Edit, which the API names
+        Write; one day) is used
         within this request and deleted; it is never stored. The account then goes on to the
         install of clx-edge (§4) — poll GET for its state: `installing`, then `ready` once the script,
         its database and cron are in place (seconds; the worker's own confirmation may follow
@@ -336,10 +337,10 @@ paths:
         default: { $ref: '#/components/responses/Error' }
   /v1/accounts/{id}:
     get:
-      summary: One connected account (scope accounts or sites)
+      summary: One connected account (scope accounts or sites), with its latest operation and link host
       parameters: [{ $ref: '#/components/parameters/Id' }]
       responses:
-        '200': { description: OK }
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { account: { $ref: '#/components/schemas/Account' } } } } } }
         default: { $ref: '#/components/responses/Error' }
     delete:
       summary: Disconnect (scope accounts) — delete clx-edge and its database, then the record
@@ -502,7 +503,8 @@ paths:
       summary: Add a short link (scope links) on the account's link host
       description: |
         A click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of
-        the link, with source `qr` when the address carries `?q` (the QR code's). `config` turns
+        the link, with source `qr` when the address carries `?q` (the QR code's) — or as a bot when
+        the client is one (curl, a script, a crawler: it is redirected all the same). `config` turns
         `synced` once the worker has the link (seconds).
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
@@ -562,7 +564,7 @@ paths:
         default: { $ref: '#/components/responses/Error' }
   /v1/links/{id}/report:
     get:
-      summary: Clicks of the link (scope reports); with breakdowns=1 also sources, countries, devices, browsers, OS and bots
+      summary: 'Clicks of the link (scope reports); with breakdowns=1 also sources, countries, devices, browsers, OS and bots (`pages` lists no pages for a link: at most one empty key)'
       description: |
         Closed days come from clx.cx; today (and any day the worker has not sent yet) is read live
         from the account's own database in one read with the breakdowns — `as_of` is the moment of
