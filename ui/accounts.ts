@@ -24,6 +24,12 @@ export function failure(e: unknown): string {
   }
   return 'Сеть недоступна. Попробуйте ещё раз.';
 }
+/** A value the reader copies into another site, with its own copy button. */
+function copyable(text: string): HTMLElement {
+  const copy = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Скопировать');
+  copy.addEventListener('click', () => void navigator.clipboard?.writeText(text).then(() => (copy.textContent = 'Скопировано')));
+  return h('span', { class: 'copyable' }, h('code', {}, text), copy);
+}
 const rows = (pairs: [string, Node | string][]) => h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
 
 /**
@@ -136,12 +142,21 @@ export function connectPage(go: (hash: string) => void): HTMLElement {
     'div',
     { class: 'narrow' },
     h('h2', {}, 'Подключить аккаунт Cloudflare'),
+    // Step by step, one value per copy button — what goes into Cloudflare's search box and only that
+    // (catchall.in's lesson: a whole "A:Read, B:Edit" line pasted into the search finds nothing).
     h(
       'ol',
       { class: 'steps' },
-      h('li', {}, 'В Cloudflare: ', h('a', { href: CF_TOKENS, target: '_blank', rel: 'noopener' }, 'Account API Tokens'), ' → Create Token → Custom.'),
-      h('li', {}, 'Права: Account Settings — Read и Account API Tokens — Edit, срок — сутки.'),
-      h('li', {}, 'Вставьте токен ниже. clx выпустит по нему свой рабочий токен с узкими правами и удалит этот.'),
+      h('li', {}, 'Откройте в Cloudflare ', h('a', { href: CF_TOKENS, target: '_blank', rel: 'noopener' }, 'Manage account → Account API Tokens'), ' (нужна роль Super Administrator), нажмите Create Token, затем Start from scratch.'),
+      h('li', {}, 'Имя токена — любое, например ', copyable('clx bootstrap'), '.'),
+      h(
+        'li',
+        {},
+        'Политика с областью Entire Account. Права ищите по одному имени и выбирайте уровень:',
+        h('ul', { class: 'perms' }, h('li', {}, copyable('Account API Tokens'), ' — уровень Edit: по нему clx выпустит свой рабочий токен'), h('li', {}, copyable('Account Settings'), ' — уровень Read')),
+      ),
+      h('li', {}, 'Срок (Expiration) — завтрашний день: токен нужен на несколько минут, clx удалит его сам.'),
+      h('li', {}, 'Review token → Create Token. Скопируйте токен и вставьте ниже.'),
     ),
     h('div', { class: 'card' }, form),
   );
@@ -194,6 +209,17 @@ function operationCard(a: Account): HTMLElement | null {
   if (!op) return null;
   const running = op.state === 'running';
   const step = op.step.startsWith('failed') ? 'остановлено' : (STEP[op.step] ?? op.step);
+  // The worker is up once uploaded; its self-check only confirms that (docs/spec.md §4), so the
+  // reader is told not to wait for it. Not for an update: a missing self-check rolls it back.
+  if (running && op.kind === 'install' && op.step === 'selfcheck' && a.state === 'ready')
+    return h(
+      'section',
+      { class: 'card card--compact' },
+      h('strong', {}, `${OPERATION[op.kind] ?? op.kind}: `),
+      'воркер загружен и работает.',
+      h('p', {}, 'Ждём его первого отклика — обычно несколько минут, до 15. Ждать не нужно: ', h('a', { href: '#/sites/new' }, 'добавляйте сайты'), ' и ссылки уже сейчас.'),
+      h('p', { class: 'muted text-sm' }, `обновлено ${when(op.updated_at)}`),
+    );
   return h(
     'section',
     { class: 'card card--compact' },

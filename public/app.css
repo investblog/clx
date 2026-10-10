@@ -30,6 +30,8 @@ main a.account-row:hover{text-decoration:none;border-color:var(--border-strong)}
 .account-row strong{margin-right:auto}
 .steps{padding-left:var(--space-5);margin:0 0 var(--space-4)}
 .steps li{margin-bottom:var(--space-2)}
+.copyable{display:inline-flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.perms{padding-left:var(--space-4);margin:var(--space-2) 0 0}
 .kv{display:grid;grid-template-columns:minmax(140px,max-content) 1fr;gap:var(--space-2) var(--space-4);margin:0}
 .kv dt{color:var(--text-muted)}
 .kv dd{margin:0;overflow-wrap:anywhere}
