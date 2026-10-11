@@ -341,12 +341,37 @@ describe('generated pages', () => {
     class Element {}
     const theme = Object.assign(Object.create(Element.prototype) as object, { closest: (sel: string) => (sel === '#theme' ? theme : null) });
     const dataset: Record<string, string> = { theme: 'dark' };
-    const document = { documentElement: { classList: { add: () => {} }, dataset }, addEventListener: (_t: string, fn: typeof click) => (click = fn) };
+    // The language switch, open: a click elsewhere (the theme button) closes it.
+    const langDd: { open: boolean; contains: (x: unknown) => boolean; closest: () => null } = Object.assign(Object.create(Element.prototype) as object, { open: true, contains: (x: unknown) => x === langDd, closest: () => null });
+    const document = {
+      documentElement: { classList: { add: () => {} }, dataset },
+      getElementById: (id: string) => (id === 'lang-dd' ? langDd : null),
+      addEventListener: (type: string, fn: typeof click) => type === 'click' && (click = fn),
+    };
     vm.runInNewContext(read('theme.js'), { document, Element, localStorage: { getItem: () => null, setItem: (k: string, v: string) => stored.set(k, v) } });
+    click!({ target: langDd });
+    expect(langDd.open).toBe(true);
     click!({ target: theme });
-    expect([dataset.theme, stored.get('clx-theme')]).toEqual(['light', 'light']);
+    expect([dataset.theme, stored.get('clx-theme'), langDd.open]).toEqual(['light', 'light', false]);
     click!({ target: theme });
     expect(dataset.theme).toBe('dark');
+  });
+
+  it('the language switch: a flag and the code, a menu of the page’s languages; none on a page of one language', () => {
+    const header = (f: string) => read(f).match(/<header[\s\S]*?<\/header>/u)![0];
+    const ru = header('ru/analytics.html');
+    expect(ru).toMatch(/<details class="lang-dd" id="lang-dd"><summary class="lang-dd__btn" aria-label="Язык: Русский"><span class="lang-dd__flag" aria-hidden="true"><svg [^>]*>[\s\S]*?<\/svg><\/span>RU<\/summary>/u);
+    expect([...ru.matchAll(/<a class="lang-dd__item" href="([^"]+)"[^>]*data-locale="(\w+)"([^>]*)>/gu)].map((m) => [m[1], m[2], m[3]!.includes('aria-current')])).toEqual([
+      ['/analytics', 'en', false],
+      ['/ru/analytics', 'ru', true],
+    ]);
+    expect(header('bitly-alternative.html')).not.toContain('lang-dd');
+    expect(ru).not.toMatch(/style=|<script/u);
+  });
+
+  it('the footer has no link to /abuse: clx.cx carries no one’s traffic to complain about; the page stays', () => {
+    for (const f of ['index.html', 'ru.html', 'ru/app.html']) expect(read(f).match(/<footer[\s\S]*?<\/footer>/u)![0]).not.toContain('abuse');
+    expect(read('abuse.html')).toContain('<link rel="canonical" href="https://clx.cx/abuse" />');
   });
 
   it('the example link’s QR code is the one the app would make for its address', () => {
@@ -363,14 +388,14 @@ describe('generated pages', () => {
     expect(read('ru/app.html')).toContain('<html lang="ru"');
   });
 
-  it('the app keeps the site’s header and footer in its language, without the link to itself', () => {
+  it('the app keeps the site’s header and footer in its language, without the link to itself; its language switch leads to the app', () => {
     const app = read('ru/app.html');
     const header = app.match(/<header[\s\S]*?<\/header>/u)![0];
     expect(header).toContain('href="/ru/analytics"');
     expect(header).toContain('id="site-nav-toggle"');
     expect(header).toContain('id="theme"');
-    expect(header).not.toContain('href="/ru/app"');
-    expect(header).not.toContain('lang-switch');
+    expect(header).not.toContain('when-signed-out');
+    expect([...header.matchAll(/<a class="lang-dd__item" href="([^"]+)"/gu)].map((m) => m[1])).toEqual(['/app', '/ru/app']);
     expect(app).toContain('<div class="app-nav" id="shell"></div>');
     expect(app).toContain('<footer class="site-foot">');
     expect(app).toContain('href="/ru/privacy"');

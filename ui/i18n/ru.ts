@@ -2,8 +2,6 @@
 // or `tsc` fails — no text silently falls back to another language.
 
 export const ru = {
-  /** How the language names itself in the switch. */
-  name: 'Русский',
   shell: {
     nav: { accounts: 'Аккаунты', sites: 'Сайты', links: 'Ссылки', keys: 'Ключи API', me: 'Учётка' },
     signOut: 'Выйти',
@@ -91,9 +89,6 @@ export const ru = {
     confirmed: 'подтверждён',
     unconfirmed: 'не подтверждён',
     plan: 'Тариф',
-    language: 'Язык',
-    languageHint: 'На нём кабинет после входа и письма clx.',
-    save: 'Сохранить',
     deleteTitle: 'Удаление учётной записи',
     deleteBody: 'Удаление отключит все аккаунты Cloudflare (воркер, база и маршруты clx удаляются из них), сотрёт итоги, ключи, сайты и ссылки — сразу и без возврата.',
     password: 'Пароль для удаления',

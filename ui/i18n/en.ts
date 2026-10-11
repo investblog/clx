@@ -2,7 +2,6 @@
 import type { Dict } from './ru';
 
 export const en: Dict = {
-  name: 'English',
   shell: {
     nav: { accounts: 'Accounts', sites: 'Sites', links: 'Links', keys: 'API keys', me: 'Profile' },
     signOut: 'Sign out',
@@ -90,9 +89,6 @@ export const en: Dict = {
     confirmed: 'confirmed',
     unconfirmed: 'not confirmed',
     plan: 'Plan',
-    language: 'Language',
-    languageHint: 'The app after sign-in and the e-mails of clx speak it.',
-    save: 'Save',
     deleteTitle: 'Deleting the account',
     deleteBody: 'Deleting disconnects every Cloudflare account (the clx worker, database and routes are removed from them) and erases the totals, keys, sites and links — at once, for good.',
     password: 'Password to delete',

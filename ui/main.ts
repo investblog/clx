@@ -1,7 +1,7 @@
 // The page's entry: the row of the app's sections (under the site's header), sign-in, the hash router over the
-// pages, the language (ADR 0015).
+// pages, the language (ADRs 0015, 0021).
 import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
-import { get, logout, refresh, SignedOut, type Me } from './api';
+import { call, get, logout, refresh, SignedOut, type Me } from './api';
 import { h, s } from './dom';
 import { appPath, asLocale, pageLocale, setLocale, t } from './i18n';
 import { linkPage, linksPage } from './links';
@@ -89,7 +89,7 @@ async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, s
   if (path === '/connect') return [connectPage(go), t.titles.connect];
   if (account) return [await accountPage(account[1]!, live, redraw), t.titles.account];
   if (path === '/keys') return [await keysPage(me, redraw), t.titles.keys];
-  if (path === '/me') return [mePage(me, redraw, showLogin), t.titles.me];
+  if (path === '/me') return [mePage(me, showLogin), t.titles.me];
   // #/sites/new and #/links/new were pages before the drawers: a bookmark of one opens the list.
   if (path === '/sites' || path === '/sites/new') return [await sitesPage(me, go), t.titles.sites];
   const report = path.match(/^\/(sites|links)\/([\w-]+)\/report(?:\?p=([\w]+))?$/u);
@@ -160,6 +160,29 @@ async function route(): Promise<void> {
 }
 
 window.addEventListener('hashchange', () => void route());
+// The header's language switch (site/layout.ts) leads to the app in another language, the same page.
+// With a session, the account's language changes with it (ADR 0021) — the account's language wins
+// over the address's, so without that the app would come straight back. Asked every time, not by
+// what the page knows: a session may be there before /v1/me has answered.
+document.getElementById('lang-dd')?.addEventListener('click', async (e) => {
+  const a = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>('a[data-locale]') : null;
+  if (!a) return;
+  e.preventDefault();
+  const dd = a.closest('details');
+  const to = asLocale(a.dataset.locale ?? '');
+  if (to === pageLocale) return void dd?.removeAttribute('open');
+  try {
+    await call('PATCH', '/v1/me', { locale: to });
+  } catch (err) {
+    // No session: the address alone sets the language.
+    if (!(err instanceof SignedOut)) {
+      dd?.removeAttribute('open');
+      flash = failure(err);
+      return void route();
+    }
+  }
+  location.assign(`${appPath(to)}${location.hash}`);
+});
 // A public page (an e-mail's link) opens signed out too; any other page without a session shows
 // the sign-in form — route() finds that out itself.
 drawShell();

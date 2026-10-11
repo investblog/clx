@@ -26,3 +26,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0018](./0018-comparison-pages.md) | Comparison pages name the other service, one market each, facts with sources | 11.10.2026 | §16 |
 | [0019](./0019-link-flows.md) | A click records where it was sent; a link with rules shows its flows as a sankey | 11.10.2026 | §6, §7, §10, §16 |
 | [0020](./0020-sitemap-view-xslt.md) | The sitemap's view for people is an XSLT stylesheet, not a script in a `<url>` | 11.10.2026 | §16 |
+| [0021](./0021-language-switch-in-the-header.md) | The language switch is in the header, the app's too; the profile has none | 11.10.2026 | §10, §16 |

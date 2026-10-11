@@ -4,7 +4,7 @@
 // hands it to the account.
 import { login } from './api';
 import { h, s } from './dom';
-import { appPath, LOCALES, locale, dictOf, sitePath, t } from './i18n';
+import { locale, sitePath, t } from './i18n';
 
 interface Config {
   turnstile_site_key: string | null;
@@ -62,20 +62,22 @@ async function turnstile(box: HTMLElement): Promise<{ token: () => string; reset
 const card = (title: string, ...children: (Node | null)[]) => h('section', { class: 'auth-card login' }, h('h1', { class: 'h3' }, title), ...children);
 const field = (label: string, input: HTMLInputElement, hint?: string) => h('div', { class: 'field' }, h('label', { class: 'field-label', for: input.id }, label), input, hint ? h('p', { class: 'field-hint' }, hint) : null);
 
-/** Under every signed-out page: its sisters and the app in the other language — at the same page. The
- *  legal pages are in the site's footer under it (site/build.ts). */
-function footer(): HTMLElement {
-  const other = LOCALES.filter((l) => l !== locale).map((l) => h('a', { href: `${appPath(l)}${location.hash}`, hreflang: l, lang: l }, dictOf(l).name));
-  const links: [string, string][] = [
-    ['#/', t.auth.signIn],
-    ['#/signup', t.auth.signUp],
-    ['#/reset', t.auth.forgot],
-  ];
-  return h('p', { class: 'muted text-sm' }, ...links.flatMap(([href, text], i) => [i ? ' · ' : '', h('a', { href }, text)]), ...other.flatMap((a) => [' · ', a]));
+type Sister = '#/' | '#/signup' | '#/reset';
+/** Under every signed-out page: its sisters, not itself. The language is the header's switch (ADR
+ *  0021), the legal pages are in the site's footer under it (site/build.ts). */
+function footer(current: Sister): HTMLElement {
+  const links = (
+    [
+      ['#/', t.auth.signIn],
+      ['#/signup', t.auth.signUp],
+      ['#/reset', t.auth.forgot],
+    ] as [Sister, string][]
+  ).filter(([href]) => href !== current);
+  return h('p', { class: 'muted text-sm' }, ...links.flatMap(([href, text], i) => [i ? ' · ' : '', h('a', { href }, text)]));
 }
 
 /** Without Turnstile set up the server refuses sign-up and reset (`not_configured`): say so at once. */
-const closed = (title: string) => card(title, h('p', {}, t.auth.closed(title)), footer());
+const closed = (title: string, current: Sister) => card(title, h('p', {}, t.auth.closed(title)), footer(current));
 
 /** The sign-in form; `done` runs once the session is there. */
 export function loginPage(done: () => void, message = ''): HTMLElement {
@@ -110,12 +112,12 @@ export function loginPage(done: () => void, message = ''): HTMLElement {
     done();
   });
   queueMicrotask(() => email.focus());
-  return card(t.titles.signIn, form, footer());
+  return card(t.titles.signIn, form, footer('#/'));
 }
 
 export async function signupPage(): Promise<HTMLElement> {
   const { password_min: min, turnstile_site_key: sitekey } = await configOf();
-  if (!sitekey) return closed(t.titles.signUp);
+  if (!sitekey) return closed(t.titles.signUp, '#/signup');
   const email = h('input', { class: 'input', id: 'su-email', type: 'email', autocomplete: 'email', required: '' });
   const password = h('input', { class: 'input', id: 'su-password', type: 'password', autocomplete: 'new-password', required: '', minlength: String(min) });
   const box = h('div', { class: 'turnstile' });
@@ -144,12 +146,12 @@ export async function signupPage(): Promise<HTMLElement> {
     if (!r.ok) return say(status, 'error', errorOf(r.error));
     form.replaceWith(h('div', { class: 'stack stack--sm' }, h('p', {}, t.auth.signedUp(email.value.trim())), h('p', { class: 'muted text-sm' }, t.auth.signedUpNext)));
   });
-  return card(t.titles.signUp, form, footer());
+  return card(t.titles.signUp, form, footer('#/signup'));
 }
 
 export async function confirmPage(token: string): Promise<HTMLElement> {
   const r = await post('/auth/confirm', { token });
-  return card(t.titles.confirm, h('p', {}, r.ok ? t.auth.confirmed : errorOf(r.error)), h('p', {}, h('a', { class: 'btn btn--primary', href: '#/' }, r.ok ? t.auth.toApp : t.auth.toHome)), footer());
+  return card(t.titles.confirm, h('p', {}, r.ok ? t.auth.confirmed : errorOf(r.error)), h('p', {}, h('a', { class: 'btn btn--primary', href: '#/' }, r.ok ? t.auth.toApp : t.auth.toHome)), footer('#/'));
 }
 
 /** Without a token: ask for the e-mail. With one (the e-mail's link): set a new password. */
@@ -168,9 +170,9 @@ export async function resetPage(token: string | null): Promise<HTMLElement> {
       if (!r.ok) return say(status, 'error', errorOf(r.error));
       form.replaceWith(h('p', {}, t.auth.passwordSaved));
     });
-    return card(t.titles.newPassword, form, footer());
+    return card(t.titles.newPassword, form, footer('#/reset'));
   }
-  if (!(await configOf()).turnstile_site_key) return closed(t.titles.reset);
+  if (!(await configOf()).turnstile_site_key) return closed(t.titles.reset, '#/reset');
   const email = h('input', { class: 'input', id: 'rs-email', type: 'email', autocomplete: 'email', required: '' });
   const box = h('div', { class: 'turnstile' });
   const button = h('button', { type: 'submit', class: 'btn btn--primary' }, t.auth.sendLink);
@@ -186,5 +188,5 @@ export async function resetPage(token: string | null): Promise<HTMLElement> {
     if (!r.ok) return say(status, 'error', errorOf(r.error));
     form.replaceWith(h('p', {}, t.auth.linkSent));
   });
-  return card(t.titles.reset, form, footer());
+  return card(t.titles.reset, form, footer('#/reset'));
 }

@@ -13,8 +13,20 @@ try {
 // one file and cannot part: if this file did not run, the menu stays a row of links. The handlers
 // listen on the document, as the header does not exist yet; opening moves focus into the menu.
 document.documentElement.classList.add('js');
+// The language switch (site/layout.ts) is a <details>: it opens by itself, and closes here on a click
+// elsewhere or Escape.
+const langDd = () => document.getElementById('lang-dd');
+document.addEventListener('keydown', (e) => {
+  const dd = langDd();
+  if (e.key === 'Escape' && dd?.open) {
+    dd.open = false;
+    dd.querySelector('summary')?.focus();
+  }
+});
 document.addEventListener('click', (e) => {
   const target = e.target instanceof Element ? e.target : null;
+  const dd = langDd();
+  if (dd?.open && !dd.contains(target)) dd.open = false;
   if (target?.closest('#theme')) {
     const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;

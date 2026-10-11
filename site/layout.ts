@@ -1,7 +1,8 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import { COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
+import * as FLAGS from 'country-flag-icons/string/3x2';
+import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { alternatesFor, appPathFor, ogImagePath, pathFor, urlFor } from './urls.ts';
 
@@ -59,13 +60,28 @@ const jsonLdBlock = (nodes: Record<string, unknown>[]): string =>
 
 const icon = (name: string, cls = 'icon') => `<svg class="${cls}" aria-hidden="true"><use href="/icons.svg#i-mono-${name}"></use></svg>`;
 
-/** Links to the page in its other languages — from the same list as the `<link rel="alternate">`. */
+/** A language's flag (country-flag-icons, 3x2, as on spintax.net): English by the British one. */
+const FLAG: Record<Locale, string> = { en: 'GB', ru: 'RU' };
+const flag = (l: Locale) => `<span class="lang-dd__flag" aria-hidden="true">${(FLAGS as Record<string, string>)[FLAG[l]]}</span>`;
+
+/** The language switch, after spintax.net's: the current language's flag and code, a menu of every
+ *  language. A page of the site links its own languages (the list of its `<link rel="alternate">`);
+ *  the app (`page` null) links its address in each, and ui/main.ts keeps the page and, signed in,
+ *  saves the account's language (ADR 0021). A `<details>`: it opens without scripts; /theme.js
+ *  closes it on a click elsewhere. */
 function langSwitch(page: PageDef | null, locale: Locale): string {
-  if (!page?.indexed || page.locales.length < 2) return '';
-  const items = page.locales
-    .filter((l) => l !== locale)
-    .map((l) => `<a class="lang-switch" href="${pathFor(page.slug, l)}" hreflang="${LOCALES[l].htmlLang}" lang="${LOCALES[l].htmlLang}">${escapeHtml(LOCALES[l].label)}</a>`);
-  return items.join('');
+  const links: [Locale, string][] = page
+    ? page.indexed && page.locales.length > 1
+      ? page.locales.map((l) => [l, pathFor(page.slug, l)])
+      : []
+    : ALL_LOCALES.map((l) => [l, appPathFor(l)]);
+  if (!links.length) return '';
+  const code = (l: Locale) => LOCALES[l].htmlLang.toUpperCase();
+  const items = links.map(
+    ([l, href]) =>
+      `<a class="lang-dd__item" href="${href}" hreflang="${LOCALES[l].htmlLang}" lang="${LOCALES[l].htmlLang}" data-locale="${l}"${l === locale ? ' aria-current="true"' : ''}>${flag(l)}${escapeHtml(LOCALES[l].label)}</a>`,
+  );
+  return `<details class="lang-dd" id="lang-dd"><summary class="lang-dd__btn" aria-label="${escapeHtml(STRINGS[locale].language)}: ${escapeHtml(LOCALES[locale].label)}">${flag(locale)}${code(locale)}</summary><div class="lang-dd__menu">${items.join('')}</div></details>`;
 }
 
 /** The menu: the table's `nav` pages, printed in the page, beside the brand. On a phone it folds behind
@@ -81,9 +97,9 @@ function nav(page: PageDef | null, locale: Locale): { menu: string; button: stri
   };
 }
 
-/** The site's header. The app's page (site/build.ts) prints the same one with `page` null: no language
- *  switch (the app follows the account's language) and no link to the app; ui/main.ts draws the app's
- *  sections in a row under it. On the site the link to the app says "Sign in", or "Dashboard" once
+/** The site's header. The app's page (site/build.ts) prints the same one with `page` null: its
+ *  language switch leads to the app in each language, and there is no link to the app; ui/main.ts
+ *  draws the app's sections in a row under it. On the site the link to the app says "Sign in", or "Dashboard" once
  *  the app has marked this browser signed in (/theme.js shows one of the two before the first paint). */
 export function header(page: PageDef | null, locale: Locale): string {
   const s = STRINGS[locale];

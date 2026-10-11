@@ -417,7 +417,7 @@ Why:
   - config has a size budget per Cloudflare account — 50 MB of `data`, counted by clx.cx before it
     syncs; over it the change is refused (`storage_limit`, §15);
   - a link and site cache in isolate memory — 60 s, for speed only.
-- **Abuse** is the domain owner's responsibility; on clx.cx: an `/abuse` page and disabling a clx
+- **Abuse** is the domain owner's responsibility; on clx.cx: an `/abuse` page (not in the footer since 11.10.2026: clx.cx carries no one's traffic; linked from the terms) and disabling a clx
   account by an admin command (a sync that deletes every key).
 
 ## 7. Totals on clx.cx
@@ -902,7 +902,7 @@ that adds a site and embeds its counter at build time.
 | Method and path | What it does |
 |---|---|
 | `GET /v1/me` | plan, limits, current use, whether the address is confirmed, the language |
-| `PATCH /v1/me` `{locale}` | the language of the app and the e-mails (page session only, ADR 0015) |
+| `PATCH /v1/me` `{locale}` | the language of the app and the e-mails, set by the header's language switch (page session only, ADRs 0015, 0021) |
 | `DELETE /v1/me` `{password}` | delete the account (page session only, §9) |
 | `POST /v1/keys`, `GET /v1/keys`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
@@ -943,8 +943,10 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   folds behind a button only when `/theme.js` ran (it marks the page and opens the menu); without
   scripts it is a row of links.
 - **The app in the site's frame** ([ADR 0017](./decisions/0017-app-in-the-site-frame.md)). The
-  app's page carries the site's header (menu, theme; no language switch, no link to the app) and
-  footer; the app's sections and sign-out are a row under the header. Signed in, an account of the
+  app's page carries the site's header (menu, theme, the language switch leading to the app in each
+  language; no link to the app) and footer; the app's sections and sign-out are a row under the
+  header. The signed-out pages link only their sisters (sign-in, sign-up, reset), not themselves
+  and not the other language. Signed in, an account of the
   other language moves the app to its own address. The site's link to the app says "Dashboard"
   instead of "Sign in" where the app left its mark (`localStorage` `clx-signed-in`, read by
   `/theme.js`).
@@ -959,8 +961,11 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
 - **Languages.** English and Russian for the site; the app and the e-mails too
   ([ADR 0015](./decisions/0015-app-language.md)): the app at `/app` and `/ru/app` speaks the
   address's language until sign-in, then the account's (`users.locale`, set at sign-up from the
-  page, changed on the profile page with `PATCH /v1/me {locale}`); the e-mails speak the account's
-  and link to its app. The words are dictionaries of one shape (`ui/i18n/`, `src/mail-text.ts`).
+  page, changed by the header's language switch with `PATCH /v1/me {locale}`,
+  [ADR 0021](./decisions/0021-language-switch-in-the-header.md)); the e-mails speak the account's
+  and link to its app. The switch is one for the site and the app: the current language's flag and
+  code, a menu of the languages (after spintax.net; flags from `country-flag-icons`), a `<details>`
+  that works without scripts. The words are dictionaries of one shape (`ui/i18n/`, `src/mail-text.ts`).
   Legal texts exist in both, English is the original.
 - **For agents** ([ADR 0013](./decisions/0013-docs-for-agents.md)), English only: `/agents` — the
   walkthrough an agent follows with a key from its person; `/api` — the reference, generated from

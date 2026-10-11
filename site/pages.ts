@@ -33,7 +33,7 @@ export interface PageDef {
   slug: string;
   locales: readonly Locale[];
   /** Key in `Strings.foot`: the page is linked from the footer. */
-  foot?: 'how' | 'openSource' | 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
+  foot?: 'how' | 'openSource' | 'agents' | 'api' | 'privacy' | 'terms';
   /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
   nav?: 'analytics' | 'links' | 'generators' | 'pricing' | 'faq';
   /** A comparison page (site/compare.ts), linked from the footer of each language under that
@@ -72,7 +72,7 @@ export const SITE_PAGES: readonly PageDef[] = [
   { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/privacy', locales: ALL_LOCALES, foot: 'privacy', legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   { slug: '/terms', locales: ALL_LOCALES, foot: 'terms', legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
-  { slug: '/abuse', locales: ALL_LOCALES, foot: 'abuse', legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
+  { slug: '/abuse', locales: ALL_LOCALES, legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   // Served by Workers Static Assets for any missing path of its language (not_found_handling = 404-page).
   { slug: '/404', locales: ALL_LOCALES, indexed: false },
 ];

@@ -273,8 +273,18 @@ a.promo:hover .promo__cta,.promo__cta:hover{background:var(--promo-cta-bg-hover)
 .doc .hint{margin:var(--space-2) 0 var(--space-1);font-size:var(--fs-sm);color:var(--text-muted)}
 .doc .fields{margin:0 0 var(--space-2);font-size:var(--fs-sm)}
 .doc .fields li{margin-bottom:var(--space-1);overflow-wrap:anywhere}
-.lang-switch{font-size:var(--fs-sm);color:var(--text-muted);text-decoration:none}
-.lang-switch:hover{color:var(--text)}
+/* The language switch (site/layout.ts), after spintax.net's: a pill with the flag and the code, a menu of the languages. */
+.lang-dd{position:relative}
+.lang-dd__btn{display:inline-flex;align-items:center;gap:.3em;font-size:var(--fs-sm);color:var(--text-muted);border:1px solid var(--border-subtle);border-radius:2rem;padding:.2em .6em;cursor:pointer;list-style:none;user-select:none;transition:all var(--transition-fast)}
+.lang-dd__btn::-webkit-details-marker{display:none}
+.lang-dd__btn:hover,.lang-dd[open] .lang-dd__btn{color:var(--text-main);border-color:var(--primary)}
+.lang-dd__btn:focus-visible{outline:2px solid var(--primary-hover);outline-offset:2px}
+.lang-dd__menu{position:absolute;inset-inline-end:0;top:calc(100% + .35rem);min-width:8rem;background:var(--panel);border:1px solid var(--border-subtle);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,.3);padding:.25rem;z-index:20}
+.lang-dd__flag{display:inline-block;width:1.2em;height:.8em;border-radius:2px;overflow:hidden;flex-shrink:0}
+.lang-dd__flag svg{display:block;width:100%;height:100%}
+.lang-dd__item{display:flex;align-items:center;gap:.4em;padding:.35em .6em;font-size:var(--fs-sm);color:var(--text-main);border-radius:calc(var(--radius) / 2);text-decoration:none;transition:background var(--transition-fast)}
+.lang-dd__item:hover{background:var(--bg-soft)}
+.lang-dd__item[aria-current]{color:var(--primary-hover);font-weight:var(--fw-semibold)}
 .site-foot{max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
 .site-foot__brand{display:inline-flex;vertical-align:middle;margin-right:var(--space-3)}
 .site-foot__brand .icon{width:20px;height:20px}

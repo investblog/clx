@@ -5,7 +5,6 @@ import { en } from './en';
 import { ru, type Dict } from './ru';
 
 export type Locale = 'en' | 'ru';
-export const LOCALES: readonly Locale[] = ['en', 'ru'];
 const DICTS: Record<Locale, Dict> = { en, ru };
 
 export const asLocale =(v: unknown): Locale => (v === 'ru' ? 'ru' : 'en');

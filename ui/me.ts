@@ -1,21 +1,15 @@
-// The profile page (#/me): the address and its confirmation, the plan, the language of the app and
-// the e-mails (ADR 0015), deleting the account (§9).
+// The profile page (#/me): the address and its confirmation, the plan, deleting the account (§9).
 import { action } from './accounts';
 import { call, logout, type Me } from './api';
 import { askConfirm } from './dialog';
 import { h } from './dom';
-import { dictOf, LOCALES, pageLocale, setLocale, t, type Locale } from './i18n';
-import { dropdown } from './pick';
+import { dictOf, pageLocale, t } from './i18n';
 
 const rows = (pairs: [string, Node | string][]) => h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
 
 /** `signedOut(message)` shows the sign-in form with the message once the account is gone. */
-export function mePage(me: Me, redraw: (message?: string) => void, signedOut: (message: string) => void): HTMLElement {
+export function mePage(me: Me, signedOut: (message: string) => void): HTMLElement {
   const resent = h('span', { class: 'muted text-sm', role: 'status' });
-  const language = dropdown(
-    LOCALES.map((l) => ({ value: l, label: dictOf(l).name })),
-    { id: 'me-locale', value: me.user.locale },
-  );
   // Not type=password: the browser would fill the saved clx.cx password into it on every load,
   // one confirmation away from a delete (the trick of the token fields, ui/accounts.ts).
   const password = h('input', { class: 'input masked', id: 'me-password', type: 'text', autocomplete: 'off', spellcheck: 'false', 'data-1p-ignore': '', 'data-lpignore': 'true' });
@@ -41,20 +35,6 @@ export function mePage(me: Me, redraw: (message?: string) => void, signedOut: (m
             }),
             resent,
           ),
-    ),
-    h(
-      'section',
-      { class: 'card stack stack--sm' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'me-locale' }, t.me.language), language.el, h('p', { class: 'field-hint' }, t.me.languageHint)),
-      h(
-        'div',
-        { class: 'actions' },
-        action(t.me.save, 'btn--primary', async (key) => {
-          const { locale } = await call<{ locale: Locale }>('PATCH', '/v1/me', { locale: language.value() }, key);
-          setLocale(locale);
-          redraw();
-        }),
-      ),
     ),
     h(
       'section',

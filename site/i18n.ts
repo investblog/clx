@@ -10,6 +10,7 @@ export interface Strings {
   /** The same link once this browser has signed in to the app. */
   dashboard: string;
   theme: string;
+  /** The language switch's name, before the current language. */
   language: string;
   home: {
     title: string;
@@ -46,7 +47,7 @@ export interface Strings {
   /** The header's menu: a page's `nav` key → its name; `menu` names the phone's menu button. */
   nav: { analytics: string; links: string; generators: string; pricing: string; faq: string; menu: string };
   notFound: { title: string; text: string; back: string };
-  foot: { how: string; openSource: string; company: string; agents: string; api: string; privacy: string; terms: string; abuse: string; source: string };
+  foot: { how: string; openSource: string; company: string; agents: string; api: string; privacy: string; terms: string; source: string };
 }
 
 const en: Strings = {
@@ -144,7 +145,7 @@ const en: Strings = {
   },
   nav: { analytics: 'Analytics', links: 'Short links', generators: 'For site generators', pricing: 'Pricing', faq: 'Questions', menu: 'Menu' },
   notFound: { title: 'Page not found', text: 'There is no such page on clx.cx.', back: 'To the home page' },
-  foot: { how: 'How it works', openSource: 'Open source', company: '301.st', agents: 'For AI agents', api: 'API', privacy: 'Privacy', terms: 'Terms', abuse: 'Abuse', source: 'Source code' },
+  foot: { how: 'How it works', openSource: 'Open source', company: '301.st', agents: 'For AI agents', api: 'API', privacy: 'Privacy', terms: 'Terms', source: 'Source code' },
 };
 
 const ru: Strings = {
@@ -242,7 +243,7 @@ const ru: Strings = {
   },
   nav: { analytics: 'Аналитика', links: 'Короткие ссылки', generators: 'Для генераторов сайтов', pricing: 'Тарифы', faq: 'Вопросы', menu: 'Меню' },
   notFound: { title: 'Страница не найдена', text: 'Такой страницы на clx.cx нет.', back: 'На главную' },
-  foot: { how: 'Как это работает', openSource: 'Открытый код', company: '301.ru', agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
+  foot: { how: 'Как это работает', openSource: 'Открытый код', company: '301.ru', agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', source: 'Исходный код' },
 };
 
 export const STRINGS: Record<Locale, Strings> = { en, ru };
