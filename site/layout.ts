@@ -127,6 +127,8 @@ export function footer(locale: Locale): string {
       : `<a href="${pathFor(p.slug, p.locales[0]!)}" hreflang="${LOCALES[p.locales[0]!].htmlLang}">${escapeHtml(s.foot[p.foot!])}</a>`,
   );
   links.push(`<a href="${REPO}" rel="noopener">${escapeHtml(s.foot.source)}</a>`);
+  // clx has no contact page of its own: questions go through 301.st's form, clx's parent service.
+  links.push(`<a href="${COMPANY_URL[locale]}/contact" rel="noopener">${escapeHtml(s.foot.contact)}</a>`);
   const compare = comparePages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(p.compare![locale]!)}</a>`);
   // The 301.st glyph leads to 301.st, as on catchall.in; its name is in aria-label and title.
   const company = `<a class="site-foot__brand" href="${COMPANY_URL[locale]}" rel="noopener" aria-label="${escapeHtml(s.foot.company)}" title="${escapeHtml(s.foot.company)}"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-301"></use></svg></a>`;

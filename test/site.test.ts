@@ -144,6 +144,9 @@ describe('generated pages', () => {
       // The glyph opens the footer's first line; the Russian one leads to 301.ru, the parent's Russian site.
       const parent = l === 'en' ? '301.st' : '301.ru';
       expect(home).toContain(`<footer class="site-foot"><p><a class="site-foot__brand" href="https://${parent}" rel="noopener" aria-label="${parent}" title="${parent}"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-301"></use></svg></a>`);
+      // The only way to reach us: the parent's contact form, in the footer of the site and of the app.
+      const contact = `<a href="https://${parent}/contact" rel="noopener">${l === 'en' ? 'Contact' : 'Связаться'}</a>`;
+      for (const page of [home, read(fileFor('/app', l))]) expect(page.match(/<footer[\s\S]*<\/footer>/u)![0]).toContain(contact);
     }
     expect(fs.readFileSync('public/icons.svg', 'utf8')).toContain('<symbol id="i-brand-301"');
   });
