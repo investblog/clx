@@ -1,7 +1,7 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import { LOCALES, ORIGIN, REPO, footPages, navPages, type Locale, type PageDef } from './pages.ts';
+import { LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { alternatesFor, appPathFor, ogImagePath, pathFor, urlFor } from './urls.ts';
 
@@ -100,7 +100,8 @@ export function footer(locale: Locale): string {
       : `<a href="${pathFor(p.slug, p.locales[0]!)}" hreflang="${LOCALES[p.locales[0]!].htmlLang}">${escapeHtml(s.foot[p.foot!])}</a>`,
   );
   links.push(`<a href="${REPO}" rel="noopener">${escapeHtml(s.foot.source)}</a>`);
-  return `<footer class="site-foot">${links.join(' · ')}</footer>`;
+  const compare = comparePages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(p.compare!)}</a>`);
+  return `<footer class="site-foot"><p>${links.join(' · ')}</p>${compare.length ? `<p>${compare.join(' · ')}</p>` : ''}</footer>`;
 }
 
 export function layout(input: LayoutInput): string {

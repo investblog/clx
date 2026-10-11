@@ -47,7 +47,9 @@ describe('generated pages', () => {
         expect(html).toContain(`<html lang="${l}"`);
         if (p.indexed) {
           expect(html).toContain(`<link rel="canonical" href="${urlFor(p.slug, l)}" />`);
-          expect(html).toContain(`hreflang="x-default" href="${urlFor(p.slug, 'en')}"`);
+          // x-default is the English page; a page without one (a Russian comparison) has none.
+          if (p.locales.includes('en')) expect(html).toContain(`hreflang="x-default" href="${urlFor(p.slug, 'en')}"`);
+          else expect(html).not.toContain('x-default');
           expect(html).not.toContain('noindex');
         } else expect(html).toContain('<meta name="robots" content="noindex" />');
       }
@@ -97,6 +99,42 @@ describe('generated pages', () => {
         expect(description.length, `${l}${p.slug}`).toBeGreaterThanOrEqual(120);
         expect(description.length, `${l}${p.slug}`).toBeLessThanOrEqual(160);
       }
+    }
+  });
+
+  it('the comparison pages: in their language’s footer only; clx’s bar highlighted; sources linked; lengths, nothing inline', () => {
+    const pages = SITE_PAGES.filter((p) => p.compare);
+    expect(pages.map((p) => `${p.locales.join()}${p.slug}`)).toEqual(['en/bitly-alternative', 'en/plausible-alternative', 'ru/clck-alternative', 'ru/liveinternet-alternative']);
+    for (const p of pages) {
+      const l = p.locales[0]!;
+      const other = l === 'en' ? 'ru' : 'en';
+      expect(read(fileFor('/', l))).toContain(`<a href="${pathFor(p.slug, l)}">${p.compare}</a>`);
+      expect(read(fileFor('/', other))).not.toContain(p.slug);
+      const html = read(fileFor(p.slug, l));
+      const main = html.match(/<main[\s\S]*?<\/main>/u)![0];
+      expect(main, p.slug).not.toMatch(/style=|<style|<script/u);
+      expect(main).toContain(`#/signup"`);
+      // Every chart in both themes; in each, at most one bar in the brand colour (clx’s; none at $0).
+      const charts = [...main.matchAll(/<div class="demo__chart themed--(dark|light)">([\s\S]*?)<\/svg><\/div>/gu)];
+      expect(charts.length, p.slug).toBeGreaterThanOrEqual(2);
+      expect(charts.length % 2).toBe(0);
+      // Both themes' copies are in the page at once: no id may repeat.
+      const ids = [...html.matchAll(/\sid="([^"]+)"/gu)].map((m) => m[1]);
+      expect(ids.length, p.slug).toBe(new Set(ids).size);
+      // The first row of every chart is clx.
+      for (const [, , svg] of charts) expect(svg!.match(/<title[^>]*>([^<:]+):/u)?.[1], p.slug).toMatch(/^clx/u);
+      // Only clx's row may be in the brand colour, and its bar is, when it has one (none at $0).
+      for (const [, , svg] of charts) {
+        const [, first, ...rest] = svg!.split('<g>');
+        expect(first, p.slug).not.toContain('cx-bar-muted');
+        expect(rest.join(''), p.slug).not.toContain('class="cx-bar"');
+      }
+      // The sources: the other service's own pages, not followed.
+      expect(main).toMatch(/<a href="https:\/\/[^"]+" rel="nofollow noopener">/u);
+      expect(html.match(/<title>([^<]*)<\/title>/u)![1]!.length, p.slug).toBeLessThanOrEqual(60);
+      const description = html.match(/<meta name="description" content="([^"]*)"/u)![1]!.replaceAll('&#39;', "'");
+      expect(description.length, p.slug).toBeGreaterThanOrEqual(120);
+      expect(description.length, p.slug).toBeLessThanOrEqual(160);
     }
   });
 
@@ -245,6 +283,11 @@ describe('generated pages', () => {
     const sitemap = read('sitemap.xml');
     expect(sitemap).toContain('<loc>https://clx.cx/ru/terms</loc>');
     expect(sitemap).not.toContain('404');
+    // Every indexed page × language is listed; a Russian-only page has itself as its one alternate.
+    for (const p of SITE_PAGES.filter((x) => x.indexed)) for (const l of p.locales) expect(sitemap).toContain(`<loc>${urlFor(p.slug, l)}</loc>`);
+    const clck = sitemap.match(/<url>\n {4}<loc>https:\/\/clx\.cx\/ru\/clck-alternative<\/loc>[\s\S]*?<\/url>/u)![0];
+    expect(clck).toContain('hreflang="ru" href="https://clx.cx/ru/clck-alternative"');
+    expect(clck).not.toContain('x-default');
     expect(robots).toContain('Content-Signal: search=yes, ai-input=yes, ai-train=yes\n');
   });
 

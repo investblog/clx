@@ -962,4 +962,7 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   the header, `favicon.svg`, `favicon.ico` (16/32/48) and `apple-touch-icon.png`.
 - **Content pages**: the home page, the two tools, site generators, pricing and the questions
   (`/faq` gathers the pages' own questions); an Open Graph card and JSON-LD for every indexed page
-  (ADR 0016). **Planned:** comparison pages.
+  (ADR 0016); comparison pages ([ADR 0018](./decisions/0018-comparison-pages.md)): `/bitly-alternative`,
+  `/plausible-alternative` in English, `/ru/clck-alternative`, `/ru/liveinternet-alternative` in Russian,
+  linked from their language's footer; every fact about the other service is from its own pages, with
+  its source and date, in `docs/comparisons.md`.

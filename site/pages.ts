@@ -34,6 +34,9 @@ export interface PageDef {
   foot?: 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
   /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
   nav?: 'analytics' | 'links' | 'generators' | 'pricing' | 'faq';
+  /** A comparison page (site/compare.ts), linked from its language's footer under this name. Such a
+   *  page has one language: the other service is known in one market. */
+  compare?: string;
   indexed: boolean;
   /** A legal text: its body is `site/legal/<locale><slug>.html`. */
   legal?: boolean;
@@ -52,6 +55,11 @@ export const SITE_PAGES: readonly PageDef[] = [
   { slug: '/for-site-generators', locales: ALL_LOCALES, nav: 'generators', indexed: true, priority: 0.8, changefreq: 'monthly' },
   { slug: '/pricing', locales: ALL_LOCALES, nav: 'pricing', indexed: true, priority: 0.8, changefreq: 'monthly' },
   { slug: '/faq', locales: ALL_LOCALES, nav: 'faq', indexed: true, priority: 0.7, changefreq: 'monthly' },
+  // clx beside another service, by market; the facts and their sources: docs/comparisons.md.
+  { slug: '/bitly-alternative', locales: ['en'], compare: 'clx vs Bitly', indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/plausible-alternative', locales: ['en'], compare: 'clx vs Plausible', indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/clck-alternative', locales: ['ru'], compare: 'Вместо Кликера', indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/liveinternet-alternative', locales: ['ru'], compare: 'Вместо LiveInternet', indexed: true, priority: 0.6, changefreq: 'monthly' },
   // For agents and integrators; English only — the reader is a program (site/agents.ts, site/api.ts).
   { slug: '/agents', locales: ['en'], foot: 'agents', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
@@ -67,6 +75,9 @@ export const STATIC_FILES: readonly string[] = ['_headers', 'favicon.svg', 'favi
 
 /** The footer of a language: its own pages, and the English-only ones (the agent docs) in English. */
 export const footPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.foot && (p.locales.includes(locale) || p.locales.length === 1));
+
+/** The comparison pages of a language, for its footer. */
+export const comparePages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.compare && p.locales.includes(locale));
 
 /** The header's menu of a language. */
 export const navPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.nav && p.locales.includes(locale));

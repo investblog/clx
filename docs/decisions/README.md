@@ -23,3 +23,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0015](./0015-app-language.md) | The app's language comes from the address until sign-in, then from the account | 10.10.2026 | §9, §15, §16 |
 | [0016](./0016-brand-and-report-charts.md) | A violet brand with its own mark; the report is drawn by affiliate-charts | 10.10.2026 | §10, §16 |
 | [0017](./0017-app-in-the-site-frame.md) | The app sits in the site's frame; the sitemap has a view for people | 11.10.2026 | §10, §16 |
+| [0018](./0018-comparison-pages.md) | Comparison pages name the other service, one market each, facts with sources | 11.10.2026 | §16 |

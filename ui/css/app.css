@@ -196,6 +196,26 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .home-section>.muted{text-align:center}
 .home-api{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-5);align-items:center}
 .home-api h2{margin-top:0}
+/* The comparison pages (site/compare.ts). */
+.narrow-section{max-width:760px}
+.compare__one{grid-template-columns:minmax(0,1fr);max-width:760px;margin:0 auto}
+.feature p.compare__note{margin:var(--space-3) 0 0;font-size:var(--fs-sm);color:var(--text-subtle)}
+.compare__list{margin:0;padding-left:var(--space-5)}
+.compare__list li{margin-bottom:var(--space-2);color:var(--text-muted)}
+.compare th[scope="row"]{font-weight:var(--fw-semibold);color:var(--text-main);white-space:normal}
+.compare td{white-space:normal;vertical-align:top}
+.compare td:nth-child(2){color:var(--text-main)}
+/* On a phone each row is a block: the row's name, then each side under its column's name. */
+@media (max-width:720px){
+  .compare thead{display:none}
+  .compare,.compare tbody,.compare tr,.compare th[scope="row"],.compare td{display:block;width:100%}
+  .compare tr{padding:var(--space-2) 0;border-bottom:1px solid var(--border-subtle)}
+  .compare tr:last-child{border-bottom:0}
+  .compare th[scope="row"],.compare td{padding:var(--space-1) var(--space-3);border:0}
+  .compare td::before{content:attr(data-label);display:block;font-size:var(--fs-xs);color:var(--text-subtle)}
+}
+.compare__sources p,.compare__sources li{font-size:var(--fs-sm)}
+.compare__sources ul{padding-left:var(--space-5)}
 .code{margin:0;padding:var(--space-4);border-radius:var(--radius-lg);background:var(--bg-soft);overflow-x:auto;font:13px/1.6 var(--font-mono)}
 .code code{font-family:inherit;white-space:pre}
 .faq{max-width:760px;margin:0 auto}
@@ -230,5 +250,7 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .lang-switch{font-size:var(--fs-sm);color:var(--text-muted);text-decoration:none}
 .lang-switch:hover{color:var(--text)}
 .site-foot{max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
+.site-foot p{margin:0}
+.site-foot p+p{margin-top:var(--space-2)}
 .site-foot a{color:var(--text-muted);text-decoration:none}
 .site-foot a:hover{color:var(--text)}

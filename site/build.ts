@@ -12,6 +12,7 @@ import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
 import { faqGroups, faqPage } from './faq.ts';
 import { analyticsPage, generatorsPage, linksPage, pricingPage } from './products.ts';
+import { bitlyPage, clckPage, liveinternetPage, plausiblePage } from './compare.ts';
 import { escapeHtml, footer, header, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
 
@@ -32,6 +33,8 @@ function notFound(locale: Locale): { title: string; body: string } {
 }
 
 const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage, '/for-site-generators': generatorsPage, '/pricing': pricingPage, '/faq': faqPage };
+// The comparison pages have one language each (site/pages.ts).
+const COMPARE_PAGES: Record<string, () => { title: string; description: string; body: string }> = { '/bitly-alternative': bitlyPage, '/plausible-alternative': plausiblePage, '/clck-alternative': clckPage, '/liveinternet-alternative': liveinternetPage };
 
 const AGENT_PAGES: Record<string, () => { title: string; description: string; body: string }> = {
   '/agents': () => ({ title: 'clx for AI agents', description: "How an AI agent sets up clx for a person: connect their Cloudflare account, add sites and embed the counter, make short links and QR codes, read reports — through the API.", body: agentsBody() }),
@@ -69,7 +72,7 @@ function structuredData(page: PageDef, locale: Locale, content: { title: string;
 }
 
 function render(page: PageDef, locale: Locale): string {
-  const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? null);
+  const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? null);
   if (!content) throw new Error(`no template for ${page.slug}`);
   return layout({ page, locale, ...content, jsonLd: page.indexed ? structuredData(page, locale, content) : undefined });
 }
