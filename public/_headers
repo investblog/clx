@@ -16,6 +16,10 @@
 /openapi.yaml
   Content-Type: application/yaml; charset=utf-8
 
+# The sitemap's view (ADR 0020): a browser applies a stylesheet only of an XML type.
+/sitemap.xsl
+  Content-Type: application/xslt+xml; charset=utf-8
+
 # The typeface (ADR 0016) changes rarely: a week in the browser. Not immutable — the names carry no
 # version, so a new file under the same name must still reach readers.
 /fonts/*

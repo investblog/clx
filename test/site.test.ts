@@ -388,9 +388,16 @@ describe('generated pages', () => {
     expect([marked('1'), marked(null)]).toEqual([true, false]);
   });
 
-  it('the sitemap carries its view for a person at the end of the last <url>', () => {
-    expect(read('sitemap.xml')).toMatch(/<priority>[\d.]+<\/priority>\n {4}<xhtml:script src="\/sitemap\.js"\/>\n {2}<\/url>\n<\/urlset>\n$/u);
-    expect(read('sitemap.xml').match(/xhtml:script/gu)).toHaveLength(1);
+  it('the sitemap names its view for a person in a processing instruction; a <url> holds only what search engines know', () => {
+    const sitemap = read('sitemap.xml');
+    expect(sitemap.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>\n<urlset ')).toBe(true);
+    // Google reported <xhtml:script> in a <url> as an error (11.10.2026).
+    const tags = new Set([...sitemap.matchAll(/<\/?([\w:]+)/gu)].map((m) => m[1]));
+    expect([...tags].sort()).toEqual(['changefreq', 'loc', 'priority', 'url', 'urlset', 'xhtml:link']);
+    // The view: one stylesheet, the site's own files only.
+    const xsl = read('sitemap.xsl');
+    expect(xsl).toContain('<xsl:output method="html"');
+    expect([...xsl.matchAll(/(?:href|src)="(\/[^"#]*)/gu)].map((m) => m[1])).toEqual(['/favicon.svg', '/app.css', '/theme.js', '/', '/icons.svg']);
   });
 
   it('robots.txt keeps crawlers off the app and the API; the sitemap lists indexed pages only', () => {

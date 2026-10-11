@@ -357,8 +357,8 @@ Why:
   `GET`/`HEAD` gets a plain `404` with no clx text.
 - **Link:** a code (3–32 characters `[A-Za-z0-9_-]`, chosen or a random 6) → target; `302`,
   `cache-control: no-store` (every click must reach the worker), no other headers and no body. A
-  click (`GET`; a `HEAD` is redirected, not counted) is written as a view of target `l<id>` (page
-  empty, source — the `Referer` host, or `qr`), with its daily visitor hash like a site's; a bot is
+  click (`GET`; a `HEAD` is redirected, not counted) is written as a view of target `l<id>` (page —
+  where it was sent, see Rules below; source — the `Referer` host, or `qr`), with its daily visitor hash like a site's; a bot is
   redirected too and counted as a bot. The code never changes (printed QR codes carry it): a new
   code is a new link; a deleted link frees its code and keeps its totals. A code is unique within
   the account — one link host per account, so the worker looks a link up by its code alone. Config
@@ -948,12 +948,13 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   other language moves the app to its own address. The site's link to the app says "Dashboard"
   instead of "Sign in" where the app left its mark (`localStorage` `clx-signed-in`, read by
   `/theme.js`).
-- **Sitemap.** `/sitemap.xml` (indexed pages × languages, hreflang alternates) carries
-  `<xhtml:script src="/sitemap.js"/>` at the end of its last `<url>`: in a browser it becomes a page
-  in the site's style, one row per page with its languages. The schema allows an element of another
-  namespace there; whether Search Console flags it is checked after the release.
-- **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`), the site's script
-  (`public/site.js`) and the sitemap's view (`public/sitemap.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
+- **Sitemap.** `/sitemap.xml` (indexed pages × languages, hreflang alternates) names its view in a
+  processing instruction, `<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>`: in a browser
+  with XSLT it becomes a page in the site's style, one row per page with its languages; elsewhere it
+  is plain XML. A `<url>` holds only `loc`, `xhtml:link`, `changefreq` and `priority`
+  ([ADR 0020](./decisions/0020-sitemap-view-xslt.md)).
+- **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`) and the site's script
+  (`public/site.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
   result before every deploy. Nothing generated is committed.
 - **Languages.** English and Russian for the site; the app and the e-mails too
   ([ADR 0015](./decisions/0015-app-language.md)): the app at `/app` and `/ru/app` speaks the

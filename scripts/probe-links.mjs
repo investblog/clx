@@ -9,7 +9,7 @@
 //      by country and device;
 //   3. clicks: 302 with no-store and no body, the rules by the visitor's country and device, `?q` as
 //      source qr, a plain 404 for anything else; the clicks in the account's own D1 and in the
-//      link's report (stage 5b: today live, breakdowns in the same read);
+//      link's report (stage 5b: today live, breakdowns in the same read), each click's destination;
 //   4. a change of the URL reaches the worker, a delete makes it a 404;
 //   5. disconnect (the link host route goes with it), the DNS record deleted, cleanup.
 // A few minutes; no cron is waited for. Write the output to a file, never through `| head` — a cut
@@ -161,6 +161,14 @@ try {
     "the link's report: today live, totals and breakdowns of one read",
     rep?.totals?.views === 3 && rep?.as_of && sumOf('devices') === 3 && sumOf('sources') === 3 && rep.breakdowns.sources.some((r) => r.key === 'qr'),
     JSON.stringify({ totals: rep?.totals, sources: rep?.breakdowns?.sources, devices: rep?.breakdowns?.devices, unavailable: rep?.unavailable }),
+  );
+  // Where each click was sent (ADR 0019): the phone's by its rule, the other two to the main URL.
+  const flows = rep?.breakdowns?.flows ?? [];
+  const to = (source, key) => flows.find((f) => f.source === source && f.to === key)?.n ?? 0;
+  step(
+    '… and where each click went: by its rule, or the main URL',
+    to('', `${loc};mobile>https://example.com/mobile-${loc}`) === 1 && to('', '>https://example.com/a') === 1 && to('qr', '>https://example.com/a') === 1,
+    JSON.stringify(flows),
   );
 
   // The worker caches a link for 60 s: a change shows within that.

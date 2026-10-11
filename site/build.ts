@@ -148,9 +148,8 @@ const urls = SITE_PAGES.filter((p) => p.indexed).flatMap((p) =>
       .join('\n'),
   ),
 );
-// The view for a person (site/sitemap-view.ts) goes at the end of the last <url>: the schema takes an
-// element of another namespace only there, and the script then finds every <url> parsed.
-urls.push(urls.pop()!.replace(/\n {2}<\/url>$/u, '\n    <xhtml:script src="/sitemap.js"/>\n  </url>'));
-write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join('\n')}\n</urlset>\n`);
+// The view for a person (public/sitemap.xsl, ADR 0020) is named by a processing instruction, which
+// search engines skip: an element in a <url> other than theirs is one Google reports as an error.
+write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join('\n')}\n</urlset>\n`);
 
 console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, the app in each, robots.txt, sitemap.xml`);
