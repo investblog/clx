@@ -11,7 +11,7 @@ import { ALL_LOCALES, LOCALES, ORIGIN, REPO, SITE_PAGES, markdownFile, type Loca
 import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
 import { faqGroups, faqPage } from './faq.ts';
-import { analyticsPage, generatorsPage, linksPage, pricingPage } from './products.ts';
+import { analyticsPage, generatorsPage, howPage, linksPage, openSourcePage, pricingPage } from './products.ts';
 import { bitlyPage, clckPage, liveinternetPage, plausiblePage } from './compare.ts';
 import { escapeHtml, footer, header, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
@@ -32,7 +32,7 @@ function notFound(locale: Locale): { title: string; body: string } {
   return { title: `${s.title} — clx`, body: `<section class="narrow">\n<h1 class="h3">${escapeHtml(s.title)}</h1>\n<p>${escapeHtml(s.text)}</p>\n<p><a href="${pathFor('/', locale)}">${escapeHtml(s.back)}</a></p>\n</section>` };
 }
 
-const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage, '/for-site-generators': generatorsPage, '/pricing': pricingPage, '/faq': faqPage };
+const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage, '/for-site-generators': generatorsPage, '/pricing': pricingPage, '/faq': faqPage, '/how-it-works': howPage, '/open-source': openSourcePage };
 // The comparison pages have one language each (site/pages.ts).
 const COMPARE_PAGES: Record<string, () => { title: string; description: string; body: string }> = { '/bitly-alternative': bitlyPage, '/plausible-alternative': plausiblePage, '/clck-alternative': clckPage, '/liveinternet-alternative': liveinternetPage };
 

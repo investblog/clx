@@ -19,10 +19,10 @@ export interface Strings {
     start: string;
     source: string;
     note: string;
-    how: { h2: string; steps: [string, string][] };
-    tools: { h2: string; items: { h: string; p: string; points: string[] }[] };
-    why: { h2: string; items: [string, string][] };
-    api: { h2: string; p: string; agents: string; reference: string };
+    how: { h2: string; steps: [string, string][]; more: string };
+    tools: { h2: string; items: { h: string; p: string; points: string[]; link: [string, string] }[] };
+    why: { h2: string; items: [string, string][]; links: [string, string][] };
+    api: { h2: string; p: string; agents: string; reference: string; generators: string };
     plans: { h2: string; items: { name: string; price: string; points: string[] }[]; note: string; more: string };
     faq: { h2: string; items: [string, string][]; more: string };
     final: string;
@@ -46,7 +46,7 @@ export interface Strings {
   /** The header's menu: a page's `nav` key → its name; `menu` names the phone's menu button. */
   nav: { analytics: string; links: string; generators: string; pricing: string; faq: string; menu: string };
   notFound: { title: string; text: string; back: string };
-  foot: { agents: string; api: string; privacy: string; terms: string; abuse: string; source: string };
+  foot: { how: string; openSource: string; company: string; agents: string; api: string; privacy: string; terms: string; abuse: string; source: string };
 }
 
 const en: Strings = {
@@ -65,6 +65,7 @@ const en: Strings = {
     note: 'Free plan, no card. Open source under AGPL-3.0.',
     how: {
       h2: 'How it works',
+      more: 'How clx works, in detail',
       steps: [
         ['Connect Cloudflare', 'Paste a one-time bootstrap token. clx issues its own working token from it, then deletes the bootstrap token — or tells you to, if Cloudflare would not let it.'],
         ['clx installs its worker', 'A worker and a D1 database appear in your account and run on your quotas — the free ones are enough for most sites.'],
@@ -76,11 +77,13 @@ const en: Strings = {
       items: [
         {
           h: 'Visit counter',
+          link: ['Cookieless website analytics', '/analytics'],
           p: 'Views and visitors of every site: by hour today, by day for 7 and 30 days; daily totals are kept for 400 days.',
           points: ['No cookies, no third-party address in your pages', 'Pages, sources, countries, devices, browsers, systems', 'Bots counted apart: search engines, AI crawlers, monitoring'],
         },
         {
           h: 'Short links',
+          link: ['Short links on your own domain', '/short-links'],
           p: 'Links on a domain of yours, served by the worker in your account.',
           points: ['A QR code for every link, as SVG', 'Rules by country and device', 'Clicks by source, country and device'],
         },
@@ -88,6 +91,7 @@ const en: Strings = {
     },
     why: {
       h2: 'Why clx',
+      links: [['Where your data lives', '/how-it-works'], ['Open source', '/open-source']],
       items: [
         ['Your data stays with you', 'Visits, clicks and their breakdowns live in a D1 database in your Cloudflare account. clx.cx stores only totals by hour and by day.'],
         ['Nothing third-party in your pages', 'The snippet is served from your own domain and sets no cookies.'],
@@ -100,6 +104,7 @@ const en: Strings = {
       p: 'Everything the app does is an API call. A site generator adds a site and puts the snippet into the page it builds; an AI agent sets clx up for a person from one page of docs.',
       agents: 'Docs for AI agents',
       reference: 'API reference',
+      generators: 'For site generators',
     },
     plans: {
       h2: 'Plans',
@@ -139,7 +144,7 @@ const en: Strings = {
   },
   nav: { analytics: 'Analytics', links: 'Short links', generators: 'For site generators', pricing: 'Pricing', faq: 'Questions', menu: 'Menu' },
   notFound: { title: 'Page not found', text: 'There is no such page on clx.cx.', back: 'To the home page' },
-  foot: { agents: 'For AI agents', api: 'API', privacy: 'Privacy', terms: 'Terms', abuse: 'Abuse', source: 'Source code' },
+  foot: { how: 'How it works', openSource: 'Open source', company: '301.st', agents: 'For AI agents', api: 'API', privacy: 'Privacy', terms: 'Terms', abuse: 'Abuse', source: 'Source code' },
 };
 
 const ru: Strings = {
@@ -158,6 +163,7 @@ const ru: Strings = {
     note: 'Бесплатный тариф, без карты. Открытый код под AGPL-3.0.',
     how: {
       h2: 'Как это работает',
+      more: 'Подробнее о том, как работает clx',
       steps: [
         ['Подключите Cloudflare', 'Вставьте разовый bootstrap-токен. clx выпустит по нему свой рабочий токен, а bootstrap-токен удалит — или попросит удалить вас, если Cloudflare не даст.'],
         ['clx ставит свой воркер', 'В вашем аккаунте появляются воркер и база D1 и работают в ваших квотах — бесплатных хватает большинству сайтов.'],
@@ -169,11 +175,13 @@ const ru: Strings = {
       items: [
         {
           h: 'Счётчик посещений',
+          link: ['Статистика сайта без cookie', '/analytics'],
           p: 'Просмотры и посетители каждого сайта: по часам за сегодня, по дням за 7 и 30 дней; итоги по дням хранятся 400 дней.',
           points: ['Без cookie и без чужих адресов на ваших страницах', 'Страницы, источники, страны, устройства, браузеры, системы', 'Боты отдельно: поисковики, ИИ-краулеры, мониторинг'],
         },
         {
           h: 'Короткие ссылки',
+          link: ['Сокращатель ссылок на своём домене', '/short-links'],
           p: 'Ссылки на вашем домене, их обслуживает воркер в вашем аккаунте.',
           points: ['QR-код для каждой ссылки, в SVG', 'Правила по стране и устройству', 'Клики по источникам, странам и устройствам'],
         },
@@ -181,6 +189,7 @@ const ru: Strings = {
     },
     why: {
       h2: 'Почему clx',
+      links: [['Где лежат ваши данные', '/how-it-works'], ['Открытый код', '/open-source']],
       items: [
         ['Данные остаются у вас', 'Посещения, клики и их разбивки лежат в базе D1 в вашем аккаунте Cloudflare. На clx.cx хранятся только итоги по часам и дням.'],
         ['Ничего чужого на страницах', 'Сниппет грузится с вашего же домена и не ставит cookie.'],
@@ -193,6 +202,7 @@ const ru: Strings = {
       p: 'Всё, что делает кабинет, — вызовы API. Генератор сайтов добавляет сайт и вставляет сниппет в страницу, которую собирает; ИИ-агент настраивает clx для человека по одной странице документации.',
       agents: 'Документация для ИИ-агентов',
       reference: 'Справочник API',
+      generators: 'Для генераторов сайтов',
     },
     plans: {
       h2: 'Тарифы',
@@ -232,7 +242,7 @@ const ru: Strings = {
   },
   nav: { analytics: 'Аналитика', links: 'Короткие ссылки', generators: 'Для генераторов сайтов', pricing: 'Тарифы', faq: 'Вопросы', menu: 'Меню' },
   notFound: { title: 'Страница не найдена', text: 'Такой страницы на clx.cx нет.', back: 'На главную' },
-  foot: { agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
+  foot: { how: 'Как это работает', openSource: 'Открытый код', company: '301.st', agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
 };
 
 export const STRINGS: Record<Locale, Strings> = { en, ru };

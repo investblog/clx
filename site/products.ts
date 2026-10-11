@@ -5,7 +5,8 @@
 import Rank from 'affiliate-charts/charts-rank.js';
 import { generateMatrix } from '../src/qr/generate.ts';
 import { chartOptions, demoReport, themed } from './demo.ts';
-import { escapeHtml } from './layout.ts';
+import { STRINGS } from './i18n.ts';
+import { escapeHtml, seeAlso } from './layout.ts';
 import type { Locale } from './pages.ts';
 import { appPathFor } from './urls.ts';
 
@@ -19,7 +20,12 @@ interface ProductText {
   steps?: string[];
   sections: { h: string; p: string; points?: string[] }[];
   setup?: { h: string; p: string; code: string };
-  faq: { h: string; items: [string, string][] };
+  /** The page's questions; /faq gathers them (site/faq.ts). */
+  faq?: { h: string; items: [string, string][] };
+  /** The page's group on /faq (site/faq.ts): "All questions →" leads there. */
+  faqKey?: string;
+  /** Related pages of the same language, under the sections. */
+  more?: [string, string][];
   final: string;
 }
 
@@ -71,6 +77,8 @@ const ANALYTICS: Record<Locale, ProductText> = {
         ['What if I disconnect?', 'clx removes its worker, database and routes from your account and lists anything it could not; the totals on clx.cx go with your clx account when you delete it.'],
       ],
     },
+    faqKey: 'analytics',
+    more: [['Short links on the same worker', '/short-links'], ['clx vs Plausible', '/plausible-alternative'], ['How it works', '/how-it-works']],
     final: 'Count your visits on your own Cloudflare account',
   },
   ru: {
@@ -109,6 +117,8 @@ const ANALYTICS: Record<Locale, ProductText> = {
         ['Что будет, если отключиться?', 'clx удалит из вашего аккаунта свой воркер, базу и маршруты и перечислит, что удалить не смог; итоги на clx.cx удаляются вместе с учётной записью clx.'],
       ],
     },
+    faqKey: 'analytics',
+    more: [['Короткие ссылки на том же воркере', '/short-links'], ['Вместо LiveInternet и Метрики', '/liveinternet-alternative'], ['Как это работает', '/how-it-works']],
     final: 'Считайте посещения в своём аккаунте Cloudflare',
   },
 };
@@ -153,6 +163,8 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
         ['How is a link chosen by country?', 'By the country Cloudflare sees the click from; a device is a phone or a computer.'],
       ],
     },
+    faqKey: 'links',
+    more: [['The visit counter on the same worker', '/analytics'], ['clx vs Bitly', '/bitly-alternative'], ['How it works', '/how-it-works']],
     final: 'Shorten links on your own domain',
     card: {
       short: 'go.example.com/spring',
@@ -204,6 +216,8 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
         ['Как выбирается страна?', 'По стране, из которой Cloudflare видит клик; устройство — телефон или компьютер.'],
       ],
     },
+    faqKey: 'links',
+    more: [['Счётчик посещений на том же воркере', '/analytics'], ['Вместо Яндекс Кликера', '/clck-alternative'], ['Как это работает', '/how-it-works']],
     final: 'Сокращайте ссылки на своём домене',
     card: {
       short: 'go.example.com/spring',
@@ -289,6 +303,8 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
         ['What does it cost?', 'The API plan is switched on by request and is free for now; Workers Paid is never required.'],
       ],
     },
+    faqKey: 'generators',
+    more: [['The API plan', '/pricing'], ['How it works', '/how-it-works'], ['Open source', '/open-source']],
     final: 'Give every site you build its own counter',
   },
   ru: {
@@ -334,6 +350,8 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
         ['Сколько это стоит?', 'Тариф API включается по запросу и пока бесплатен; Workers Paid не нужен.'],
       ],
     },
+    faqKey: 'generators',
+    more: [['Тариф API', '/pricing'], ['Как это работает', '/how-it-works'], ['Открытый код', '/open-source']],
     final: 'Дайте каждому собранному сайту свой счётчик',
   },
 };
@@ -381,6 +399,8 @@ const PRICING: Record<Locale, PricingText> = {
         ['What counts towards the limits?', 'Connected Cloudflare accounts, sites, links and API keys; visits and clicks are limited only by your Cloudflare quotas.'],
       ],
     },
+    faqKey: 'pricing',
+    more: [['For site generators', '/for-site-generators'], ['How it works', '/how-it-works']],
     final: 'Start on the free plan',
   },
   ru: {
@@ -420,13 +440,156 @@ const PRICING: Record<Locale, PricingText> = {
         ['Что входит в лимиты?', 'Подключённые аккаунты Cloudflare, сайты, ссылки и ключи API; посещения и клики ограничены только квотами вашего Cloudflare.'],
       ],
     },
+    faqKey: 'pricing',
+    more: [['Для генераторов сайтов', '/for-site-generators'], ['Как это работает', '/how-it-works']],
     final: 'Начните с бесплатного тарифа',
+  },
+};
+
+/** /how-it-works: the path of a visit and of a click, and what clx creates, keeps and removes (§2–§4). */
+const HOW: Record<Locale, ProductText & { flow: [string, string][] }> = {
+  en: {
+    title: 'How clx works: a worker in your Cloudflare account — clx',
+    description: 'clx installs one worker and one D1 database in your Cloudflare account, on a token with only the rights it needs. What runs where, what is kept, how to leave.',
+    h1: 'How clx works',
+    lead: 'clx puts one worker into your Cloudflare account. It counts visits and serves short links on your own domains, keeps the details in your D1 database and sends clx.cx only the totals.',
+    start: 'Start free',
+    steps: ['Connect Cloudflare', 'Add a site or a link host', 'Read the report'],
+    flow: [
+      ['A visitor', 'opens a page of your site or a short link on your domain'],
+      ['clx-edge, in your account', 'counts the view or redirects the click, writes the details to your D1'],
+      ['clx.cx', 'gets the totals every hour and reads your D1 when you open a report'],
+    ],
+    sections: [
+      {
+        h: 'A token with only the rights it needs',
+        p: 'You make a one-day bootstrap token from a template link. clx turns it into a working token for that one account, valid for a year, and deletes the bootstrap token — or tells you to revoke it, if Cloudflare would not let it. The working token is stored encrypted and holds only these rights:',
+        points: ['Workers scripts and routes: install the worker and its routes', 'D1: the worker’s database', 'Zone read: which domains you can pick', 'Account settings and analytics read: the account’s name, and a warning before a quota runs out'],
+      },
+      {
+        h: 'What clx creates, and only that',
+        p: 'One worker and one database, both named clx-edge, and a route for each site and for your link host. clx records what it made. If a clx-edge it did not make is already there, it stops and touches nothing; before replacing or removing the worker, it checks that the code there is one it released.',
+      },
+      {
+        h: 'Where your data lives',
+        p: 'The details — pages, sources, countries, devices, browsers, systems — stay in the D1 database in your account: by hour for 31 days, by day for 400. clx.cx keeps your settings and the totals. A visitor is counted by a hash of a daily salt; the hash and the salt are deleted when the day closes and never leave your account.',
+      },
+      {
+        h: 'Updates, and how to leave',
+        p: 'clx updates the worker with one checked release for every account, migrating its database first. Disconnecting removes the worker, the database and the routes and lists anything it could not; the working token you revoke in Cloudflare from the link clx gives, and the totals on clx.cx are deleted after 30 days, or at once. Revoking the token alone stops clx from changing anything; deleting clx-edge yourself stops the counting and the links at once.',
+      },
+    ],
+    more: [['Open source', '/open-source'], ['Pricing', '/pricing'], ['Questions', '/faq']],
+    final: 'See it in your own Cloudflare account',
+  },
+  ru: {
+    title: 'Как работает clx: воркер в вашем аккаунте Cloudflare — clx',
+    description: 'clx ставит в ваш аккаунт Cloudflare один воркер и одну базу D1 — токеном только с нужными правами. Что где работает, что хранится и как отключиться.',
+    h1: 'Как работает clx',
+    lead: 'clx ставит в ваш аккаунт Cloudflare один воркер. Он считает посещения и обслуживает короткие ссылки на ваших доменах, хранит подробности в вашей базе D1, а на clx.cx отправляет только итоги.',
+    start: 'Начать бесплатно',
+    steps: ['Подключите Cloudflare', 'Добавьте сайт или хост ссылок', 'Смотрите отчёт'],
+    flow: [
+      ['Посетитель', 'открывает страницу вашего сайта или короткую ссылку на вашем домене'],
+      ['clx-edge в вашем аккаунте', 'считает просмотр или переадресует клик, пишет подробности в вашу D1'],
+      ['clx.cx', 'раз в час получает итоги и читает вашу D1, когда вы открываете отчёт'],
+    ],
+    sections: [
+      {
+        h: 'Токен только с нужными правами',
+        p: 'Вы создаёте суточный bootstrap-токен по ссылке-шаблону. clx делает из него рабочий токен для одного этого аккаунта на год и удаляет bootstrap-токен — или просит отозвать его вручную, если Cloudflare не дал. Рабочий токен хранится зашифрованным, и в нём только эти права:',
+        points: ['Скрипты и маршруты Workers — поставить воркер и его маршруты', 'D1 — база воркера', 'Чтение зон — из каких доменов выбирать', 'Чтение настроек и аналитики аккаунта — его название и предупреждение, пока квота не кончилась'],
+      },
+      {
+        h: 'clx создаёт только своё',
+        p: 'Один воркер и одну базу, обе с именем clx-edge, и маршрут для каждого сайта и для хоста ссылок. clx записывает, что создал. Если clx-edge, созданный не им, уже есть — он останавливается и ничего не трогает; прежде чем заменить или удалить воркер, проверяет, что там код его же выпуска.',
+      },
+      {
+        h: 'Где лежат ваши данные',
+        p: 'Подробности — страницы, источники, страны, устройства, браузеры, системы — остаются в базе D1 вашего аккаунта: по часам 31 день, по дням 400 дней. На clx.cx хранятся ваши настройки и итоги. Посетитель считается по хешу с суточной солью; хеш и соль удаляются, когда сутки закрываются, и не покидают ваш аккаунт.',
+      },
+      {
+        h: 'Обновления и как уйти',
+        p: 'clx обновляет воркер одним проверенным выпуском для всех аккаунтов, сначала обновляя схему его базы. Отключение удаляет воркер, базу и маршруты и перечисляет, что удалить не удалось; рабочий токен вы отзываете в Cloudflare по ссылке от clx, а итоги на clx.cx удаляются через 30 дней или сразу. Один отзыв токена не даёт clx ничего менять; удалите clx-edge сами — и подсчёт и ссылки остановятся сразу.',
+      },
+    ],
+    more: [['Открытый код', '/open-source'], ['Тарифы', '/pricing'], ['Вопросы', '/faq']],
+    final: 'Посмотрите, как это работает, в своём аккаунте',
+  },
+};
+
+/** /open-source: the licence, the code that runs in a user's account, running one's own copy (§11). */
+const OPEN: Record<Locale, ProductText> = {
+  en: {
+    title: 'Open-source analytics and link shortener, AGPL — clx',
+    description: 'clx is open source under AGPL-3.0: the service, the worker it installs in your Cloudflare account and the site. Read what runs in your account, or run your own.',
+    h1: 'clx is open source',
+    lead: 'The service at clx.cx, the worker it installs into your Cloudflare account and this site are one public repository under AGPL-3.0. Read what runs in your account, or run a clx of your own.',
+    start: 'Start free',
+    sections: [
+      {
+        h: 'AGPL-3.0',
+        p: 'You may read, change and run the code. If you offer a changed copy to others as a service, its users get its source too.',
+      },
+      {
+        h: 'What runs in your account',
+        p: 'The worker is built from the repository’s edge/ folder; the built bundle is committed with its sha256, and every release ever made is listed beside it. clx replaces or removes a worker in your account only when its code is one of those.',
+      },
+      {
+        h: 'Your own clx',
+        p: 'clx.cx itself is a Worker with a D1 database and a KV namespace: one Cloudflare account runs a copy of it, with the same app, API and worker for your users’ accounts.',
+      },
+      {
+        h: 'The QR code library',
+        p: 'The QR codes are drawn by @301st/qr-svg, a separate library under the MIT licence; until it is on npm, its copy lives in the repository with its own licence and tests.',
+      },
+    ],
+    setup: {
+      h: 'Run your own copy',
+      p: 'Node.js 22 and pnpm. The README has every step, the secrets included.',
+      code: 'git clone https://github.com/investblog/clx && cd clx\npnpm install\nnode scripts/wrangler.mjs login\nnode scripts/wrangler.mjs d1 create clx\nnode scripts/wrangler.mjs kv namespace create SESSIONS\ncp wrangler.example.jsonc wrangler.jsonc   # your route, ids, HOOK_URL\nnode scripts/wrangler.mjs d1 migrations apply clx --remote\nnode scripts/secrets.mjs JWT_SECRET\nnode scripts/secrets.mjs MASTER_KEYS\npnpm run deploy\nnode scripts/user.mjs add you@example.com',
+    },
+    more: [['How it works', '/how-it-works'], ['For site generators', '/for-site-generators']],
+    final: 'Or use clx.cx, free',
+  },
+  ru: {
+    title: 'Открытый код clx: счётчик и сокращатель ссылок — clx',
+    description: 'clx — открытый код под AGPL-3.0: сервис, воркер, который он ставит в ваш аккаунт Cloudflare, и сайт. Проверьте, что работает у вас, или запустите свой clx.',
+    h1: 'Открытый код clx',
+    lead: 'Сервис clx.cx, воркер, который он ставит в ваш аккаунт Cloudflare, и этот сайт — один публичный репозиторий под AGPL-3.0. Проверьте, что работает в вашем аккаунте, или запустите свой clx.',
+    start: 'Начать бесплатно',
+    sections: [
+      {
+        h: 'AGPL-3.0',
+        p: 'Код можно читать, менять и запускать. Если вы даёте изменённую копию другим как сервис, её пользователи тоже получают исходный код.',
+      },
+      {
+        h: 'Что работает в вашем аккаунте',
+        p: 'Воркер собирается из папки edge/ репозитория; собранный бандл коммитится со своим sha256, а рядом — список всех когда-либо выпущенных. clx заменяет или удаляет воркер в вашем аккаунте, только если его код — один из них.',
+      },
+      {
+        h: 'Свой clx',
+        p: 'Сам clx.cx — это Worker с базой D1 и пространством KV: копию запускает один аккаунт Cloudflare, с тем же кабинетом, API и воркером для аккаунтов ваших пользователей.',
+      },
+      {
+        h: 'Библиотека QR-кодов',
+        p: 'QR-коды рисует @301st/qr-svg — отдельная библиотека под лицензией MIT; пока её нет в npm, копия лежит в репозитории со своей лицензией и тестами.',
+      },
+    ],
+    setup: {
+      h: 'Запустить свою копию',
+      p: 'Нужны Node.js 22 и pnpm. Все шаги, включая секреты, — в README.',
+      code: 'git clone https://github.com/investblog/clx && cd clx\npnpm install\nnode scripts/wrangler.mjs login\nnode scripts/wrangler.mjs d1 create clx\nnode scripts/wrangler.mjs kv namespace create SESSIONS\ncp wrangler.example.jsonc wrangler.jsonc   # ваш маршрут, id, HOOK_URL\nnode scripts/wrangler.mjs d1 migrations apply clx --remote\nnode scripts/secrets.mjs JWT_SECRET\nnode scripts/secrets.mjs MASTER_KEYS\npnpm run deploy\nnode scripts/user.mjs add you@example.com',
+    },
+    more: [['Как это работает', '/how-it-works'], ['Для генераторов сайтов', '/for-site-generators']],
+    final: 'Или пользуйтесь clx.cx бесплатно',
   },
 };
 
 /** Who does what in a site generator's build: three boxes in a row. */
 function flow(steps: [string, string][]): string {
-  return `<figure class="flow" aria-hidden="true">${steps.map(([h, p]) => `<div class="flow__step"><p class="flow__h">${escapeHtml(h)}</p><p>${escapeHtml(p)}</p></div>`).join('<span class="flow__arrow">→</span>')}</figure>`;
+  // The steps are read out; only the arrows between them are hidden.
+  return `<figure class="flow">${steps.map(([h, p]) => `<div class="flow__step"><p class="flow__h">${escapeHtml(h)}</p><p>${escapeHtml(p)}</p></div>`).join('<span class="flow__arrow" aria-hidden="true">→</span>')}</figure>`;
 }
 
 function plansBlock(t: PricingText): string {
@@ -455,22 +618,25 @@ function page(locale: Locale, t: ProductText, illustration: string): { title: st
 </section>
 `
     : '';
+  const faq = t.faq
+    ? `<section class="home-section">
+  <h2>${escapeHtml(t.faq.h)}</h2>
+  <div class="faq">${t.faq.items.map(([q, a]) => `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`).join('')}</div>
+  ${seeAlso(t.faqKey ? [[STRINGS[locale].home.faq.more, `/faq#${t.faqKey}`]] : [], locale)}
+</section>
+`
+    : '';
+  const demo = illustration ? `<section class="home-demo">\n${illustration}\n</section>\n` : '';
   const body = `<section class="hero hero--home">
   <h1>${escapeHtml(t.h1)}</h1>
   <p class="lead">${escapeHtml(t.lead)}</p>
   <p class="actions">${start}</p>
 ${stepFlow(t.steps)}</section>
-<section class="home-demo">
-${illustration}
-</section>
-<section class="home-section">
+${demo}<section class="home-section">
   <div class="${features}">${t.sections.map((x) => `<div class="card feature"><h2 class="h3">${escapeHtml(x.h)}</h2><p>${escapeHtml(x.p)}</p>${x.points ? `<ul class="ticks">${x.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</div>
+  ${seeAlso(t.more ?? [], locale)}
 </section>
-${setup}<section class="home-section">
-  <h2>${escapeHtml(t.faq.h)}</h2>
-  <div class="faq">${t.faq.items.map(([q, a]) => `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`).join('')}</div>
-</section>
-<section class="home-final">
+${setup}${faq}<section class="home-final">
   <h2>${escapeHtml(t.final)}</h2>
   <p class="actions">${start}</p>
 </section>`;
@@ -481,11 +647,13 @@ export const analyticsPage = (locale: Locale) => page(locale, ANALYTICS[locale],
 export const linksPage = (locale: Locale) => page(locale, LINKS[locale], linkCard(locale, LINKS[locale].card));
 export const generatorsPage = (locale: Locale) => page(locale, GENERATORS[locale], flow(GENERATORS[locale].flow));
 export const pricingPage = (locale: Locale) => page(locale, PRICING[locale], plansBlock(PRICING[locale]));
+export const howPage = (locale: Locale) => page(locale, HOW[locale], flow(HOW[locale].flow));
+export const openSourcePage = (locale: Locale) => page(locale, OPEN[locale], '');
 
 /** The questions of each page, for /faq (site/faq.ts): one source, so a page and /faq cannot differ. */
 export const pageQuestions = (locale: Locale) => ({
-  analytics: ANALYTICS[locale].faq.items,
-  links: LINKS[locale].faq.items,
-  generators: GENERATORS[locale].faq.items,
-  pricing: PRICING[locale].faq.items,
+  analytics: ANALYTICS[locale].faq!.items,
+  links: LINKS[locale].faq!.items,
+  generators: GENERATORS[locale].faq!.items,
+  pricing: PRICING[locale].faq!.items,
 });

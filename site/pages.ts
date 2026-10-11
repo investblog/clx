@@ -6,6 +6,8 @@
 
 export const ORIGIN = 'https://clx.cx';
 export const REPO = 'https://github.com/investblog/clx';
+/** The footer's glyph links here (site/layout.ts). */
+export const COMPANY_URL = 'https://301.st';
 /** The app (sign-in and the pages of docs/spec.md §10): a hash-routed page, never indexed. */
 export const APP_PATH = '/app';
 
@@ -31,7 +33,7 @@ export interface PageDef {
   slug: string;
   locales: readonly Locale[];
   /** Key in `Strings.foot`: the page is linked from the footer. */
-  foot?: 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
+  foot?: 'how' | 'openSource' | 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
   /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
   nav?: 'analytics' | 'links' | 'generators' | 'pricing' | 'faq';
   /** A comparison page (site/compare.ts), linked from its language's footer under this name. Such a
@@ -60,6 +62,9 @@ export const SITE_PAGES: readonly PageDef[] = [
   { slug: '/plausible-alternative', locales: ['en'], compare: 'clx vs Plausible', indexed: true, priority: 0.6, changefreq: 'monthly' },
   { slug: '/clck-alternative', locales: ['ru'], compare: 'Вместо Кликера', indexed: true, priority: 0.6, changefreq: 'monthly' },
   { slug: '/liveinternet-alternative', locales: ['ru'], compare: 'Вместо LiveInternet', indexed: true, priority: 0.6, changefreq: 'monthly' },
+  // How it runs and the code, from the footer (site/products.ts).
+  { slug: '/how-it-works', locales: ALL_LOCALES, foot: 'how', indexed: true, priority: 0.7, changefreq: 'monthly' },
+  { slug: '/open-source', locales: ALL_LOCALES, foot: 'openSource', indexed: true, priority: 0.6, changefreq: 'monthly' },
   // For agents and integrators; English only — the reader is a program (site/agents.ts, site/api.ts).
   { slug: '/agents', locales: ['en'], foot: 'agents', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },

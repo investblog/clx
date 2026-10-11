@@ -196,6 +196,9 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .home-section>.muted{text-align:center}
 .home-api{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-5);align-items:center}
 .home-api h2{margin-top:0}
+/* Links to related pages in the text (site/layout.ts seeAlso). */
+.see-also{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-2) var(--space-5);margin:var(--space-5) 0 0}
+.card .see-also{justify-content:flex-start;margin-top:var(--space-3)}
 /* The comparison pages (site/compare.ts). */
 .narrow-section{max-width:760px}
 .compare__one{grid-template-columns:minmax(0,1fr);max-width:760px;margin:0 auto}
@@ -249,7 +252,9 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .doc .fields li{margin-bottom:var(--space-1);overflow-wrap:anywhere}
 .lang-switch{font-size:var(--fs-sm);color:var(--text-muted);text-decoration:none}
 .lang-switch:hover{color:var(--text)}
-.site-foot{max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
+.site-foot{display:flex;align-items:center;gap:var(--space-4);max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
+.site-foot__brand{display:inline-flex;flex:none}
+.site-foot__brand .icon{width:24px;height:24px}
 .site-foot p{margin:0}
 .site-foot p+p{margin-top:var(--space-2)}
 .site-foot a{color:var(--text-muted);text-decoration:none}

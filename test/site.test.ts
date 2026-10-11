@@ -102,6 +102,50 @@ describe('generated pages', () => {
     }
   });
 
+  it('internal links: every indexed page but the home page and the legal ones is linked from the text of another page of its language', () => {
+    const mains = new Map<string, string>();
+    for (const p of SITE_PAGES.filter((x) => x.indexed)) for (const l of p.locales) mains.set(pathFor(p.slug, l), read(fileFor(p.slug, l)).match(/<main[\s\S]*?<\/main>/u)![0]);
+    for (const p of SITE_PAGES.filter((x) => x.indexed && !x.legal && x.slug !== '/'))
+      for (const l of p.locales) {
+        const target = pathFor(p.slug, l);
+        const from = [...mains].filter(([path, main]) => path !== target && new RegExp(`href="${target}(#[^"]*)?"`, 'u').test(main)).map(([path]) => path);
+        expect(from.length, target).toBeGreaterThan(0);
+      }
+    // Every link in a page's text to a page of the site leads to a page of the table in the same
+    // language (the English-only agent docs aside), and a /faq#fragment to one of its groups.
+    const groups = new Set([...read('faq.html').matchAll(/<section class="home-section faq-group" id="([^"]+)"/gu)].map((m) => m[1]));
+    for (const [path, main] of mains) {
+      const lang = path === '/ru' || path.startsWith('/ru/') ? 'ru' : 'en';
+      for (const [, href, hash] of main.matchAll(/<a [^>]*?href="(\/[^"#?]*)(?:#([^"]*))?"/gu)) {
+        if (/^\/(agents|api)$|\.(yaml|json|md)$|\/app$/u.test(href!)) continue;
+        const page = SITE_PAGES.find((p) => p.locales.includes(lang) && pathFor(p.slug, lang) === href);
+        expect(page, `${path} → ${href}`).toBeDefined();
+        if (hash) expect(groups.has(hash) && page!.slug === '/faq', `${path} → ${href}#${hash}`).toBe(true);
+      }
+    }
+    // A tool page leads to its comparison and to its group on /faq.
+    expect(mains.get('/analytics')).toContain('href="/plausible-alternative"');
+    expect(mains.get('/ru/short-links')).toContain('href="/ru/clck-alternative"');
+    expect(mains.get('/ru/analytics')).toContain('href="/ru/faq#analytics"');
+  });
+
+  it('how it works and the open source: in every footer of their language; lengths, nothing inline; the footer’s glyph leads to 301.st', () => {
+    for (const l of ['en', 'ru'] as const) {
+      const home = read(fileFor('/', l));
+      for (const slug of ['/how-it-works', '/open-source']) {
+        expect(home.match(/<footer[\s\S]*<\/footer>/u)![0]).toContain(`<a href="${pathFor(slug, l)}">`);
+        const html = read(fileFor(slug, l));
+        expect(html.match(/<main[\s\S]*?<\/main>/u)![0], `${l}${slug}`).not.toMatch(/style=|<style|<script/u);
+        expect(html.match(/<title>([^<]*)<\/title>/u)![1]!.length, `${l}${slug}`).toBeLessThanOrEqual(60);
+        const description = html.match(/<meta name="description" content="([^"]*)"/u)![1]!.replaceAll('&#39;', "'");
+        expect(description.length, `${l}${slug}`).toBeGreaterThanOrEqual(120);
+        expect(description.length, `${l}${slug}`).toBeLessThanOrEqual(160);
+      }
+      expect(home).toMatch(/<footer class="site-foot"><a class="site-foot__brand" href="https:\/\/301\.st" rel="noopener" aria-label="301\.st" title="301\.st"><svg class="icon" aria-hidden="true"><use href="\/icons\.svg#i-brand-301"><\/use><\/svg><\/a>/u);
+    }
+    expect(fs.readFileSync('public/icons.svg', 'utf8')).toContain('<symbol id="i-brand-301"');
+  });
+
   it('the comparison pages: in their language’s footer only; clx’s bar highlighted; sources linked; lengths, nothing inline', () => {
     const pages = SITE_PAGES.filter((p) => p.compare);
     expect(pages.map((p) => `${p.locales.join()}${p.slug}`)).toEqual(['en/bitly-alternative', 'en/plausible-alternative', 'ru/clck-alternative', 'ru/liveinternet-alternative']);

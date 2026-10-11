@@ -1,12 +1,23 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import { LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
+import { COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { alternatesFor, appPathFor, ogImagePath, pathFor, urlFor } from './urls.ts';
 
 export function escapeHtml(v: string): string {
   return v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+/** A row of links to related pages of the same language, each "name →": the site's internal links
+ *  in the text, beside the menu and the footer. `slug` may carry a `#fragment`. */
+export function seeAlso(links: readonly (readonly [string, string])[], locale: Locale): string {
+  if (!links.length) return '';
+  const href = (slug: string) => {
+    const [path, hash] = slug.split('#');
+    return `${pathFor(path!, locale)}${hash ? `#${hash}` : ''}`;
+  };
+  return `<p class="see-also">${links.map(([name, slug]) => `<a href="${href(slug)}">${escapeHtml(name)} →</a>`).join('')}</p>`;
 }
 
 export interface LayoutInput {
@@ -101,7 +112,9 @@ export function footer(locale: Locale): string {
   );
   links.push(`<a href="${REPO}" rel="noopener">${escapeHtml(s.foot.source)}</a>`);
   const compare = comparePages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(p.compare!)}</a>`);
-  return `<footer class="site-foot"><p>${links.join(' · ')}</p>${compare.length ? `<p>${compare.join(' · ')}</p>` : ''}</footer>`;
+  // The 301.st glyph leads to 301.st, as on catchall.in; its name is in aria-label and title.
+  const company = `<a class="site-foot__brand" href="${COMPANY_URL}" rel="noopener" aria-label="${escapeHtml(s.foot.company)}" title="${escapeHtml(s.foot.company)}"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-301"></use></svg></a>`;
+  return `<footer class="site-foot">${company}<div><p>${links.join(' · ')}</p>${compare.length ? `<p>${compare.join(' · ')}</p>` : ''}</div></footer>`;
 }
 
 export function layout(input: LayoutInput): string {

@@ -4,7 +4,7 @@
 // others grey), a table, when the other service is the better choice, the sources, a call to sign up.
 import Rank from 'affiliate-charts/charts-rank.js';
 import { chartOptions, themed } from './demo.ts';
-import { escapeHtml } from './layout.ts';
+import { escapeHtml, seeAlso } from './layout.ts';
 import type { Locale } from './pages.ts';
 import { appPathFor } from './urls.ts';
 
@@ -27,6 +27,8 @@ interface CompareText {
   aside?: { h: string; p: string; points: string[] };
   theirs: { h: string; points: string[] };
   sources: { h: string; checked: string; links: [string, string][] };
+  /** This tool's own page and the other comparison of the language. */
+  more: [string, string][];
   final: string;
 }
 
@@ -96,6 +98,7 @@ const BITLY: CompareText = {
       ['clx pricing', '/pricing'],
     ],
   },
+  more: [['Short links on your own domain', '/short-links'], ['clx vs Plausible', '/plausible-alternative']],
   final: 'Shorten links on your own domain, free',
 };
 
@@ -162,6 +165,7 @@ const PLAUSIBLE: CompareText = {
       ['clx pricing', '/pricing'],
     ],
   },
+  more: [['The cookieless visit counter', '/analytics'], ['clx vs Bitly', '/bitly-alternative']],
   final: 'Count your visits without cookies, free',
 };
 
@@ -223,6 +227,7 @@ const CLCK: CompareText = {
       ['Тарифы clx', '/ru/pricing'],
     ],
   },
+  more: [['Короткие ссылки на своём домене', '/short-links'], ['Вместо LiveInternet', '/liveinternet-alternative']],
   final: 'Сокращайте ссылки на своём домене со статистикой',
 };
 
@@ -287,6 +292,7 @@ const LIVEINTERNET: CompareText = {
       ['Тарифы clx', '/ru/pricing'],
     ],
   },
+  more: [['Счётчик посещений без cookie', '/analytics'], ['Вместо Кликера', '/clck-alternative']],
   final: 'Считайте посещения без cookie и без кнопки',
 };
 
@@ -332,6 +338,7 @@ function page(locale: Locale, t: CompareText): { title: string; description: str
 ${aside}<section class="home-section narrow-section">
   <h2>${escapeHtml(t.theirs.h)}</h2>
   <div class="card feature"><ul class="compare__list">${t.theirs.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>
+  ${seeAlso(t.more, locale)}
 </section>
 <section class="home-section narrow-section compare__sources">
   <h2 class="h3">${escapeHtml(t.sources.h)}</h2>

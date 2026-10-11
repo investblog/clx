@@ -4,7 +4,7 @@
 import { REPO, type Locale } from './pages.ts';
 import { demoReport } from './demo.ts';
 import { STRINGS } from './i18n.ts';
-import { escapeHtml } from './layout.ts';
+import { escapeHtml, seeAlso } from './layout.ts';
 import { appPathFor, pathFor } from './urls.ts';
 
 export function home(locale: Locale): { title: string; description: string; body: string } {
@@ -24,20 +24,22 @@ ${demoReport(locale, 'sources')}
 <section class="home-section">
   <h2>${escapeHtml(s.how.h2)}</h2>
   <ol class="home-steps">${s.how.steps.map(([h, p]) => `<li><h3>${escapeHtml(h)}</h3><p>${escapeHtml(p)}</p></li>`).join('')}</ol>
+  ${seeAlso([[s.how.more, '/how-it-works']], locale)}
 </section>
 <section class="home-section">
   <h2>${escapeHtml(s.tools.h2)}</h2>
-  <div class="tools">${s.tools.items.map((t) => `<div class="card tool"><h3>${escapeHtml(t.h)}</h3><p>${escapeHtml(t.p)}</p><ul class="ticks">${t.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`).join('')}</div>
+  <div class="tools">${s.tools.items.map((t) => `<div class="card tool"><h3>${escapeHtml(t.h)}</h3><p>${escapeHtml(t.p)}</p><ul class="ticks">${t.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>${seeAlso([t.link], locale)}</div>`).join('')}</div>
 </section>
 <section class="home-section">
   <h2>${escapeHtml(s.why.h2)}</h2>
   <div class="features">${s.why.items.map(([h, p]) => card(h, p)).join('')}</div>
+  ${seeAlso(s.why.links, locale)}
 </section>
 <section class="home-section home-api">
   <div>
     <h2>${escapeHtml(s.api.h2)}</h2>
     <p>${escapeHtml(s.api.p)}</p>
-    <p class="actions"><a class="btn btn--ghost" href="${pathFor('/agents', 'en')}" hreflang="en">${escapeHtml(s.api.agents)}</a><a class="btn btn--ghost" href="${pathFor('/api', 'en')}" hreflang="en">${escapeHtml(s.api.reference)}</a></p>
+    <p class="actions"><a class="btn btn--ghost" href="${pathFor('/agents', 'en')}" hreflang="en">${escapeHtml(s.api.agents)}</a><a class="btn btn--ghost" href="${pathFor('/api', 'en')}" hreflang="en">${escapeHtml(s.api.reference)}</a><a class="btn btn--ghost" href="${pathFor('/for-site-generators', locale)}">${escapeHtml(s.api.generators)}</a></p>
   </div>
   <pre class="code"><code>curl https://clx.cx/v1/sites \\
   -H "Authorization: Bearer clx_…" \\
