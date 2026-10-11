@@ -1,10 +1,11 @@
 // The home page (docs/spec.md §16): the hero, an example report, how it works, the two tools, why
-// clx, the API, the plans in short, a few questions. The example report is drawn at build time
-// (site/demo.ts, ADR 0016).
+// clx, the API, the plans in short, a few questions, the banners of our other services (site/promo.ts).
+// The example report is drawn at build time (site/demo.ts, ADR 0016).
 import { REPO, type Locale } from './pages.ts';
 import { demoReport } from './demo.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
+import { promoBlock } from './promo.ts';
 import { appPathFor, pathFor } from './urls.ts';
 
 export function home(locale: Locale): { title: string; description: string; body: string } {
@@ -59,6 +60,7 @@ ${demoReport(locale, 'sources')}
   <div class="faq">${s.faq.items.map(([q, a]) => `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`).join('')}</div>
   <p class="faq__more"><a href="${pathFor('/faq', locale)}">${escapeHtml(s.faq.more)} →</a></p>
 </section>
+${promoBlock(locale)}
 <section class="home-final">
   <h2>${escapeHtml(s.final)}</h2>
   <p class="actions">${start}</p>

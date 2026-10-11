@@ -6,8 +6,8 @@
 
 export const ORIGIN = 'https://clx.cx';
 export const REPO = 'https://github.com/investblog/clx';
-/** The footer's glyph links here (site/layout.ts). */
-export const COMPANY_URL = 'https://301.st';
+/** The footer's glyph links here (site/layout.ts): 301.st, the parent service; its Russian site is 301.ru. */
+export const COMPANY_URL: Record<Locale, string> = { en: 'https://301.st', ru: 'https://301.ru' };
 /** The app (sign-in and the pages of docs/spec.md §10): a hash-routed page, never indexed. */
 export const APP_PATH = '/app';
 
@@ -36,9 +36,9 @@ export interface PageDef {
   foot?: 'how' | 'openSource' | 'agents' | 'api' | 'privacy' | 'terms' | 'abuse';
   /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
   nav?: 'analytics' | 'links' | 'generators' | 'pricing' | 'faq';
-  /** A comparison page (site/compare.ts), linked from its language's footer under this name. Such a
-   *  page has one language: the other service is known in one market. */
-  compare?: string;
+  /** A comparison page (site/compare.ts), linked from the footer of each language under that
+   *  language's name. Most have one language: the other service is known in one market. */
+  compare?: Partial<Record<Locale, string>>;
   indexed: boolean;
   /** A legal text: its body is `site/legal/<locale><slug>.html`. */
   legal?: boolean;
@@ -58,10 +58,12 @@ export const SITE_PAGES: readonly PageDef[] = [
   { slug: '/pricing', locales: ALL_LOCALES, nav: 'pricing', indexed: true, priority: 0.8, changefreq: 'monthly' },
   { slug: '/faq', locales: ALL_LOCALES, nav: 'faq', indexed: true, priority: 0.7, changefreq: 'monthly' },
   // clx beside another service, by market; the facts and their sources: docs/comparisons.md.
-  { slug: '/bitly-alternative', locales: ['en'], compare: 'clx vs Bitly', indexed: true, priority: 0.6, changefreq: 'monthly' },
-  { slug: '/plausible-alternative', locales: ['en'], compare: 'clx vs Plausible', indexed: true, priority: 0.6, changefreq: 'monthly' },
-  { slug: '/clck-alternative', locales: ['ru'], compare: 'Вместо Кликера', indexed: true, priority: 0.6, changefreq: 'monthly' },
-  { slug: '/liveinternet-alternative', locales: ['ru'], compare: 'Вместо LiveInternet', indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/bitly-alternative', locales: ['en'], compare: { en: 'clx vs Bitly' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/plausible-alternative', locales: ['en'], compare: { en: 'clx vs Plausible' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/clck-alternative', locales: ['ru'], compare: { ru: 'Вместо Кликера' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/liveinternet-alternative', locales: ['ru'], compare: { ru: 'Вместо LiveInternet' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
+  // The parent service: not a rival, in both languages, its banner and links allowed (ADR 0018).
+  { slug: '/vs-301', locales: ALL_LOCALES, compare: { en: 'clx and 301.st', ru: 'clx и 301.ru' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
   // How it runs and the code, from the footer (site/products.ts).
   { slug: '/how-it-works', locales: ALL_LOCALES, foot: 'how', indexed: true, priority: 0.7, changefreq: 'monthly' },
   { slug: '/open-source', locales: ALL_LOCALES, foot: 'openSource', indexed: true, priority: 0.6, changefreq: 'monthly' },
@@ -82,7 +84,7 @@ export const STATIC_FILES: readonly string[] = ['_headers', 'favicon.svg', 'favi
 export const footPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.foot && (p.locales.includes(locale) || p.locales.length === 1));
 
 /** The comparison pages of a language, for its footer. */
-export const comparePages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.compare && p.locales.includes(locale));
+export const comparePages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.compare?.[locale] && p.locales.includes(locale));
 
 /** The header's menu of a language. */
 export const navPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.nav && p.locales.includes(locale));

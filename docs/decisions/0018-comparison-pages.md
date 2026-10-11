@@ -31,6 +31,13 @@ answer those; a page that misstates it is a liability.
 - The pages are in the footer of their language, not in the menu (`PageDef.compare` in
   `site/pages.ts`); one template, `site/compare.ts`.
 
+**Amended 11.10.2026: the parent service.** `/vs-301` sets clx beside 301.st, its parent — not a
+rival, so in both languages (301.ru on the Russian page, as wpps.ru does), with its sources as
+links and its banner closing the page. The home page carries a rotation of our services' banners
+(301.st / 301.ru, catchall.in, generator.ink; `site/promo.ts`, after wpps.ru): all in the page, the
+first shown without scripts, one picked at random by `/site.js`. The footer's 301 glyph leads to
+301.st, or 301.ru in Russian.
+
 **Consequences.** The facts age: prices and plans of the other services change without notice, so
 `docs/comparisons.md` carries the check date and the pages show it. Facts seen once but not
 explained (a Yandex check page answering 503 from abroad) are kept out.

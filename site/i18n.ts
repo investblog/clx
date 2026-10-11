@@ -91,7 +91,7 @@ const en: Strings = {
     },
     why: {
       h2: 'Why clx',
-      links: [['Where your data lives', '/how-it-works'], ['Open source', '/open-source']],
+      links: [['Where your data lives', '/how-it-works'], ['Open source', '/open-source'], ['clx and 301.st', '/vs-301']],
       items: [
         ['Your data stays with you', 'Visits, clicks and their breakdowns live in a D1 database in your Cloudflare account. clx.cx stores only totals by hour and by day.'],
         ['Nothing third-party in your pages', 'The snippet is served from your own domain and sets no cookies.'],
@@ -189,7 +189,7 @@ const ru: Strings = {
     },
     why: {
       h2: 'Почему clx',
-      links: [['Где лежат ваши данные', '/how-it-works'], ['Открытый код', '/open-source']],
+      links: [['Где лежат ваши данные', '/how-it-works'], ['Открытый код', '/open-source'], ['clx и 301.ru', '/vs-301']],
       items: [
         ['Данные остаются у вас', 'Посещения, клики и их разбивки лежат в базе D1 в вашем аккаунте Cloudflare. На clx.cx хранятся только итоги по часам и дням.'],
         ['Ничего чужого на страницах', 'Сниппет грузится с вашего же домена и не ставит cookie.'],
@@ -242,7 +242,7 @@ const ru: Strings = {
   },
   nav: { analytics: 'Аналитика', links: 'Короткие ссылки', generators: 'Для генераторов сайтов', pricing: 'Тарифы', faq: 'Вопросы', menu: 'Меню' },
   notFound: { title: 'Страница не найдена', text: 'Такой страницы на clx.cx нет.', back: 'На главную' },
-  foot: { how: 'Как это работает', openSource: 'Открытый код', company: '301.st', agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
+  foot: { how: 'Как это работает', openSource: 'Открытый код', company: '301.ru', agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', abuse: 'Жалобы', source: 'Исходный код' },
 };
 
 export const STRINGS: Record<Locale, Strings> = { en, ru };

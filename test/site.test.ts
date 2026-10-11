@@ -141,18 +141,43 @@ describe('generated pages', () => {
         expect(description.length, `${l}${slug}`).toBeGreaterThanOrEqual(120);
         expect(description.length, `${l}${slug}`).toBeLessThanOrEqual(160);
       }
-      expect(home).toMatch(/<footer class="site-foot"><a class="site-foot__brand" href="https:\/\/301\.st" rel="noopener" aria-label="301\.st" title="301\.st"><svg class="icon" aria-hidden="true"><use href="\/icons\.svg#i-brand-301"><\/use><\/svg><\/a>/u);
+      // The glyph opens the footer's first line; the Russian one leads to 301.ru, the parent's Russian site.
+      const parent = l === 'en' ? '301.st' : '301.ru';
+      expect(home).toContain(`<footer class="site-foot"><p><a class="site-foot__brand" href="https://${parent}" rel="noopener" aria-label="${parent}" title="${parent}"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-301"></use></svg></a>`);
     }
     expect(fs.readFileSync('public/icons.svg', 'utf8')).toContain('<symbol id="i-brand-301"');
   });
 
+  it('clx and 301.st, the parent: both languages, each linking its own site of 301 and closing with its banner', () => {
+    for (const [l, parent] of [['en', '301.st'], ['ru', '301.ru']] as const) {
+      expect(read(fileFor('/', l))).toContain(`<a href="${pathFor('/vs-301', l)}">${SITE_PAGES.find((p) => p.slug === '/vs-301')!.compare![l]}</a>`);
+      const main = read(fileFor('/vs-301', l)).match(/<main[\s\S]*?<\/main>/u)![0];
+      expect(main).toContain(`<a href="https://${parent}/pricing" rel="noopener">`);
+      expect(main).not.toMatch(new RegExp(`https://${l === 'en' ? '301\\.ru' : '301\\.st'}`, 'u'));
+      // One banner, 301's, shown: no rotation on its own page.
+      expect([...main.matchAll(/data-promo/gu)]).toHaveLength(1);
+      expect(main).toMatch(new RegExp(`<a class="promo promo--301" href="https://${parent.replace('.', '\\.')}/\\?utm_source=clx\\.cx&amp;utm_medium=banner&amp;utm_campaign=site" rel="noopener" data-promo>`, 'u'));
+    }
+  });
+
+  it('the home page rotates the banners of our services: all in the page, the first shown, nothing inline', () => {
+    for (const l of ['en', 'ru'] as const) {
+      const slot = read(fileFor('/', l)).match(/<section class="home-section promo-slot">[\s\S]*?<\/section>/u)![0];
+      const banners = [...slot.matchAll(/<a class="promo promo--(\w+)"[^>]*>/gu)];
+      expect(banners.map((m) => m[1])).toEqual(['301', 'catchall', 'generator']);
+      expect(banners.map((m) => m[0].includes(' hidden'))).toEqual([false, true, true]);
+      expect(slot).not.toMatch(/style=|<style|<script/u);
+    }
+    expect(fs.readFileSync('public/site.js', 'utf8')).toContain('[data-promo]');
+  });
+
   it('the comparison pages: in their language’s footer only; clx’s bar highlighted; sources linked; lengths, nothing inline', () => {
-    const pages = SITE_PAGES.filter((p) => p.compare);
+    const pages = SITE_PAGES.filter((p) => p.compare && p.locales.length === 1);
     expect(pages.map((p) => `${p.locales.join()}${p.slug}`)).toEqual(['en/bitly-alternative', 'en/plausible-alternative', 'ru/clck-alternative', 'ru/liveinternet-alternative']);
     for (const p of pages) {
       const l = p.locales[0]!;
       const other = l === 'en' ? 'ru' : 'en';
-      expect(read(fileFor('/', l))).toContain(`<a href="${pathFor(p.slug, l)}">${p.compare}</a>`);
+      expect(read(fileFor('/', l))).toContain(`<a href="${pathFor(p.slug, l)}">${p.compare![l]}</a>`);
       expect(read(fileFor('/', other))).not.toContain(p.slug);
       const html = read(fileFor(p.slug, l));
       const main = html.match(/<main[\s\S]*?<\/main>/u)![0];
@@ -236,6 +261,22 @@ describe('generated pages', () => {
     const css = fs.readFileSync('ui/css/app.css', 'utf8');
     const hiding = [...css.matchAll(/([^{}]*)\{[^}]*\bdisplay:none/gu)].map((m) => m[1]!.trim()).filter((sel) => /\.site-nav(?![\w-])/u.test(sel));
     expect(hiding).toEqual(['.js .site-nav']);
+  });
+
+  it('site.js shows exactly the banner chance picks — the first, the middle, the last, and a lone one', () => {
+    const run = (count: number, random: number) => {
+      const banners = Array.from({ length: count }, (_, i) => ({ hidden: i > 0 }));
+      const slot = { querySelectorAll: (sel: string) => (sel === '[data-promo]' ? banners : []) };
+      const document = { querySelectorAll: (sel: string) => (sel === '.promo-slot' ? [slot] : []) };
+      const math = Object.create(Math) as Math;
+      math.random = () => random;
+      vm.runInNewContext(read('site.js'), { document, location: { pathname: '/', hash: '' }, Math: math });
+      return banners.map((b) => (b.hidden ? 0 : 1));
+    };
+    expect(run(3, 0)).toEqual([1, 0, 0]);
+    expect(run(3, 0.5)).toEqual([0, 1, 0]);
+    expect(run(3, 0.99)).toEqual([0, 0, 1]);
+    expect(run(1, 0.7)).toEqual([1]);
   });
 
   it('theme.js marks the page and opens the menu: false → true → false, focus into the menu', () => {

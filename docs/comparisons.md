@@ -112,6 +112,21 @@ unconfirmed.
 | Data licence | free, worldwide, may be combined with Yandex's data | terms 2.6 |
 | Cookies | `_ym_uid` and others, a year, plus localStorage | yandex.ru/support/metrica/general/cookie-usage.html |
 
+## 301.st (301.ru in Russian) — the parent service, checked 11.10.2026
+
+Not a rival: `/vs-301` says what each does. 301.ru is the same service's Russian site (its pages
+name it 301.st).
+
+| Fact | Value | Source |
+|---|---|---|
+| What it does | domain portfolio, bulk edge redirects (geo, UA), TDS (A/B and geo splits; Smart Shield filters by geo, device, OS or bot signals; SmartLink), attribution from "S2S postbacks from affiliate networks" | 301.st home, /features |
+| Analytics | "real-time analytics" on every plan | /pricing |
+| For whom | SEO webmasters, affiliate teams, media buyers, agencies | /features |
+| Cloudflare | a bootstrap token (Account Settings Read + API Tokens Edit) mints scoped tokens; redirects and TDS deploy as Workers in the user's account; DNS does not move | /docs/cloudflare-integration |
+| Price | free during Open Beta; Free $0, Pro $30, Business $100 a month (301.ru: 0 ₽, 2 500 ₽, 8 500 ₽) | /pricing |
+| Limits by plan | domains 10 / 100 / 500; Cloudflare accounts 1 / 10 / 100; analytics retention 30 / 180 / 365 days | /pricing |
+| Domains | expiry, DNS checks, VirusTotal through the user's own key | /features |
+
 ## Search demand (Ahrefs, 11.10.2026; volume US/RU, global)
 
 | Phrase | Volume | Difficulty |

@@ -111,10 +111,11 @@ export function footer(locale: Locale): string {
       : `<a href="${pathFor(p.slug, p.locales[0]!)}" hreflang="${LOCALES[p.locales[0]!].htmlLang}">${escapeHtml(s.foot[p.foot!])}</a>`,
   );
   links.push(`<a href="${REPO}" rel="noopener">${escapeHtml(s.foot.source)}</a>`);
-  const compare = comparePages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(p.compare!)}</a>`);
+  const compare = comparePages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(p.compare![locale]!)}</a>`);
   // The 301.st glyph leads to 301.st, as on catchall.in; its name is in aria-label and title.
-  const company = `<a class="site-foot__brand" href="${COMPANY_URL}" rel="noopener" aria-label="${escapeHtml(s.foot.company)}" title="${escapeHtml(s.foot.company)}"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-301"></use></svg></a>`;
-  return `<footer class="site-foot">${company}<div><p>${links.join(' · ')}</p>${compare.length ? `<p>${compare.join(' · ')}</p>` : ''}</div></footer>`;
+  const company = `<a class="site-foot__brand" href="${COMPANY_URL[locale]}" rel="noopener" aria-label="${escapeHtml(s.foot.company)}" title="${escapeHtml(s.foot.company)}"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-301"></use></svg></a>`;
+  // The glyph opens the first line, the comparisons are the second.
+  return `<footer class="site-foot"><p>${company}${links.join(' · ')}</p>${compare.length ? `<p>${compare.join(' · ')}</p>` : ''}</footer>`;
 }
 
 export function layout(input: LayoutInput): string {

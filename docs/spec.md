@@ -919,7 +919,7 @@ that adds a site and embeds its counter at build time.
 
 clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site-and-app.md)).
 - **Addresses.** The site at the root: `/`, `/analytics`, `/short-links`, `/for-site-generators`, `/pricing`,
-  `/how-it-works`, `/open-source`,
+  `/how-it-works`, `/open-source`, `/vs-301`,
   `/faq`, `/privacy`, `/terms`, `/abuse` in English, the same
   under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` (and
   `/ru/app`, ADRs 0015, 0017) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
@@ -965,10 +965,12 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   (`/faq` gathers the pages' own questions); an Open Graph card and JSON-LD for every indexed page
   (ADR 0016); comparison pages ([ADR 0018](./decisions/0018-comparison-pages.md)): `/bitly-alternative`,
   `/plausible-alternative` in English, `/ru/clck-alternative`, `/ru/liveinternet-alternative` in Russian,
-  linked from their language's footer; every fact about the other service is from its own pages, with
+  linked from their language's footer, and `/vs-301` in both languages — clx beside its parent service
+  301.st (301.ru in Russian), with links to it; every fact about the other service is from its own pages, with
   its source and date, in `docs/comparisons.md`. `/how-it-works` (what clx creates in an account, the
   token's rights, where data lives, leaving) and `/open-source` (AGPL, the released bundles, running
-  one's own copy) are linked from the footer, which also carries the 301.st glyph linking to
-  https://301.st. Pages link each other in their text (`seeAlso` in `site/layout.ts`): the tools to
+  one's own copy) are linked from the footer, which also carries the 301 glyph linking to
+  https://301.st (https://301.ru in Russian); the home page rotates the banners of our services
+  (ADR 0018). Pages link each other in their text (`seeAlso` in `site/layout.ts`): the tools to
   each other, to their comparison and to their group on `/faq`; a test requires every indexed page
   but the home page and the legal ones to be linked from another page's text.

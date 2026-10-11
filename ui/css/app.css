@@ -196,6 +196,27 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .home-section>.muted{text-align:center}
 .home-api{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-5);align-items:center}
 .home-api h2{margin-top:0}
+/* Banners of our services (site/promo.ts), after wpps.ru's: one shown, each with its brand pair. */
+.promo-slot{margin-top:var(--space-6);margin-bottom:var(--space-6)}
+.promo{--promo-a:#4da3ff;--promo-b:#4D48ED;--promo-cta-bg:#4da3ff;--promo-cta-bg-hover:#7dbcff;--promo-cta-fg:#0b0d12;--promo-glow:.7;position:relative;overflow:hidden;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-5);padding:var(--space-5) var(--space-6);background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-xl);color:inherit;text-decoration:none;transition:border-color var(--transition-md),box-shadow var(--transition-md)}
+.promo[hidden]{display:none}
+.promo--catchall{--promo-a:#5E8BFF;--promo-b:#F75622;--promo-cta-bg:#5E8BFF;--promo-cta-bg-hover:#7DA1FF}
+.promo--generator{--promo-a:#4db7bf;--promo-b:#7c6dbf;--promo-cta-bg:#4db7bf;--promo-cta-bg-hover:#6fc9d0}
+:root[data-theme="light"] .promo{--promo-cta-bg:#0055DC;--promo-cta-bg-hover:#0047B8;--promo-cta-fg:#fff;--promo-glow:.45}
+:root[data-theme="light"] .promo--generator{--promo-cta-bg:#1d7a82;--promo-cta-bg-hover:#16646b}
+.promo:hover{border-color:color-mix(in srgb,var(--promo-a) 45%,transparent);box-shadow:0 18px 45px color-mix(in srgb,var(--promo-a) 18%,transparent)}
+.promo:focus-visible{outline:2px solid var(--promo-a);outline-offset:3px}
+.promo__glow{position:absolute;inset:0;pointer-events:none;opacity:var(--promo-glow);background:radial-gradient(55% 140% at 10% 50%,color-mix(in srgb,var(--promo-a) 30%,transparent),transparent 70%),radial-gradient(40% 120% at 34% 110%,color-mix(in srgb,var(--promo-b) 24%,transparent),transparent 70%)}
+.promo__mark{position:relative;display:block;width:6rem;color:var(--text-main)}
+.promo__mark svg{display:block;width:100%;height:auto;max-height:5rem}
+.promo--301 .promo__mark{width:4rem}
+.promo__body{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-2);min-width:0}
+.promo__eyebrow{font-size:var(--fs-xs);font-weight:var(--fw-medium);padding:.2em .6em;border-radius:var(--r-pill);background:color-mix(in srgb,var(--promo-cta-bg) 14%,transparent);color:var(--text-main)}
+.promo__title{font-size:var(--fs-xl);font-weight:var(--fw-semibold);line-height:1.25;color:var(--text-main)}
+.promo__text{font-size:var(--fs-sm);line-height:1.5;color:var(--text-muted);max-width:60ch}
+.promo__cta{position:relative;display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-5);border-radius:var(--r-pill);background:var(--promo-cta-bg);color:var(--promo-cta-fg);font-size:var(--fs-sm);font-weight:var(--fw-semibold);white-space:nowrap;transition:background var(--transition-fast)}
+.promo:hover .promo__cta{background:var(--promo-cta-bg-hover)}
+@media (max-width:720px){.promo{grid-template-columns:1fr;justify-items:center;text-align:center;padding:var(--space-5) var(--space-4);gap:var(--space-4)}.promo__body{align-items:center}.promo__cta{width:100%;justify-content:center}}
 /* Links to related pages in the text (site/layout.ts seeAlso). */
 .see-also{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-2) var(--space-5);margin:var(--space-5) 0 0}
 .card .see-also{justify-content:flex-start;margin-top:var(--space-3)}
@@ -252,9 +273,9 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .doc .fields li{margin-bottom:var(--space-1);overflow-wrap:anywhere}
 .lang-switch{font-size:var(--fs-sm);color:var(--text-muted);text-decoration:none}
 .lang-switch:hover{color:var(--text)}
-.site-foot{display:flex;align-items:center;gap:var(--space-4);max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
-.site-foot__brand{display:inline-flex;flex:none}
-.site-foot__brand .icon{width:24px;height:24px}
+.site-foot{max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
+.site-foot__brand{display:inline-flex;vertical-align:middle;margin-right:var(--space-3)}
+.site-foot__brand .icon{width:20px;height:20px}
 .site-foot p{margin:0}
 .site-foot p+p{margin-top:var(--space-2)}
 .site-foot a{color:var(--text-muted);text-decoration:none}

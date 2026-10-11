@@ -5,6 +5,7 @@
 import Rank from 'affiliate-charts/charts-rank.js';
 import { chartOptions, themed } from './demo.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
+import { promoBlock } from './promo.ts';
 import type { Locale } from './pages.ts';
 import { appPathFor } from './urls.ts';
 
@@ -29,6 +30,8 @@ interface CompareText {
   sources: { h: string; checked: string; links: [string, string][] };
   /** This tool's own page and the other comparison of the language. */
   more: [string, string][];
+  /** The other service is ours (site/promo.ts id): its sources are links, and its banner closes the page. */
+  ours?: string;
   final: string;
 }
 
@@ -296,6 +299,113 @@ const LIVEINTERNET: CompareText = {
   final: 'Считайте посещения без cookie и без кнопки',
 };
 
+/** clx beside 301.st, its parent service: not rivals — what each does, and how they fit. Facts from
+ *  301.st's (and 301.ru's) own pages, docs/comparisons.md. */
+const PARENT: Record<Locale, CompareText> = {
+  en: {
+    title: 'clx and 301.st: visit counter and redirect platform — clx',
+    description: 'clx counts visits and serves short links; 301.st manages domains, edge redirects, TDS and postbacks. Both run on your own Cloudflare account.',
+    h1: 'clx and 301.st: what each does',
+    lead: '301.st is clx’s parent service. It runs a domain portfolio, edge redirects, traffic distribution and conversion tracking; clx counts the visits of your sites and serves short links. Both work on your own Cloudflare account — use one, or both.',
+    start: 'Start with clx, free',
+    charts: [],
+    table: {
+      h: 'clx and 301.st side by side',
+      head: ['', 'clx', '301.st'],
+      rows: [
+        ['What it does', 'A cookieless visit counter and short links with QR codes', 'A domain portfolio, edge redirects, TDS and postback attribution'],
+        ['For whom', 'Site owners, site generators and AI agents', 'SEO webmasters, affiliate teams, media buyers and agencies'],
+        ['Where it runs', 'A worker and a D1 database in your Cloudflare account', 'Workers in your Cloudflare account; your DNS does not move'],
+        ['Traffic rules', 'Up to 10 a link, by country and device', 'Redirects by geo and user agent across many domains; TDS with A/B and geo splits'],
+        ['Statistics', 'Views, visitors, sources, countries, devices and bots of your sites; clicks of your links', 'Real-time analytics, kept 30 to 365 days by plan; conversions from S2S postbacks'],
+        ['Domains', 'Your sites, and one host for links', 'A portfolio with expiry dates, DNS checks and VirusTotal checks through your own key'],
+        ['Price', 'Free', 'Free during Open Beta; then Free, Pro $30 or Business $100 a month'],
+        ['Cloudflare accounts', '1; 50 on the API plan', '1, 10 or 100 by plan'],
+      ],
+    },
+    aside: {
+      h: 'Together',
+      p: 'Both keep your traffic on your own Cloudflare account and leave your DNS where it is. They fit each other:',
+      points: [
+        '301.st moves the traffic between domains and offers; clx counts the visits of the sites it leads to.',
+        'A clx short link, with its QR code for print or a post, can point to any address — a 301.st flow included.',
+      ],
+    },
+    theirs: {
+      h: 'When you need 301.st',
+      points: [
+        'You run many domains and move traffic between them: bulk redirects, rules by geo and device.',
+        'You split traffic between offers or landing pages: A/B and geo splits at the Cloudflare edge.',
+        'You need to know which click converted: postbacks from affiliate networks.',
+      ],
+    },
+    sources: {
+      h: 'Sources',
+      checked: `301.st’s facts are from its own pages, checked on ${CHECKED}; clx’s from its pricing and specification.`,
+      links: [
+        ['301.st pricing', 'https://301.st/pricing'],
+        ['301.st features', 'https://301.st/features'],
+        ['301.st: Cloudflare integration', 'https://301.st/docs/cloudflare-integration'],
+        ['clx pricing', '/pricing'],
+      ],
+    },
+    more: [['How clx works', '/how-it-works'], ['clx pricing', '/pricing']],
+    ours: '301',
+    final: 'Count your visits with clx, free',
+  },
+  ru: {
+    title: 'clx и 301.ru: счётчик посещений и платформа редиректов — clx',
+    description: 'clx считает посещения и обслуживает короткие ссылки; 301.ru управляет доменами, edge-редиректами, TDS и постбэками. Оба работают в вашем аккаунте Cloudflare.',
+    h1: 'clx и 301.ru: что делает каждый',
+    lead: '301.ru — родительский сервис clx. Он ведёт портфель доменов, edge-редиректы, распределение трафика и трекинг конверсий; clx считает посещения ваших сайтов и обслуживает короткие ссылки. Оба работают в вашем аккаунте Cloudflare — берите один или оба.',
+    start: 'Начать с clx бесплатно',
+    charts: [],
+    table: {
+      h: 'clx и 301.ru рядом',
+      head: ['', 'clx', '301.ru'],
+      rows: [
+        ['Что делает', 'Счётчик посещений без cookie и короткие ссылки с QR-кодами', 'Портфель доменов, edge-редиректы, TDS и атрибуция через постбэки'],
+        ['Для кого', 'Владельцы сайтов, генераторы сайтов и ИИ-агенты', 'SEO-вебмастера, арбитражные команды, медиабайеры и агентства'],
+        ['Где работает', 'Воркер и база D1 в вашем аккаунте Cloudflare', 'Воркеры в вашем аккаунте Cloudflare; DNS остаётся на месте'],
+        ['Правила трафика', 'До 10 на ссылку, по стране и устройству', 'Редиректы по гео и UA на многих доменах; TDS с A/B- и гео-сплитами'],
+        ['Статистика', 'Просмотры, посетители, источники, страны, устройства и боты сайтов; клики ссылок', 'Аналитика в реальном времени, хранение от 30 до 365 дней по тарифу; конверсии из S2S-постбэков'],
+        ['Домены', 'Ваши сайты и один хост для ссылок', 'Портфель со сроками, проверками DNS и VirusTotal по вашему ключу'],
+        ['Цена', 'Бесплатно', 'Бесплатно на Open Beta; затем Бесплатный, Pro 2 500 ₽ или Бизнес 8 500 ₽ в месяц'],
+        ['Аккаунты Cloudflare', '1; 50 на тарифе API', '1, 10 или 100 по тарифу'],
+      ],
+    },
+    aside: {
+      h: 'Вместе',
+      p: 'Оба держат трафик в вашем аккаунте Cloudflare и не трогают ваш DNS. И дополняют друг друга:',
+      points: [
+        '301.ru переводит трафик между доменами и офферами; clx считает посещения сайтов, куда он ведёт.',
+        'Короткая ссылка clx с QR-кодом для печати или поста может вести на любой адрес — в том числе в поток 301.ru.',
+      ],
+    },
+    theirs: {
+      h: 'Когда нужен 301.ru',
+      points: [
+        'У вас много доменов и трафик между ними: массовые редиректы, правила по гео и устройству.',
+        'Вы делите трафик между офферами или лендингами: A/B- и гео-сплиты на edge Cloudflare.',
+        'Нужно знать, какой клик принёс конверсию: постбэки от партнёрских сетей.',
+      ],
+    },
+    sources: {
+      h: 'Источники',
+      checked: `Сведения о 301.ru — с его собственных страниц, проверено ${CHECKED}; о clx — из тарифов и спецификации.`,
+      links: [
+        ['Тарифы 301.ru', 'https://301.ru/pricing'],
+        ['Возможности 301.ru', 'https://301.ru/features'],
+        ['301.ru: интеграция с Cloudflare', 'https://301.ru/docs/cloudflare-integration'],
+        ['Тарифы clx', '/ru/pricing'],
+      ],
+    },
+    more: [['Как работает clx', '/how-it-works'], ['Тарифы clx', '/pricing']],
+    ours: '301',
+    final: 'Считайте посещения с clx бесплатно',
+  },
+};
+
 function chartCard(locale: Locale, c: Chart): string {
   const { o } = chartOptions(locale);
   const rows = c.rows.map(([label, value, display]) => ({ label, value, display }));
@@ -305,13 +415,20 @@ function chartCard(locale: Locale, c: Chart): string {
   return `<div class="card feature"><h3>${escapeHtml(c.h)}</h3>${themed('demo__chart', draw)}<p class="compare__note">${escapeHtml(c.note)}</p></div>`;
 }
 
-/** A source: our own page is a link; another service's is its address as text, in brackets — no link to it. */
-const source = ([label, href]: [string, string]) =>
-  href.startsWith('/') ? `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>` : `${escapeHtml(label)} (${escapeHtml(href.replace(/^https:\/\/(www\.)?/u, '').replace(/\/$/u, ''))})`;
+/** A source: our own page is a link; another service's is its address as text, in brackets — no link
+ *  to it, unless the page is about a service of ours (`linked`). */
+const source = ([label, href]: [string, string], linked: boolean) =>
+  href.startsWith('/') || linked ? `<a href="${escapeHtml(href)}"${linked && !href.startsWith('/') ? ' rel="noopener"' : ''}>${escapeHtml(label)}</a>` : `${escapeHtml(label)} (${escapeHtml(href.replace(/^https:\/\/(www\.)?/u, '').replace(/\/$/u, ''))})`;
 
 function page(locale: Locale, t: CompareText): { title: string; description: string; body: string } {
   const start = `<a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a>`;
-  const charts = t.charts.length > 1 ? 'features' : 'features compare__one';
+  const grid = t.charts.length > 1 ? 'features' : 'features compare__one';
+  const charts = t.charts.length
+    ? `<section class="home-section">
+  <div class="${grid}">${t.charts.map((c) => chartCard(locale, c)).join('')}</div>
+</section>
+`
+    : '';
   const [, us, them] = t.table.head;
   const aside = t.aside
     ? `<section class="home-section narrow-section">
@@ -325,10 +442,7 @@ function page(locale: Locale, t: CompareText): { title: string; description: str
   <p class="lead">${escapeHtml(t.lead)}</p>
   <p class="actions">${start}</p>
 </section>
-<section class="home-section">
-  <div class="${charts}">${t.charts.map((c) => chartCard(locale, c)).join('')}</div>
-</section>
-<section class="home-section">
+${charts}<section class="home-section">
   <h2>${escapeHtml(t.table.h)}</h2>
   <div class="card table-scroll"><table class="table compare">
     <thead><tr><td></td><th scope="col">${escapeHtml(us)}</th><th scope="col">${escapeHtml(them)}</th></tr></thead>
@@ -343,9 +457,9 @@ ${aside}<section class="home-section narrow-section">
 <section class="home-section narrow-section compare__sources">
   <h2 class="h3">${escapeHtml(t.sources.h)}</h2>
   <p>${escapeHtml(t.sources.checked)}</p>
-  <ul>${t.sources.links.map((s) => `<li>${source(s)}</li>`).join('')}</ul>
+  <ul>${t.sources.links.map((s) => `<li>${source(s, !!t.ours)}</li>`).join('')}</ul>
 </section>
-<section class="home-final">
+${t.ours ? `${promoBlock(locale, [t.ours])}\n` : ''}<section class="home-final">
   <h2>${escapeHtml(t.final)}</h2>
   <p class="actions">${start}</p>
 </section>`;
@@ -356,3 +470,4 @@ export const bitlyPage = () => page('en', BITLY);
 export const plausiblePage = () => page('en', PLAUSIBLE);
 export const clckPage = () => page('ru', CLCK);
 export const liveinternetPage = () => page('ru', LIVEINTERNET);
+export const parentPage = (locale: Locale) => page(locale, PARENT[locale]);
