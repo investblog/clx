@@ -7,7 +7,7 @@ import path from 'node:path';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml } from './layout.ts';
 import type { Locale } from './pages.ts';
-import { appPathFor } from './urls.ts';
+import { authPathFor } from './urls.ts';
 
 const logo = (file: string) => fs.readFileSync(path.join(import.meta.dirname, 'brand', 'promo', file), 'utf8').trim();
 
@@ -120,7 +120,7 @@ export function finalBlock(locale: Locale, title: string, cta: string): string {
     <span class="promo__glow" aria-hidden="true"></span>
     <span class="promo__mark" aria-hidden="true">${CLX_MARK}</span>
     <div class="promo__body"><h2 class="promo__title">${escapeHtml(title)}</h2><p class="promo__text">${escapeHtml(s.note)}</p></div>
-    <a class="promo__cta" href="${appPathFor(locale)}#/signup">${escapeHtml(cta)} <span aria-hidden="true">→</span></a>
+    <a class="promo__cta" href="${authPathFor(locale, 'register')}">${escapeHtml(cta)} <span aria-hidden="true">→</span></a>
   </div>
 </section>`;
 }

@@ -31,3 +31,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0023](./0023-mcp-server.md) | An MCP server at /mcp over the same /v1, signed in with the API key | 11.10.2026 | §15 |
 | [0024](./0024-link-host-per-site.md) | Link hosts per site, random labels, made as Workers Custom Domains | 11.10.2026 | §3, §6, §13, §15 |
 | [0025](./0025-anchor-map.md) | An anchor map at /keywords.json, built with the pages | 11.10.2026 | §16 |
+| [0026](./0026-sign-in-on-the-home-page.md) | Sign-in, sign-up and the reset request are a card on the home page | 12.10.2026 | §16 |

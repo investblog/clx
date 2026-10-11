@@ -147,6 +147,23 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .hero--home h1{font-size:clamp(32px,5vw,52px);line-height:1.1;letter-spacing:-.02em}
 .hero--home .actions{justify-content:center;gap:var(--space-3);margin:var(--space-5) 0 var(--space-3)}
 .hero__note{font-size:var(--fs-sm);color:var(--text-subtle)}
+/* The sign-in card beside the hero (site/auth.ts, ADR 0026): hidden until #login, #register or #recover;
+   then the hero moves left and the card stands to its right, or under it on a narrow screen. */
+.landing{display:grid;gap:var(--space-5);align-items:start}
+.auth{width:100%;max-width:420px;margin:0 auto var(--space-5)}
+.auth h2{margin:0 0 var(--space-3)}
+.auth__tabs{display:flex;gap:var(--space-2);margin:0 0 var(--space-4)}
+.auth__tabs a{padding:var(--space-1) var(--space-3);border-radius:999px;color:var(--text-muted);text-decoration:none;font-weight:var(--fw-semibold)}
+.auth__tabs a:hover{color:var(--text)}
+.auth__tabs a[aria-current="page"]{color:var(--primary);background:var(--primary-soft)}
+.auth .auth-form{display:grid;gap:var(--space-3)}
+.auth .auth-form p{margin:0}
+@media (min-width:900px){
+  .landing--auth{grid-template-columns:minmax(0,1fr) minmax(0,400px);gap:var(--space-6)}
+  .landing--auth .auth{margin:var(--space-6) 0 0}
+  .landing--auth .hero--home{margin:var(--space-6) 0;text-align:left}
+  .landing--auth .hero--home .actions{justify-content:flex-start}
+}
 /* The 301.st step flow under a page's call to sign up (site/products.ts): a list without its markers. */
 .hero__steps{justify-content:center;margin:var(--space-4) 0 0;padding:0;list-style:none}
 .home-demo{position:relative;max-width:1040px;margin:0 auto}

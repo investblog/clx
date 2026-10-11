@@ -1,7 +1,7 @@
 // Talking to the Worker, as the 301.st UI does: the access
 // token lives in memory only; the refresh id is an HttpOnly cookie the page never sees. A 401 gets
-// one refresh and one retry; if that fails too, the reader signs in again.
-import { t } from './i18n';
+// one refresh and one retry; if that fails too, the reader signs in again (on the home page's card,
+// ADR 0026, which also does the sign-in itself).
 
 let token: string | null = null;
 let refreshing: Promise<boolean> | null = null;
@@ -18,18 +18,6 @@ export function refresh(): Promise<boolean> {
     .catch(() => false)
     .finally(() => (refreshing = null));
   return refreshing;
-}
-
-export async function login(email: string, password: string): Promise<string | null> {
-  const res = await fetch('/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });
-  const body = (await res.json().catch(() => ({}))) as { access_token?: string; error?: string; retryAfter?: number };
-  if (res.ok && body.access_token) {
-    token = body.access_token;
-    return null;
-  }
-  if (res.status === 429) return t.login.tooMany(Math.ceil((body.retryAfter ?? 60) / 60));
-  if (body.error === 'invalid_login') return t.login.invalid;
-  return t.login.failed;
 }
 
 /** False when the server did not end the session: its refresh cookie may still sign this browser in. */

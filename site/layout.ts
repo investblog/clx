@@ -4,7 +4,7 @@
 import * as FLAGS from 'country-flag-icons/string/3x2';
 import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
-import { alternatesFor, appPathFor, ogImagePath, pathFor, urlFor } from './urls.ts';
+import { alternatesFor, appPathFor, authPathFor, ogImagePath, pathFor, urlFor } from './urls.ts';
 
 export function escapeHtml(v: string): string {
   return v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -99,13 +99,13 @@ function nav(page: PageDef | null, locale: Locale): { menu: string; button: stri
 
 /** The site's header. The app's page (site/build.ts) prints the same one with `page` null: its
  *  language switch leads to the app in each language, and there is no link to the app; ui/main.ts
- *  draws the app's sections in a row under it. On the site the link to the app says "Sign in", or "Dashboard" once
+ *  draws the app's sections in a row under it. On the site the header has "Sign in" (the home page's card, ADR 0026), or "Dashboard" (the app) once
  *  the app has marked this browser signed in (/theme.js shows one of the two before the first paint). */
 export function header(page: PageDef | null, locale: Locale): string {
   const s = STRINGS[locale];
   const { menu, button } = nav(page, locale);
   const app = page
-    ? `<a class="btn btn--ghost btn--sm" href="${appPathFor(locale)}"><span class="when-signed-out">${escapeHtml(s.signIn)}</span><span class="when-signed-in">${escapeHtml(s.dashboard)}</span></a>`
+    ? `<a class="btn btn--ghost btn--sm when-signed-out" href="${authPathFor(locale, 'login')}">${escapeHtml(s.signIn)}</a><a class="btn btn--ghost btn--sm when-signed-in" href="${appPathFor(locale)}">${escapeHtml(s.dashboard)}</a>`
     : '';
   return `<header class="topbar">
   <div class="topbar__inner">

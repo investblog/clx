@@ -21,6 +21,10 @@ export const urlFor = (slug: string, locale: Locale): string => `${ORIGIN}${path
 /** The app of a language (ADR 0015): `/app`, `/ru/app` — the language until the person signs in. */
 export const appPathFor = (locale: Locale): string => `${prefixFor(locale)}${APP_PATH}`;
 
+/** A form of the home page's sign-in card (site/auth.ts, ADR 0026): `/#login`, `/ru#register`. */
+export type AuthTab = 'login' | 'register' | 'recover';
+export const authPathFor = (locale: Locale, tab: AuthTab): string => `${pathFor('/', locale)}#${tab}`;
+
 /** The file in public/: `index.html`, `ru.html`, `privacy.html`, `ru/privacy.html`. */
 export function fileFor(slug: string, locale: Locale): string {
   if (slug === '/') return locale === 'en' ? 'index.html' : `${locale}.html`;

@@ -3,11 +3,11 @@
 import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
 import { call, get, logout, refresh, SignedOut, type Me } from './api';
 import { h, s } from './dom';
-import { appPath, asLocale, pageLocale, setLocale, t } from './i18n';
+import { appPath, asLocale, homePath, pageLocale, setLocale, t } from './i18n';
 import { linkPage, linksPage } from './links';
 import { mePage, unconfirmedBanner } from './me';
 import { reportPage } from './report';
-import { confirmPage, loginPage, resetPage, signupPage } from './signup';
+import { confirmPage, resetPage } from './signup';
 import { sitePage, sitesPage } from './sites';
 
 const shell = document.getElementById('shell')!;
@@ -55,8 +55,8 @@ function drawShell(current?: Section): void {
       flash = t.shell.signOutFailed;
       return void route();
     }
-    history.replaceState(null, '', '#/');
-    showLogin();
+    markSignedIn(false);
+    location.assign(homePath(pageLocale));
   });
   shell.replaceChildren(h('div', { class: 'app-nav__inner' }, nav, out));
   // On a narrow screen the navigation scrolls: the current item in view.
@@ -64,12 +64,15 @@ function drawShell(current?: Section): void {
   if (at && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = at.offsetLeft - nav.offsetLeft;
 }
 
-function showLogin(message = ''): void {
+/** Signed out: to the home page's sign-in card (ADR 0026); with a message (the account is deleted,
+ *  and what is left to remove by hand), that first, with the way to the home page. */
+function signedOut(message = ''): void {
   markSignedIn(false);
+  if (!message) return location.replace(`${homePath(pageLocale)}#login`);
   setLocale(pageLocale);
   drawShell();
-  app.replaceChildren(loginPage(() => void route(), message));
-  document.title = `${t.titles.signIn} — clx`;
+  app.replaceChildren(h('section', { class: 'auth-card login' }, h('p', {}, message), h('p', {}, h('a', { href: homePath(pageLocale) }, t.auth.toHome))));
+  document.title = 'clx';
 }
 
 const go = (hash: string) => {
@@ -89,7 +92,7 @@ async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, s
   if (path === '/connect') return [connectPage(go), t.titles.connect];
   if (account) return [await accountPage(account[1]!, live, redraw), t.titles.account];
   if (path === '/keys') return [await keysPage(me, redraw), t.titles.keys];
-  if (path === '/me') return [mePage(me, showLogin), t.titles.me];
+  if (path === '/me') return [mePage(me, signedOut), t.titles.me];
   // #/sites/new and #/links/new were pages before the drawers: a bookmark of one opens the list.
   if (path === '/sites' || path === '/sites/new') return [await sitesPage(me, go), t.titles.sites];
   const report = path.match(/^\/(sites|links)\/([\w-]+)\/report(?:\?p=([\w]+))?$/u);
@@ -102,12 +105,16 @@ async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, s
   return [await accountsPage(me), t.titles.accounts];
 }
 
-/** The pages a signed-out visitor opens (§9): sign-up, the confirmation link, the password reset. */
-async function publicPage(path: string): Promise<[HTMLElement, string] | null> {
+/** The pages an e-mail's link opens signed out (§9): the confirmation and a new password. Sign-up and
+ *  the reset request live on the home page (ADR 0026); old links to them here go there. */
+async function publicPage(path: string): Promise<[HTMLElement, string] | 'moved' | null> {
   const token = path.match(/[?&]t=([A-Za-z0-9_-]{43})/u)?.[1] ?? null;
-  if (path === '/signup') return [await signupPage(), t.titles.signUp];
+  if (path === '/signup' || ((path === '/reset' || path.startsWith('/reset?')) && !token)) {
+    location.replace(`${homePath(pageLocale)}#${path === '/signup' ? 'register' : 'recover'}`);
+    return 'moved';
+  }
   if (path.startsWith('/confirm')) return [await confirmPage(token ?? ''), t.titles.confirm];
-  if (path === '/reset' || path.startsWith('/reset?')) return [await resetPage(token), token ? t.titles.newPassword : t.titles.reset];
+  if (path.startsWith('/reset?')) return [resetPage(token!), t.titles.newPassword];
   return null;
 }
 
@@ -122,6 +129,7 @@ async function route(): Promise<void> {
   // signed-in page switches to the account's below, once /v1/me has answered.
   setLocale(pageLocale);
   const open = await publicPage(path);
+  if (open === 'moved') return;
   if (open) {
     if (mine !== seq) return;
     // Nothing of a signed-in page stays around a public one.
@@ -154,7 +162,7 @@ async function route(): Promise<void> {
     document.title = `${title} — clx`;
   } catch (e) {
     if (mine !== seq) return;
-    if (e instanceof SignedOut) return showLogin();
+    if (e instanceof SignedOut) return signedOut();
     app.replaceChildren(h('div', { class: 'card' }, h('p', {}, failure(e)), h('p', {}, h('a', { href: '#/' }, t.shell.toHome))));
   }
 }
@@ -183,7 +191,7 @@ document.getElementById('lang-dd')?.addEventListener('click', async (e) => {
   }
   location.assign(`${appPath(to)}${location.hash}`);
 });
-// A public page (an e-mail's link) opens signed out too; any other page without a session shows
-// the sign-in form — route() finds that out itself.
+// A public page (an e-mail's link) opens signed out too; any other page without a session goes to
+// the home page's sign-in card — route() finds that out itself.
 drawShell();
 void refresh().then(() => route());

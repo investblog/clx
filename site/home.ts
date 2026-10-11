@@ -2,6 +2,7 @@
 // clx, the API, the plans in short, a few questions, the banners of our other services (site/promo.ts).
 // The example report is drawn at build time (site/demo.ts, ADR 0016).
 import { REPO, type Locale } from './pages.ts';
+import { authCard } from './auth.ts';
 import { demoReport } from './demo.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
@@ -10,15 +11,19 @@ import { appPathFor, pathFor } from './urls.ts';
 
 export function home(locale: Locale): { title: string; description: string; body: string } {
   const s = STRINGS[locale].home;
-  const app = appPathFor(locale);
-  const start = `<a class="btn btn--primary btn--lg" href="${app}#/signup">${escapeHtml(s.start)}</a>`;
+  // Signed out the first button opens the sign-up form beside the hero; signed in it leads to the app
+  // (/theme.js shows one of the two before the first paint, by the app's mark).
+  const start = `<a class="btn btn--primary btn--lg when-signed-out" href="#register">${escapeHtml(s.start)}</a><a class="btn btn--primary btn--lg when-signed-in" href="${appPathFor(locale)}">${escapeHtml(STRINGS[locale].dashboard)}</a>`;
   const card = (h: string, p: string) => `<div class="card feature"><h3>${escapeHtml(h)}</h3><p>${escapeHtml(p)}</p></div>`;
-  const body = `<section class="hero hero--home">
+  const body = `<div class="landing" data-landing>
+<section class="hero hero--home">
   <h1>${escapeHtml(s.h1)}</h1>
   <p class="lead">${escapeHtml(s.lead)}</p>
   <p class="actions">${start}<a class="btn btn--ghost btn--lg" href="${REPO}" rel="noopener">${escapeHtml(s.source)}</a></p>
   <p class="hero__note">${escapeHtml(s.note)}</p>
 </section>
+${authCard(locale)}
+</div>
 <section class="home-demo">
 ${demoReport(locale, 'sources')}
 </section>

@@ -21,7 +21,7 @@ const adviceBadge = (level: string) => badge(label.adviceLevel(level), ADVICE_TO
 export const notice = (text: string, tone: 'error' | 'success' | 'loading' | 'idle' = 'error') => h('div', { class: 'auth-status', 'data-type': tone, role: 'status' }, text);
 export function failure(e: unknown): string {
   if (e instanceof ApiError) return errorText(e.code, e.message);
-  // The session ended mid-action: the router finds that out again and shows the sign-in form.
+  // The session ended mid-action: the router finds that out again and goes to the sign-in card.
   if (e instanceof SignedOut) {
     window.dispatchEvent(new HashChangeEvent('hashchange'));
     return t.common.sessionEnded;

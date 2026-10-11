@@ -7,7 +7,7 @@ import { chartOptions, themed } from './demo.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
 import { finalBlock, promoBlock } from './promo.ts';
 import type { Locale } from './pages.ts';
-import { appPathFor } from './urls.ts';
+import { authPathFor } from './urls.ts';
 
 interface Chart {
   h: string;
@@ -421,7 +421,7 @@ const source = ([label, href]: [string, string], linked: boolean) =>
   href.startsWith('/') || linked ? `<a href="${escapeHtml(href)}"${linked && !href.startsWith('/') ? ' rel="noopener"' : ''}>${escapeHtml(label)}</a>` : `${escapeHtml(label)} (${escapeHtml(href.replace(/^https:\/\/(www\.)?/u, '').replace(/\/$/u, ''))})`;
 
 function page(locale: Locale, t: CompareText): { title: string; description: string; body: string } {
-  const start = `<a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a>`;
+  const start = `<a class="btn btn--primary btn--lg" href="${authPathFor(locale, 'register')}">${escapeHtml(t.start)}</a>`;
   const grid = t.charts.length > 1 ? 'features' : 'features compare__one';
   const charts = t.charts.length
     ? `<section class="home-section">

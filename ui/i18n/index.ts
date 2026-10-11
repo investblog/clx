@@ -23,6 +23,8 @@ export const dictOf = (l: Locale): Dict => DICTS[l];
 
 /** The app of a language: `/app`, `/ru/app`. */
 export const appPath = (l: Locale) => (l === 'en' ? '/app' : `/${l}/app`);
+/** The home page of a language, where the sign-in card is (ADR 0026): `/`, `/ru`. */
+export const homePath = (l: Locale) => (l === 'en' ? '/' : `/${l}`);
 /** A page of the site in the language in use: `/privacy`, `/ru/privacy`. */
 export const sitePath = (slug: string) => (locale === 'en' ? slug : `/${locale}${slug}`);
 

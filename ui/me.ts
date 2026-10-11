@@ -7,7 +7,7 @@ import { dictOf, pageLocale, t } from './i18n';
 
 const rows = (pairs: [string, Node | string][]) => h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
 
-/** `signedOut(message)` shows the sign-in form with the message once the account is gone. */
+/** `signedOut(message)` shows the message, signed out, once the account is gone. */
 export function mePage(me: Me, signedOut: (message: string) => void): HTMLElement {
   const resent = h('span', { class: 'muted text-sm', role: 'status' });
   // Not type=password: the browser would fill the saved clx.cx password into it on every load,
@@ -51,9 +51,9 @@ export function mePage(me: Me, signedOut: (message: string) => void): HTMLElemen
           // A failed logout leaves nothing: the user's sessions end with the user, and a new user who
           // gets the same id starts at another session version (src/auth/signup.ts).
           await logout();
-          // Not location.hash: its hashchange would draw the sign-in form again, without the message.
+          // Not location.hash: its hashchange would leave for the sign-in card, without the message.
           history.replaceState(null, '', '#/');
-          // Said on the sign-in page, which speaks the address's language.
+          // Said signed out, in the address's language.
           const said = dictOf(pageLocale).me;
           const rest = [...r.revoke_tokens.map((x) => said.token(x)), ...r.left];
           signedOut(rest.length ? said.deletedLeft(rest) : said.deleted);

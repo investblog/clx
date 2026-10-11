@@ -11,7 +11,7 @@ import { STRINGS } from './i18n.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
 import type { Locale } from './pages.ts';
 import { finalBlock } from './promo.ts';
-import { appPathFor } from './urls.ts';
+import { authPathFor } from './urls.ts';
 
 interface ProductText {
   title: string;
@@ -659,7 +659,7 @@ function stepFlow(steps: string[] | undefined): string {
 }
 
 function page(locale: Locale, t: ProductText, illustration: string, after = ''): { title: string; description: string; body: string } {
-  const start = `<a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a>`;
+  const start = `<a class="btn btn--primary btn--lg" href="${authPathFor(locale, 'register')}">${escapeHtml(t.start)}</a>`;
   const features = t.sections.length === 3 ? 'features features--3' : 'features';
   const setup = t.setup
     ? `<section class="home-section home-api">

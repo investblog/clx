@@ -1,5 +1,5 @@
 // The app's words in English, of the same shape as ru.ts (`Dict`): a missing key fails `tsc`.
-import type { Dict } from './ru';
+import type { Dict } from './ru.ts'; // with the extension: site/auth.ts loads this file in Node
 
 export const en: Dict = {
   shell: {

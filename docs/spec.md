@@ -995,11 +995,18 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
 - **The app in the site's frame** ([ADR 0017](./decisions/0017-app-in-the-site-frame.md)). The
   app's page carries the site's header (menu, theme, the language switch leading to the app in each
   language; no link to the app) and footer; the app's sections and sign-out are a row under the
-  header. The signed-out pages link only their sisters (sign-in, sign-up, reset), not themselves
-  and not the other language. Signed in, an account of the
-  other language moves the app to its own address. The site's link to the app says "Dashboard"
-  instead of "Sign in" where the app left its mark (`localStorage` `clx-signed-in`, read by
-  `/theme.js`).
+  header. Signed in, an account of the other language moves the app to its own address. The site's
+  header shows "Dashboard" (the app) instead of "Sign in" where the app left its mark
+  (`localStorage` `clx-signed-in`, read by `/theme.js`).
+- **Sign-in on the home page** ([ADR 0026](./decisions/0026-sign-in-on-the-home-page.md)). Sign-in,
+  sign-up and the reset request are three forms of one card on each language's home page, shown by
+  the fragment — `/#login`, `/#register`, `/#recover` (`/ru#…`); beside the hero on a wide screen,
+  under it on a narrow one; without a fragment the card is hidden. The header's "Sign in" opens
+  `#login`, every call to sign up opens `#register`. Sign-in leads to `/app#/`, which takes the
+  session from the refresh cookie. The app without a session goes to `#login`; its old `#/signup`
+  and `#/reset` go to `#register` and `#recover`. The e-mails' links (`/app#/confirm?t=`,
+  `/app#/reset?t=`) still open the app's pages, which lead back to the card. The forms are printed
+  at build time from the app's dictionaries; `/site.js` switches and sends them.
 - **Sitemap.** `/sitemap.xml` (indexed pages × languages, hreflang alternates) names its view in a
   processing instruction, `<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>`: in a browser
   with XSLT it becomes a page in the site's style, one row per page with its languages; elsewhere it

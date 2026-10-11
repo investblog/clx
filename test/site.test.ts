@@ -6,7 +6,8 @@ import vm from 'node:vm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SITE_PAGES } from '../site/pages.ts';
 import { generateMatrix } from '../src/qr/generate';
-import { alternatesFor, fileFor, ogImagePath, pathFor, urlFor } from '../site/urls.ts';
+import { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } from '../site/urls.ts';
+import { PASSWORD_MIN } from '../src/auth/signup';
 
 describe('addresses', () => {
   it('English at the root, Russian under /ru, no trailing slash on a home page', () => {
@@ -108,7 +109,18 @@ describe('generated pages', () => {
   it('the home page: sign-up first, an example report drawn for both themes and both widths, nothing inline', () => {
     for (const [file, app] of [['index.html', '/app'], ['ru.html', '/ru/app']] as const) {
       const html = read(file);
-      expect(html).toContain(`href="${app}#/signup"`);
+      // Signed out the first button opens the card's sign-up form; signed in it leads to the app.
+      expect(html).toContain('<a class="btn btn--primary btn--lg when-signed-out" href="#register">');
+      expect(html).toContain(`<a class="btn btn--primary btn--lg when-signed-in" href="${app}">`);
+      // The sign-in card (ADR 0026): hidden, three forms that post (never a GET with the password).
+      const card = html.match(/<section class="card auth-card auth" data-auth[\s\S]*?<\/section>/u)![0];
+      expect(card).toContain(`data-app="${app}"`);
+      expect(card).toMatch(/data-t="[^"]+" hidden>/u);
+      expect([...card.matchAll(/<form class="auth-form" method="post" data-auth-form="(\w+)" hidden>/gu)].map((m) => m[1])).toEqual(['login', 'register', 'recover']);
+      expect(card).not.toMatch(/style=|<script/u);
+      // The minimum the forms ask for is the server's, in the card and on the app's new-password page.
+      expect(card).toContain(`minlength="${PASSWORD_MIN}"`);
+      expect(fs.readFileSync('ui/signup.ts', 'utf8')).toContain(`const PASSWORD_MIN = ${PASSWORD_MIN};`);
       const demo = html.match(/<figure class="demo" aria-hidden="true">[\s\S]*?<\/figure>/u)?.[0] ?? '';
       for (const theme of ['dark', 'light']) expect(demo).toContain(`themed--${theme}`);
       for (const size of ['wide', 'narrow']) expect(demo).toContain(`demo__size--${size}`);
@@ -132,7 +144,7 @@ describe('generated pages', () => {
       for (const p of tools) {
         const html = read(fileFor(p.slug, l));
         expect(html).toContain(`href="${pathFor(p.slug, l)}" aria-current="page"`);
-        expect(html).toContain(`#/signup"`);
+        expect(html).toContain(`href="${authPathFor(l, 'register')}"`);
         // The CSP allows no inline style or script: none in the page's content, charts included.
         expect(html.match(/<main[\s\S]*?<\/main>/u)![0]).not.toMatch(/style=|<style|<script/u);
         expect(html.match(/<title>([^<]*)<\/title>/u)![1]!.length).toBeLessThanOrEqual(60);
@@ -161,7 +173,8 @@ describe('generated pages', () => {
         if (/^\/(agents|api)$|\.(yaml|json|md)$|\/app$/u.test(href!)) continue;
         const page = SITE_PAGES.find((p) => p.locales.includes(lang) && pathFor(p.slug, lang) === href);
         expect(page, `${path} → ${href}`).toBeDefined();
-        if (hash) expect(groups.has(hash) && page!.slug === '/faq', `${path} → ${href}#${hash}`).toBe(true);
+        // A fragment: a group of /faq, or a form of the home page's sign-in card.
+        if (hash) expect((groups.has(hash) && page!.slug === '/faq') || (['login', 'register', 'recover'].includes(hash) && page!.slug === '/'), `${path} → ${href}#${hash}`).toBe(true);
       }
     }
     // A tool page leads to its comparison and to its group on /faq.
@@ -240,7 +253,7 @@ describe('generated pages', () => {
         expect(slot).toContain(`<span class="promo__mark" aria-hidden="true">${mark}</span>`);
         expect(slot).toMatch(/<h2 class="promo__title">[^<]+<\/h2>/u);
         expect([...slot.matchAll(/<a /gu)]).toHaveLength(1);
-        expect(slot).toContain(`<a class="promo__cta" href="${l === 'en' ? '/app' : '/ru/app'}#/signup">`);
+        expect(slot).toContain(`<a class="promo__cta" href="${authPathFor(l, 'register')}">`);
         expect(slot).not.toMatch(/data-promo|style=|<script/u);
       }
   });
@@ -256,7 +269,7 @@ describe('generated pages', () => {
       const html = read(fileFor(p.slug, l));
       const main = html.match(/<main[\s\S]*?<\/main>/u)![0];
       expect(main, p.slug).not.toMatch(/style=|<style|<script/u);
-      expect(main).toContain(`#/signup"`);
+      expect(main).toContain(`href="${authPathFor(l, 'register')}"`);
       // Every chart in both themes; in each, at most one bar in the brand colour (clx’s; none at $0).
       const charts = [...main.matchAll(/<div class="demo__chart themed--(dark|light)">([\s\S]*?)<\/svg><\/div>/gu)];
       expect(charts.length, p.slug).toBeGreaterThanOrEqual(2);
@@ -341,7 +354,7 @@ describe('generated pages', () => {
     const run = (count: number, random: number) => {
       const banners = Array.from({ length: count }, (_, i) => ({ hidden: i > 0 }));
       const slot = { querySelectorAll: (sel: string) => (sel === '[data-promo]' ? banners : []) };
-      const document = { querySelectorAll: (sel: string) => (sel === '.promo-slot' ? [slot] : []) };
+      const document = { querySelector: () => null, querySelectorAll: (sel: string) => (sel === '.promo-slot' ? [slot] : []) };
       const math = Object.create(Math) as Math;
       math.random = () => random;
       vm.runInNewContext(read('site.js'), { document, location: { pathname: '/', hash: '' }, Math: math });
@@ -351,6 +364,121 @@ describe('generated pages', () => {
     expect(run(3, 0.5)).toEqual([0, 1, 0]);
     expect(run(3, 0.99)).toEqual([0, 0, 1]);
     expect(run(1, 0.7)).toEqual([1]);
+  });
+
+  /** site.js on a stand-in of the home page's card (site/auth.ts): what it shows, sends and opens. */
+  async function cardStand(opts: { hash: string; sitekey: string | null; configFailures?: number }) {
+    let failures = opts.configFailures ?? 0;
+    const el = (attrs: Record<string, string> = {}) => ({
+      hidden: true,
+      disabled: false,
+      value: '',
+      textContent: '',
+      dataset: { ...attrs } as Record<string, string>,
+      attrs: new Map<string, string>(),
+      setAttribute(k: string, v: string) {
+        this.attrs.set(k, v);
+      },
+      removeAttribute(k: string) {
+        this.attrs.delete(k);
+      },
+      addEventListener: () => {},
+      focus: () => {},
+    });
+    const form = (kind: string) => {
+      const f = Object.assign(el({ authForm: kind }), { msg: el(), button: el(), fields: { email: el(), password: el() } as Record<string, ReturnType<typeof el>>, onSubmit: (_e: unknown) => Promise.resolve() });
+      return Object.assign(f, {
+        addEventListener: (type: string, fn: (e: unknown) => Promise<void>) => type === 'submit' && (f.onSubmit = fn),
+        querySelector: (sel: string) => (sel === '[data-msg]' ? f.msg : sel === '[type=submit]' ? f.button : sel === 'input[name=email]' ? f.fields.email : sel === 'input[name=password]' ? f.fields.password : sel === '[data-turnstile]' ? el() : null),
+        reset: () => Object.values(f.fields).forEach((x) => (x.value = '')),
+        submit: () => f.onSubmit({ preventDefault: () => {} }),
+      });
+    };
+    const forms = ['login', 'register', 'recover'].map(form);
+    const tabs = ['login', 'register'].map((k) => el({ tab: k }));
+    const texts = { closed: { register: 'closed', recover: 'closed' }, waitHuman: 'wait', signedUp: 'sent {email}', signedUpNext: 'next', errors: {} };
+    const card = Object.assign(el({ t: JSON.stringify(texts), app: '/app' }), { querySelectorAll: (sel: string) => (sel === '[data-auth-form]' ? forms : sel === '[data-tab]' ? tabs : []) });
+    const classes = new Set<string>();
+    const landing = { classList: { toggle: (c: string, on: boolean) => (on ? classes.add(c) : classes.delete(c)) } };
+    const state = { onHash: () => {}, posts: [] as [string, unknown][], assigned: [] as string[], resets: 0, human: (_t: string) => {} };
+    const location = { pathname: '/', hash: opts.hash, assign: (to: string) => state.assigned.push(to) };
+    const document = { documentElement: { lang: 'ru' }, querySelector: (sel: string) => (sel === '[data-auth]' ? card : sel === '[data-landing]' ? landing : null), querySelectorAll: () => [] };
+    const turnstile = { render: (_el: unknown, o: { callback: (t: string) => void }) => ((state.human = o.callback), 'w1'), reset: () => state.resets++ };
+    const window = { turnstile, addEventListener: (type: string, fn: () => void) => type === 'hashchange' && (state.onHash = fn) };
+    const fetch = async (url: string, init?: { body: string }) => {
+      if (url === '/auth/config') return failures-- > 0 ? { ok: false, status: 503, json: async () => ({}) } : { ok: true, status: 200, json: async () => ({ turnstile_site_key: opts.sitekey }) };
+      state.posts.push([url, JSON.parse(init!.body)]);
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+    vm.runInNewContext(read('site.js'), { document, window, location, fetch, Math, JSON, Array, Map, Set, Promise, String, Number, Object });
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+    return {
+      card, forms, tabs, classes, location, settle,
+      onHash: () => state.onHash(),
+      get posts() { return state.posts; },
+      get assigned() { return state.assigned; },
+      get resets() { return state.resets; },
+      set token(v: string) { if (v) state.human(v); },
+    };
+  }
+
+  it('site.js shows the card’s form the fragment names, and none without one; the hero makes room for it', async () => {
+    const run = await cardStand({ hash: '#register', sitekey: null });
+    const { card, forms, tabs, classes, location } = run;
+    const shown = () => [card.hidden, ...forms.map((f) => f.hidden), classes.has('landing--auth')];
+    expect(shown()).toEqual([false, true, false, true, true]);
+    expect(tabs.map((t) => t.attrs.get('aria-current') ?? null)).toEqual([null, 'page']);
+    // Without a Turnstile key the server refuses sign-up: the form says so and cannot be sent.
+    await run.settle();
+    expect([forms[1]!.msg.textContent, forms[1]!.button.disabled]).toEqual(['closed', true]);
+    location.hash = '#login';
+    run.onHash();
+    expect(shown()).toEqual([false, false, true, true, true]);
+    location.hash = '#/confirm?t=x'; // not a form of the card: it stays hidden
+    run.onHash();
+    expect(shown()).toEqual([true, true, true, true, false]);
+  });
+
+  it('site.js sends the card’s forms to /auth: sign-in leads to the app; sign-up carries the page’s language and the Turnstile token', async () => {
+    const run = await cardStand({ hash: '#login', sitekey: 'key' });
+    const [login, register] = run.forms;
+    login!.fields.email!.value = 'a@b.c';
+    login!.fields.password!.value = 'pass-word-1';
+    const sent = login!.submit();
+    expect(login!.button.disabled).toBe(true); // a second click waits
+    await sent;
+    expect(run.posts.shift()).toEqual(['/auth/login', { email: 'a@b.c', password: 'pass-word-1' }]);
+    expect(run.assigned).toEqual(['/app#/']);
+    // Sign-up: nothing goes before the human check; then the token, the language, and a fresh check.
+    run.location.hash = '#register';
+    run.onHash();
+    register!.fields.email!.value = ' new@b.c ';
+    register!.fields.password!.value = 'a-long-password';
+    run.token = '';
+    await run.settle();
+    await register!.submit();
+    expect([run.posts.length, register!.msg.textContent]).toEqual([0, 'wait']);
+    run.token = 'tok';
+    await register!.submit();
+    expect(run.posts.shift()).toEqual(['/auth/signup', { email: ' new@b.c ', password: 'a-long-password', turnstile: 'tok', locale: 'ru' }]);
+    expect([register!.msg.dataset.type, register!.msg.textContent, run.resets]).toEqual(['success', 'sent new@b.c next', 1]);
+  });
+
+  it('site.js: a failed /auth/config is not "closed" — the form stays usable and the next visit asks again', async () => {
+    const run = await cardStand({ hash: '#register', sitekey: 'key', configFailures: 1 });
+    const register = run.forms[1]!;
+    await run.settle();
+    expect([register.msg.textContent, register.button.disabled]).toEqual(['', false]);
+    run.location.hash = '#login';
+    run.onHash();
+    run.location.hash = '#register';
+    run.onHash();
+    await run.settle();
+    register.fields.email!.value = 'x@y.z';
+    register.fields.password!.value = 'a-long-password';
+    run.token = 'tok';
+    await register.submit();
+    expect(run.posts.map(([url]) => url)).toEqual(['/auth/signup']);
   });
 
   it('theme.js marks the page and opens the menu: false → true → false, focus into the menu', () => {
@@ -445,9 +573,9 @@ describe('generated pages', () => {
     expect(app).toContain('href="/ru/privacy"');
   });
 
-  it('the site’s link to the app has both labels; the page shows one by the mark theme.js sets', () => {
+  it('the header signs in on the home page’s card, or leads to the app; the page shows one by the mark theme.js sets', () => {
     const header = read('ru/analytics.html').match(/<header[\s\S]*?<\/header>/u)![0];
-    expect(header).toContain('<a class="btn btn--ghost btn--sm" href="/ru/app"><span class="when-signed-out">Войти</span><span class="when-signed-in">Кабинет</span></a>');
+    expect(header).toContain('<a class="btn btn--ghost btn--sm when-signed-out" href="/ru#login">Войти</a><a class="btn btn--ghost btn--sm when-signed-in" href="/ru/app">Кабинет</a>');
     const marked = (stored: string | null) => {
       const classes = new Set<string>();
       const document = { documentElement: { classList: { add: (c: string) => classes.add(c) }, dataset: {} }, addEventListener: () => {} };
