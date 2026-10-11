@@ -21,7 +21,7 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
     ru: { primary: 'счетчик посещений clx', keywords: ['clx в вашем аккаунте Cloudflare', 'сервис clx', 'счетчик и короткие ссылки clx'], tags: ['аналитика', 'короткие ссылки'] },
   },
   '/analytics': {
-    en: { primary: 'cookieless web analytics', keywords: ['website visitor counter', 'privacy-friendly analytics', 'cookieless analytics platform', 'site visitor counter'], tags: ['analytics', 'privacy'] },
+    en: { primary: 'cookieless web analytics', keywords: ['website visitor counter', 'privacy-friendly analytics', 'cookieless analytics platform', 'page view counter'], tags: ['analytics', 'privacy'] },
     ru: { primary: 'счетчик посещений сайта', keywords: ['статистика посещаемости сайта', 'веб-аналитика сайта', 'счетчик уникальных посетителей', 'аналитика без файлов куки'], tags: ['аналитика', 'приватность'] },
   },
   '/short-links': {
@@ -29,16 +29,16 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
     ru: { primary: 'сокращение ссылок', keywords: ['короткие ссылки на своем домене', 'сервис коротких ссылок', 'отслеживание переходов по ссылкам', 'сокращатель ссылок с QR-кодом'], tags: ['короткие ссылки', 'QR-коды'] },
   },
   '/for-site-generators': {
-    en: { primary: 'analytics for generated websites', keywords: ['visit counter without shared footprint', 'site generator analytics API', 'counter for every site you build', 'analytics for many sites'], tags: ['site generators', 'analytics'] },
-    ru: { primary: 'счетчик для генератора сайтов', keywords: ['статистика без общего следа', 'API счетчика для конвейера сборки', 'аналитика для множества сайтов', 'свой счетчик каждому сайту'], tags: ['генераторы сайтов', 'аналитика'] },
+    en: { primary: 'analytics for generated websites', keywords: ['separate counter for each website', 'site generator analytics API', 'analytics for many sites'], tags: ['site generators', 'analytics'] },
+    ru: { primary: 'аналитика для генератора сайтов', keywords: ['отдельный счетчик для каждого сайта', 'API статистики для конвейера сборки', 'учет визитов на множестве сайтов'], tags: ['генераторы сайтов', 'аналитика'] },
   },
   '/pricing': {
-    en: { primary: 'free visitor counter', keywords: ['clx pricing', 'free link shortener plan', 'counter and shortener pricing'], tags: ['pricing'] },
-    ru: { primary: 'бесплатный счетчик посещений', keywords: ['тарифы clx', 'бесплатное сокращение ссылок', 'цены на счетчик и ссылки'], tags: ['цены'] },
+    en: { primary: 'free web analytics plan', keywords: ['clx pricing', 'link shortener free tier', 'counter and shortener pricing'], tags: ['pricing'] },
+    ru: { primary: 'бесплатная веб-аналитика', keywords: ['тарифы clx', 'бесплатное сокращение ссылок', 'цены на аналитику и ссылки'], tags: ['цены'] },
   },
   '/faq': {
-    en: { primary: 'visitor counter FAQ', keywords: ['adding a counter to your website', 'answers about short links', 'clx help and answers'], tags: ['help'] },
-    ru: { primary: 'вопросы о счетчике посещений', keywords: ['ответы о коротких ссылках', 'справка по clx', 'установка счетчика на сайт'], tags: ['справка'] },
+    en: { primary: 'web analytics FAQ', keywords: ['adding stats to your website', 'answers about short links', 'clx help center'], tags: ['help'] },
+    ru: { primary: 'вопросы о статистике сайта', keywords: ['ответы о коротких ссылках', 'справка по clx', 'установка счетчика на сайт'], tags: ['справка'] },
   },
   '/bitly-alternative': {
     en: { primary: 'Bitly alternative', keywords: ['alternative to Bitly', 'free Bitly alternative', 'Bitly alternative on your own domain', 'open source Bitly replacement'], tags: ['comparison', 'short links'] },
@@ -53,16 +53,16 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
     ru: { primary: 'альтернатива LiveInternet', keywords: ['аналог счетчика LiveInternet', 'счетчик вместо LiveInternet', 'открытая статистика вместо LiveInternet'], tags: ['сравнение', 'аналитика'] },
   },
   '/vs-301': {
-    en: { primary: 'Cloudflare redirect manager with analytics', keywords: ['redirect platform and visit counter', 'edge redirects with click stats', 'traffic distribution and site analytics'], tags: ['comparison', 'redirects'] },
-    ru: { primary: 'менеджер редиректов на Cloudflare', keywords: ['301 редирект и статистика', 'редиректы и счетчик посещений', 'управление редиректами с аналитикой'], tags: ['сравнение', 'редиректы'] },
+    en: { primary: 'Cloudflare redirect manager with analytics', keywords: ['redirect platform and traffic stats', 'edge redirects with click stats', 'traffic distribution and site analytics'], tags: ['comparison', 'redirects'] },
+    ru: { primary: 'менеджер редиректов на Cloudflare', keywords: ['301 редирект и статистика', 'редиректы и учет визитов', 'управление редиректами с аналитикой'], tags: ['сравнение', 'редиректы'] },
   },
   '/how-it-works': {
-    en: { primary: 'analytics on your own Cloudflare', keywords: ['Cloudflare Workers visit counter', 'Cloudflare web analytics alternative', 'visit data in your own database'], tags: ['platform', 'analytics'] },
-    ru: { primary: 'аналитика в вашем Cloudflare', keywords: ['счетчик на Cloudflare Workers', 'данные посещений в вашей базе', 'устройство счетчика clx'], tags: ['платформа', 'аналитика'] },
+    en: { primary: 'analytics on your own Cloudflare', keywords: ['page views on Cloudflare Workers', 'Cloudflare web analytics alternative', 'visit data in your own database'], tags: ['platform', 'analytics'] },
+    ru: { primary: 'аналитика в вашем Cloudflare', keywords: ['статистика на Cloudflare Workers', 'данные посещений в вашей базе', 'устройство счетчика clx'], tags: ['платформа', 'аналитика'] },
   },
   '/open-source': {
-    en: { primary: 'open source URL shortener', keywords: ['open source website analytics', 'AGPL visitor counter', 'self-hostable visitor counter'], tags: ['open source'] },
-    ru: { primary: 'счетчик с открытым кодом', keywords: ['открытый исходный код clx', 'сокращатель ссылок с открытым кодом', 'аналитика с открытым исходным кодом', 'свободная лицензия AGPL'], tags: ['открытый код'] },
+    en: { primary: 'open source URL shortener', keywords: ['open source website analytics', 'AGPL-licensed link shortener', 'self-hostable web analytics'], tags: ['open source'] },
+    ru: { primary: 'система учета визитов с открытым кодом', keywords: ['открытый исходный код clx', 'сокращатель ссылок с открытым кодом', 'аналитика с открытым исходным кодом', 'свободная лицензия AGPL'], tags: ['открытый код'] },
   },
   '/agents': {
     en: { primary: 'MCP server for short links', keywords: ['link shortener for AI agents', 'analytics MCP server', 'agent-ready URL shortener'], tags: ['AI agents', 'developers'] },
