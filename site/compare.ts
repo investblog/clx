@@ -299,7 +299,9 @@ function chartCard(locale: Locale, c: Chart): string {
   return `<div class="card feature"><h3>${escapeHtml(c.h)}</h3>${themed('demo__chart', draw)}<p class="compare__note">${escapeHtml(c.note)}</p></div>`;
 }
 
-const external = (href: string) => (href.startsWith('/') ? '' : ' rel="nofollow noopener"');
+/** A source: our own page is a link; another service's is its address as text, in brackets — no link to it. */
+const source = ([label, href]: [string, string]) =>
+  href.startsWith('/') ? `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>` : `${escapeHtml(label)} (${escapeHtml(href.replace(/^https:\/\/(www\.)?/u, '').replace(/\/$/u, ''))})`;
 
 function page(locale: Locale, t: CompareText): { title: string; description: string; body: string } {
   const start = `<a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a>`;
@@ -334,7 +336,7 @@ ${aside}<section class="home-section narrow-section">
 <section class="home-section narrow-section compare__sources">
   <h2 class="h3">${escapeHtml(t.sources.h)}</h2>
   <p>${escapeHtml(t.sources.checked)}</p>
-  <ul>${t.sources.links.map(([label, href]) => `<li><a href="${escapeHtml(href)}"${external(href)}>${escapeHtml(label)}</a></li>`).join('')}</ul>
+  <ul>${t.sources.links.map((s) => `<li>${source(s)}</li>`).join('')}</ul>
 </section>
 <section class="home-final">
   <h2>${escapeHtml(t.final)}</h2>

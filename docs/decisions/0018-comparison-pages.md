@@ -21,7 +21,7 @@ answer those; a page that misstates it is a liability.
   latter with a word on Yandex Metrica. No other-language copy and no `x-default` on the Russian two.
 - The other service is named in the address, the title and the text; its logo is not used.
 - Every claim about it comes from its own pages, its code or its live answers, recorded with the
-  address and the day in `docs/comparisons.md`; the page lists its sources (`rel="nofollow"`) and
+  address and the day in `docs/comparisons.md`; the page lists its sources — the other service's addresses as text in brackets, not links — and
   the day checked. A fact that could not be confirmed stays off the page. Re-checked before a
   change and at least every six months.
 - Each page says when the other service is the better choice, including where it beats clx (a

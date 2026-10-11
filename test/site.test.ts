@@ -129,8 +129,10 @@ describe('generated pages', () => {
         expect(first, p.slug).not.toContain('cx-bar-muted');
         expect(rest.join(''), p.slug).not.toContain('class="cx-bar"');
       }
-      // The sources: the other service's own pages, not followed.
-      expect(main).toMatch(/<a href="https:\/\/[^"]+" rel="nofollow noopener">/u);
+      // The sources: the other service's pages as addresses in brackets, never a link to it.
+      expect(main).toMatch(/<li>[^<]+ \([a-z0-9.-]+\.[a-z]+[^)<]*\)<\/li>/u);
+      expect(main).not.toMatch(/<a href="https?:/u);
+      expect(main.match(/compare__sources[\s\S]*?<\/ul>/u)![0]).toContain(`<a href="${pathFor('/pricing', l)}">`);
       expect(html.match(/<title>([^<]*)<\/title>/u)![1]!.length, p.slug).toBeLessThanOrEqual(60);
       const description = html.match(/<meta name="description" content="([^"]*)"/u)![1]!.replaceAll('&#39;', "'");
       expect(description.length, p.slug).toBeGreaterThanOrEqual(120);
