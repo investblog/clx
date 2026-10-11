@@ -981,7 +981,8 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   violet (`#4D48ED`, from the logo), the Onest typeface served from `public/fonts/`, the clx mark in
   the header, `favicon.svg`, `favicon.ico` (16/32/48) and `apple-touch-icon.png`.
 - **Content pages**: the home page, the two tools, site generators, pricing and the questions
-  (`/faq` gathers the pages' own questions); an Open Graph card and JSON-LD for every indexed page
+  (`/faq` gathers the pages' own questions); an Open Graph card (its words over a sankey of flows made
+  up from its path, `scripts/build-og.mjs`, ADR 0022) and JSON-LD for every indexed page
   (ADR 0016); comparison pages ([ADR 0018](./decisions/0018-comparison-pages.md)): `/bitly-alternative`,
   `/plausible-alternative` in English, `/ru/clck-alternative`, `/ru/liveinternet-alternative` in Russian,
   linked from their language's footer, and `/vs-301` in both languages — clx beside its parent service

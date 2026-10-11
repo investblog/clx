@@ -1,5 +1,5 @@
 // The Open Graph cards (scripts/build-og.mjs): the words keep to their column whatever they are, and the
-// card's SVG carries nothing but outlines.
+// card's SVG draws its words as outlines, never as text; its picture is a sankey of the page's own flows.
 import { describe, expect, it } from 'vitest';
 
 interface Font {
@@ -7,7 +7,7 @@ interface Font {
 }
 const og = (await import('../scripts/build-og.mjs' as string)) as {
   fit: (font: Font, text: string, sizes: number[], width: number, max: number) => { size: number; lines: string[] };
-  cardSvg: (title: string, description: string | null) => string;
+  cardSvg: (title: string, description: string | null, seed?: string) => string;
   semibold: Font;
   regular: Font;
   TEXT_W: number;
@@ -34,6 +34,15 @@ describe('the card’s words', () => {
     expect(r.lines).toHaveLength(3);
     expect(r.lines[2]!.endsWith('…')).toBe(true);
     expect(within(r, og.regular)).toBe(true);
+  });
+
+  it('the background: the sankey’s ribbons and nodes, none of its words; the same page draws the same, another its own', () => {
+    const a = og.cardSvg('Title', null, '/og/en/home.png');
+    expect(a).toContain('class="og-link"');
+    expect(a).toContain('class="og-node"');
+    expect(a).not.toMatch(/og-key|og-tag|<title/u);
+    expect(og.cardSvg('Title', null, '/og/en/home.png')).toBe(a);
+    expect(og.cardSvg('Title', null, '/og/ru/home.png')).not.toBe(a);
   });
 
   it('the SVG has no <text> and nothing of the input as markup', () => {
