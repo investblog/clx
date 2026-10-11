@@ -119,11 +119,14 @@ try {
   const removed = await tool('delete_site', { id: siteId, idempotency_key: `probe-mcp-site-delete-${run}` }, key);
   step('delete_site', removed?.isError === false, removed?.structuredContent?.site?.state ?? removed?.content?.[0]?.text);
 
-  const gone = await tool('disconnect_account', { id: accountId, idempotency_key: `probe-mcp-disconnect-${run}` }, key);
+  // The site's removal may still hold the account: retry while it says so, as /agents tells an agent.
+  const busy = (r) => r?.structuredContent?.error?.code === 'operation_in_progress';
+  const gone = await until(() => tool('disconnect_account', { id: accountId, idempotency_key: `probe-mcp-disconnect-${run}` }, key), (r) => !busy(r), 2, 3_000);
   step('disconnect_account', gone?.isError === false && gone.structuredContent?.left?.length === 0, JSON.stringify(gone?.structuredContent?.left ?? gone?.content?.[0]?.text));
   if (gone?.isError === false) accountId = null;
 } finally {
-  if (accountId) await clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-mcp-cleanup-${run}`).catch(() => undefined);
+  // Disconnected before the tokens go: without its working token clx cannot remove its worker.
+  if (accountId) await until(() => clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-mcp-cleanup-${run}`), (r) => r.status !== 409, 2, 3_000).catch(() => undefined);
   const left = (await cfAdmin('GET', `/accounts/${account}/tokens?per_page=50`)).filter((t) => t.id === boot?.id || /^clx-[A-Za-z0-9_-]{22}$/u.test(t.name));
   for (const t of left) await cfAdmin('DELETE', `/accounts/${account}/tokens/${t.id}`);
   const relog = await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });
