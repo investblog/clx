@@ -28,6 +28,34 @@ export interface LinkConfig {
 }
 export type Device = 'mobile' | 'desktop';
 export const linkKey = (code: string) => `link:${code}`;
+type Conditions = { countries?: string[]; devices?: Device[] };
+/** FNV-1a, 32 bits, in base 36: a short fingerprint, not a secret. */
+function fnv(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+}
+/** Where a click was sent, as its row records it in `page` (a link has no pages; §6, ADR 0019):
+ *  `<rule>><url>`, the rule as `DE,AT;mobile` (it has at least one condition, so `;` is always there)
+ *  or nothing for the main URL — the first 512 characters. The rule's own conditions, not its place
+ *  in the list: rules are edited and reordered. Sorted, as matching treats them as sets; past 40
+ *  countries, the first 40 and `+N#<FNV-1a of the whole list>` — short, so the `>` is always within
+ *  512, and two lists alike in their first 40 still apart. Rows of a worker before this record ''. */
+export function destinationOf(url: string, rule?: Conditions): string {
+  if (!rule) return `>${url}`.slice(0, 512);
+  const c = [...(rule.countries ?? [])].sort();
+  const countries = c.length > 40 ? [...c.slice(0, 40), `+${c.length - 40}#${fnv(c.join(','))}`] : c;
+  return `${countries.join(',')};${[...(rule.devices ?? [])].sort().join(',')}>${url}`.slice(0, 512);
+}
+/** A recorded destination back: the rule (null for the main URL) and the URL; null for '' and
+ *  `(other)`, which name none. */
+export function parseDestination(key: string): { rule: { countries: string[]; devices: string[] } | null; url: string } | null {
+  const at = key.indexOf('>');
+  if (at < 0) return null;
+  if (!at) return { rule: null, url: key.slice(1) };
+  const [countries = '', devices = ''] = key.slice(0, at).split(';');
+  return { rule: { countries: countries ? countries.split(',') : [], devices: devices ? devices.split(',') : [] }, url: key.slice(at + 1) };
+}
 /** A link code: 3–32 of `[A-Za-z0-9_-]`. */
 export const CODE = /^[A-Za-z0-9_-]{3,32}$/u;
 

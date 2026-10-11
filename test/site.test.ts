@@ -171,6 +171,20 @@ describe('generated pages', () => {
     expect(fs.readFileSync('public/site.js', 'utf8')).toContain('[data-promo]');
   });
 
+  it('/short-links shows which rule took which clicks: a sankey of the example link in both themes, its ids apart', () => {
+    for (const l of ['en', 'ru'] as const) {
+      const html = read(fileFor('/short-links', l));
+      const figure = html.match(/<figure class="demo flows-demo">[\s\S]*?<\/figure>/u)![0];
+      expect([...figure.matchAll(/<div class="demo__chart themed--(\w+)">/gu)].map((m) => m[1])).toEqual(['dark', 'light']);
+      expect([...figure.matchAll(/class="cx-node"/gu)]).toHaveLength(2 * (4 + 3));
+      const ids = [...html.matchAll(/\bid="([^"]+)"/gu)].map((m) => m[1]);
+      expect(new Set(ids).size).toBe(ids.length);
+      // The same 3,440 clicks as the example's countries; rule 1 is Germany and Austria.
+      expect(figure).toMatch(/>1[,\s]370 · 40%</u);
+      expect(figure).not.toMatch(/style=|<script/u);
+    }
+  });
+
   it('the closing call to sign up is clx’s own banner: its mark, a heading, one link to sign-up, out of the rotation', () => {
     const mark = fs.readFileSync('public/favicon.svg', 'utf8').trim();
     for (const slug of ['/', '/analytics', '/faq', '/pricing', '/vs-301', '/bitly-alternative', '/clck-alternative'])

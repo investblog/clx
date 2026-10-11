@@ -24,3 +24,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0016](./0016-brand-and-report-charts.md) | A violet brand with its own mark; the report is drawn by affiliate-charts | 10.10.2026 | §10, §16 |
 | [0017](./0017-app-in-the-site-frame.md) | The app sits in the site's frame; the sitemap has a view for people | 11.10.2026 | §10, §16 |
 | [0018](./0018-comparison-pages.md) | Comparison pages name the other service, one market each, facts with sources | 11.10.2026 | §16 |
+| [0019](./0019-link-flows.md) | A click records where it was sent; a link with rules shows its flows as a sankey | 11.10.2026 | §6, §7, §10, §16 |

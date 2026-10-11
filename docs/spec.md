@@ -369,7 +369,13 @@ Why:
   Built on clx.cx, not in the browser, so that API clients get it too.
 - **Rules:** `{countries?, devices?, url}` — countries as ISO alpha-2 codes (`cf.country`), devices
   `mobile`/`desktop` (as the collector tells them), at least one of the two; the first match wins,
-  otherwise the main target. Up to 10 rules per link.
+  otherwise the main target. Up to 10 rules per link. A click records where it was sent — the
+  matched rule's conditions, sorted, and URL (`AT,DE;mobile>https://…`; past 40 countries the first
+  40 and `+N#<fingerprint>`) or the main target (`>https://…`), the first 512 characters (`destinationOf` in
+  `edge/contract.ts`) — in its row's `page`, which a
+  link has no other use for: no new column or migration, and while the rules stay the same no
+  extra row (the destination follows from the country and the device, already in the row).
+  Clicks counted by a bundle before this record `''` ([ADR 0019](./decisions/0019-link-flows.md)).
 - **Targets:** `https://` only, not on the link host (no loops), up to 2048 characters.
 - **Sync clx.cx → worker** — everything the worker serves for the account: its sites (config of §5)
   and its links with rules. A delete-then-insert sync can leave sites or links without settings for
@@ -474,8 +480,9 @@ Why:
 - **Report:** totals and charts — from clx.cx `hourly`/`daily`, except a link's **today** (links
   have no hourly totals on clx.cx), which is read from the user's D1 like the breakdowns, under
   the same limit and with the same unavailable state; breakdowns (top 10 pages, sources,
-  countries, devices, browsers, OS, bots by category) — from the user's D1 through the D1 REST API
-  when the report is opened:
+  countries, devices, browsers, OS, bots by category; for a link its `pages` are its destinations,
+  plus `flows` — the top 200 source and destination pairs, one more dimension of the same pass) —
+  from the user's D1 through the D1 REST API when the report is opened:
   - periods `today`, `7d`, `30d` — UTC days ending with today; the series is hourly for `today`,
     daily otherwise;
   - everything is **as of** the end of the latest closed hour the worker sent today (`as_of`; the
@@ -706,6 +713,11 @@ Pages:
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
   "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques". Tiles, the series and
   the breakdowns are drawn by `affiliate-charts` ([ADR 0016](./decisions/0016-brand-and-report-charts.md)).
+  A link whose clicks went more than one way (it has rules, or had in the period) also gets "Where
+  the clicks went": a sankey from its sources to its destinations (`ui/flows.ts`; at most eight a
+  side, the rest joined), each destination named from what its clicks recorded — "Rule 2 (DE,
+  AT)", "Main address", or by its URL ("… (earlier rule: DE, AT)") when today's rules no longer hold it
+  ([ADR 0019](./decisions/0019-link-flows.md)).
 - **Status:** last push, bundle and schema version, queue depth, last error, rejected rows, the
   upgrade advice (a banner at `upgrade_soon` and `over`, §8), "reinstall", "renew the token" and
   "disconnect" — the last shows what could not be removed and the link to revoke the working
@@ -920,7 +932,8 @@ that adds a site and embeds its counter at build time.
 clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site-and-app.md)).
 - **Addresses.** The site at the root: `/`, `/analytics`, `/short-links`, `/for-site-generators`, `/pricing`,
   `/how-it-works`, `/open-source`, `/vs-301`,
-  `/faq`, `/privacy`, `/terms`, `/abuse` in English, the same
+  `/faq`, `/privacy`, `/terms`, `/abuse` in English (`/short-links` shows its example link's flows
+  as the app draws them, ADR 0019), the same
   under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` (and
   `/ru/app`, ADRs 0015, 0017) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).

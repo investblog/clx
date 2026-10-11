@@ -175,6 +175,7 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .demo .cx-tick{stroke:none}
 .demo__size--narrow{display:none}
 .demo__note{margin:var(--space-3) 0 0;text-align:center;font-size:var(--fs-sm);color:var(--text-subtle)}
+.flows-demo{padding:var(--space-4)}
 /* A chart drawn at build time for each theme: only the current theme's copy shows. */
 .themed--light,:root[data-theme="light"] .themed--dark{display:none}
 :root[data-theme="light"] .themed--light{display:block}

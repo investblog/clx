@@ -5,7 +5,7 @@
 // site's path gets the site's own answer. While
 // clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
 import { bodyHead, click, collect, countryOf } from './collect';
-import { CODE, deviceOf, linkHostKey, linkKey, SELF_CHECK_CRON, siteKey, WORKING_CRON, type LinkConfig, type SiteConfig } from './contract';
+import { CODE, destinationOf, deviceOf, linkHostKey, linkKey, SELF_CHECK_CRON, siteKey, WORKING_CRON, type LinkConfig, type SiteConfig } from './contract';
 import { hourly } from './cron';
 
 interface Env {
@@ -45,11 +45,11 @@ async function configFor<T>(env: Env, key: string): Promise<T | null> {
 }
 
 /** Where a link sends this visitor: the first rule matching their country and device, else its URL. */
-function destination(link: LinkConfig, request: Request): string {
+function destination(link: LinkConfig, request: Request): { url: string; rule?: LinkConfig['rules'][number] } {
   const country = countryOf(request);
   const device = deviceOf(request.headers.get('user-agent') ?? '');
   const rule = link.rules.find((r) => (!r.countries || r.countries.includes(country)) && (!r.devices || r.devices.includes(device)));
-  return rule?.url ?? link.url;
+  return rule ? { url: rule.url, rule } : { url: link.url };
 }
 
 export default {
@@ -86,8 +86,9 @@ export default {
       if (link === null) return new Response(null, { status: 503, headers: { 'retry-after': '30' } });
       if (!link) return new Response(null, { status: 404 });
       // Every click must reach the worker: no-store, and nothing else — no clx header, no body (§6).
-      if (request.method === 'GET') ctx.waitUntil(click(env.DB, request, link, url.hostname, now).catch(() => undefined));
-      return new Response(null, { status: 302, headers: { location: destination(link, request), 'cache-control': 'no-store' } });
+      const to = destination(link, request);
+      if (request.method === 'GET') ctx.waitUntil(click(env.DB, request, link, url.hostname, destinationOf(to.url, to.rule), now).catch(() => undefined));
+      return new Response(null, { status: 302, headers: { location: to.url, 'cache-control': 'no-store' } });
     }
     return fetch(request);
   },

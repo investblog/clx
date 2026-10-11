@@ -113,15 +113,18 @@ export async function collect(db: D1Database, request: Request, body: string, ho
 }
 
 /**
- * Counts a click on a short link (§6) as a view of its target with no page; the source is `qr`
- * for the QR code's `?q`, else the referring host. A bot's click is counted as a bot.
+ * Counts a click on a short link (§6) as a view of its target; its page is where the click was sent
+ * (`to`, already as `destinationOf` records it), so a report can show which rule took which traffic. While the
+ * rules stay the same it adds no row: the address follows from the country and the device, already in
+ * the row. The source is `qr` for the QR code's `?q`, else the referring host. A bot's click is
+ * counted as a bot.
  */
-export async function click(db: D1Database, request: Request, link: LinkConfig, host: string, now: number): Promise<'view' | 'bot'> {
+export async function click(db: D1Database, request: Request, link: LinkConfig, host: string, to: string, now: number): Promise<'view' | 'bot'> {
   const url = new URL(request.url);
   const referer = request.headers.get('referer');
   const refHost = referer ? (hostOf(referer) ?? '') : '';
   const source = url.searchParams.has('q') ? 'qr' : refHost && bare(refHost) !== bare(host) ? bare(refHost) : '';
-  return count(db, request, link.t, '', source, now);
+  return count(db, request, link.t, to, source, now);
 }
 
 /** One view (or bot hit) of `target`: exact totals, a capped detail row, the day's visitor hash. */

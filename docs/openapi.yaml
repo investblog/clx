@@ -221,6 +221,11 @@ components:
             browsers: { $ref: '#/components/schemas/Top' }
             os: { $ref: '#/components/schemas/Top' }
             bots: { $ref: '#/components/schemas/Top' }
+            flows:
+              type: array
+              maxItems: 200
+              description: 'a link only: clicks by source and destination together, the top 200 by count. `to` is where the clicks were sent: the matched rule''s conditions and URL, `AT,DE;mobile>https://…` (sorted; past 40 countries the first 40 and `+N#<fingerprint of the whole list>`), or `>https://…` for the main URL (the first 512 characters, also the keys of a link''s `pages`); "" for clicks counted by a worker that did not record it yet, "(other)" for what went over the detail caps'
+              items: { type: object, properties: { source: { type: string }, to: { type: string }, n: { type: integer } } }
         unavailable:
           type: string
           enum: [not_installed, cloudflare, rate_limited]
@@ -577,7 +582,7 @@ paths:
         default: { $ref: '#/components/responses/Error' }
   /v1/links/{id}/report:
     get:
-      summary: 'Clicks of the link (scope reports); with breakdowns=1 also sources, countries, devices, browsers, OS and bots (`pages` lists no pages for a link: at most one empty key)'
+      summary: 'Clicks of the link (scope reports); with breakdowns=1 also sources, countries, devices, browsers, OS, bots, its destinations (in `pages`: where the clicks were sent, by rule or the main URL) and `flows`, sources and destinations together'
       description: |
         Closed days come from clx.cx; today (and any day the worker has not sent yet) is read live
         from the account's own database in one read with the breakdowns — `as_of` is the moment of

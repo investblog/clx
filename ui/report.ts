@@ -1,11 +1,14 @@
 // The site report (stage 4e-3, docs/spec.md §7, §10): totals, the chart and the breakdowns of
 // GET /v1/sites/{id}/report. Everything is "as of" the last hour the worker sent (ADR 0004).
 import Rank from 'affiliate-charts/charts-rank.js';
+import Sankey from 'affiliate-charts/charts-sankey.js';
 import Series from 'affiliate-charts/charts-series.js';
 import Share from 'affiliate-charts/charts-share.js';
 import Spark from 'affiliate-charts/charts-spark.js';
+import { destinationOf, parseDestination } from '../edge/contract';
 import { call } from './api';
 import { h } from './dom';
+import { flowChart, type Flow } from './flows';
 import { locale, num, t, when } from './i18n';
 import type { Link } from './links';
 import type { Site } from './sites';
@@ -20,7 +23,8 @@ interface Report {
   totals: { views: number; bots: number; visitors: number };
   series: { at: string; views: number; bots: number; visitors?: number }[];
   incomplete: boolean;
-  breakdowns?: Record<Dim, Top> | null;
+  /** a link's also `flows`: its clicks by source and destination together */
+  breakdowns?: (Record<Dim, Top> & { flows?: Flow[] }) | null;
   unavailable?: 'not_installed' | 'cloudflare' | 'rate_limited';
 }
 
@@ -134,18 +138,49 @@ function breakdown(dim: Dim, rows: Top, total: number): HTMLElement {
   return h('section', { class: 'card breakdown' }, h('h3', {}, title), body);
 }
 
+const bareUrl = (url: string) => url.replace(/^https:\/\//u, '').replace(/\/$/u, '');
+
+/** Where a link's clicks went, from which sources: a sankey, when they went more than one way — the
+ *  link has rules now, or had in the period. A destination is named from what its clicks recorded
+ *  (the rule's conditions, edge/contract.ts), matched to the link's rules of today only for the
+ *  number. A note while the worker has recorded no destination yet. */
+function flows(link: Link, rows: Flow[] | undefined, total: number): HTMLElement | null {
+  const ruled = rows?.some((f) => parseDestination(f.to)?.rule);
+  if (!rows?.length || (!link.rules.length && !ruled)) return null;
+  const F = t.report.flows;
+  const title = F.title;
+  if (!rows.some((f) => parseDestination(f.to))) return h('section', { class: 'card breakdown' }, h('h3', {}, title), h('p', { class: 'muted' }, F.pending));
+  const devices = t.report.names.devices as Record<string, string>;
+  const destination = (key: string) => {
+    if (!key) return F.unrecorded;
+    if (key === '(other)') return t.report.other;
+    const d = parseDestination(key);
+    if (!d) return key;
+    // A destination of the past leads with its URL: two earlier rules may share their conditions.
+    if (!d.rule) return key === destinationOf(link.url) ? F.main : F.formerMain(bareUrl(d.url));
+    const cond = [...d.rule.countries.map((c) => c.replace(/#.*/u, '')), ...d.rule.devices.map((x) => devices[x] ?? x)].join(', ');
+    const n = link.rules.findIndex((r) => destinationOf(r.url, r) === key);
+    return n < 0 ? F.gone(cond, bareUrl(d.url)) : F.rule(String(n + 1), cond);
+  };
+  const { nodes, links } = flowChart(rows, { source: (k) => label('sources', k), destination, rest: F.rest, display: (n) => `${num(n)} · ${pct(n, total)}` });
+  const desc = links.map((l) => `${nodes.find((x) => x.id === l.from)!.label} → ${nodes.find((x) => x.id === l.to)!.label}: ${l.display}`).join('; ');
+  return h('section', { class: 'card breakdown' }, h('h3', {}, title), drawn('chart-svg', (o) => Sankey.sankey(nodes, links, { ...o, title, desc })));
+}
+
 /** The report of a site or of a link: the same shape; a link has no pages and its today is live. */
 export async function reportPage(kind: 'sites' | 'links', id: string, period: string): Promise<HTMLElement> {
   const mine = ++reports;
   releaseCharts();
   const R = t.report;
   const p = (PERIODS as string[]).includes(period) ? period : 'today';
-  const [subject, { report: r }] = await Promise.all([
-    kind === 'sites' ? call<{ site: Site }>('GET', `/v1/sites/${id}`).then(({ site }) => site.host) : call<{ link: Link }>('GET', `/v1/links/${id}`).then(({ link }) => link.short_url ?? link.code),
+  const [owner, { report: r }] = await Promise.all([
+    kind === 'sites' ? call<{ site: Site }>('GET', `/v1/sites/${id}`).then(({ site }) => site.host) : call<{ link: Link }>('GET', `/v1/links/${id}`).then(({ link }) => link),
     call<{ report: Report }>('GET', `/v1/${kind}/${id}/report?period=${p}&breakdowns=1`),
   ]);
   // A newer report started while this one loaded: the router drops this one, so it draws no charts.
   if (mine !== reports) return h('div');
+  const link = typeof owner === 'string' ? null : owner;
+  const subject = link ? (link.short_url ?? link.code) : (owner as string);
   const totals = r.totals;
   const span = R.utc(r.period === 'today' ? r.to : `${r.from} — ${r.to}`);
   const b = r.breakdowns;
@@ -182,6 +217,7 @@ export async function reportPage(kind: 'sites' | 'links', id: string, period: st
       tile(R.botShare, pct(totals.bots, totals.bots + totals.views), trend.bots, R.botHits(num(totals.bots))),
     ),
     chart(r, w),
+    link && b ? flows(link, b.flows, totals.views) : null,
     b ? h('div', { class: 'breakdowns' }, ...dims.map((d) => breakdown(d, b[d], totals.views)), breakdown('bots', b.bots, totals.bots)) : h('div', { class: 'card' }, h('p', {}, why)),
   );
 }

@@ -3,7 +3,9 @@
 // example, questions, a call to sign up. Every claim follows docs/spec.md (§5 the counter, §6 links,
 // §7 totals, §8 limits); the words are here, one object per language of one shape.
 import Rank from 'affiliate-charts/charts-rank.js';
+import Sankey from 'affiliate-charts/charts-sankey.js';
 import { generateMatrix } from '../src/qr/generate.ts';
+import { flowChart } from '../ui/flows.ts';
 import { chartOptions, demoReport, themed } from './demo.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
@@ -39,6 +41,8 @@ interface LinkCard {
   clicksTitle: string;
   countries: [string, string, string, string];
   note: string;
+  /** The same link's report: from its sources to where its rules sent the clicks. */
+  flows: { h: string; p: string; title: string; sources: [string, string, string, string]; to: [string, string, string]; note: string };
 }
 
 const ANALYTICS: Record<Locale, ProductText> = {
@@ -147,7 +151,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       },
       {
         h: 'Link tracking',
-        p: 'Clicks and visitors of every link, by day, with sources, countries, devices, browsers and systems. Bots are redirected too, but counted apart.',
+        p: 'Clicks and visitors of every link, by day, with sources, countries, devices, browsers and systems — and for a link with rules, which rule took which clicks. Bots are redirected too, but counted apart.',
       },
     ],
     setup: {
@@ -176,6 +180,14 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       clicksTitle: 'Clicks by country',
       countries: ['United States', 'Germany', 'Austria', 'Other'],
       note: 'An example link.',
+      flows: {
+        h: 'Which rule took which clicks',
+        p: 'With rules, one link sends people different ways. The report draws it in one picture: from every source to the address each click was sent to, so you see what each rule actually does.',
+        title: 'Where the clicks went',
+        sources: ['QR code', 'Direct', 'news.example.net', 'blog.example.org'],
+        to: ['Main address', 'Rule 1 (DE, AT)', 'Rule 2 (phone)'],
+        note: 'The example link’s report, 30 days: its printed QR code went out in Germany, and its blog is read on phones.',
+      },
     },
   },
   ru: {
@@ -200,7 +212,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       },
       {
         h: 'Статистика кликов',
-        p: 'Клики и посетители каждой ссылки по дням — с источниками, странами, устройствами, браузерами и системами. Боты тоже переадресуются, но считаются отдельно.',
+        p: 'Клики и посетители каждой ссылки по дням — с источниками, странами, устройствами, браузерами и системами, а у ссылки с правилами — какое правило забрало какие клики. Боты тоже переадресуются, но считаются отдельно.',
       },
     ],
     setup: {
@@ -229,6 +241,14 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       clicksTitle: 'Клики по странам',
       countries: ['Россия', 'Германия', 'Австрия', 'Прочие'],
       note: 'Пример ссылки.',
+      flows: {
+        h: 'Какое правило забрало какие клики',
+        p: 'С правилами одна ссылка ведёт людей разными путями. Отчёт рисует это одной картинкой: от каждого источника — к адресу, куда ушёл клик. Сразу видно, что на деле делает каждое правило.',
+        title: 'Куда ушли клики',
+        sources: ['QR-код', 'Прямые заходы', 'news.example.net', 'blog.example.org'],
+        to: ['Основной адрес', 'Правило 1 (DE, AT)', 'Правило 2 (телефон)'],
+        note: 'Отчёт этой ссылки за 30 дней: напечатанный QR-код раздавали в Германии, а блог читают с телефонов.',
+      },
     },
   },
 };
@@ -258,6 +278,36 @@ function linkCard(locale: Locale, c: LinkCard): string {
   </div>
 </figure>
 <p class="demo__note">${escapeHtml(c.note)}</p>`;
+}
+
+/** The example link's flows (source → destination, ui/flows.ts as the app draws them): the same 3,440
+ *  clicks as its countries above, rule 1 taking Germany and Austria (960 + 410). Each source tells its
+ *  own story: the printed QR code went out in Germany, the blog is read on phones, the news site on
+ *  computers elsewhere. */
+const FLOWS = [
+  [80, 820, 80],
+  [260, 300, 500],
+  [480, 150, 210],
+  [100, 100, 360],
+];
+
+/** Which rule took which clicks: the example link's sankey, in both themes. */
+function flowsBlock(locale: Locale, f: LinkCard['flows']): string {
+  const { num, o } = chartOptions(locale);
+  const total = FLOWS.flat().reduce((a, n) => a + n, 0);
+  const rows = FLOWS.flatMap((row, s) => row.map((n, d) => ({ source: f.sources[s]!, to: f.to[d]!, n })));
+  const { nodes, links } = flowChart(rows, { source: (k) => k, destination: (k) => k, rest: '', display: (n) => `${num(n)} · ${Math.round((n / total) * 100)}%` });
+  // A screen reader gets every flow as text, as in the app (ui/report.ts).
+  const desc = links.map((l) => `${nodes.find((x) => x.id === l.from)!.label} → ${nodes.find((x) => x.id === l.to)!.label}: ${l.display}`).join('; ');
+  // The library names its title by a hash of the chart; both themes' copies are in the page.
+  const chart = themed('demo__chart', (theme) => Sankey.sankey(nodes, links, { ...o(theme), title: f.title, desc }).replace(/\bcx-([0-9a-z]{12,})/gu, `cx-$1-${theme}`));
+  return `<section class="home-section narrow-section">
+  <h2>${escapeHtml(f.h)}</h2>
+  <p>${escapeHtml(f.p)}</p>
+  <figure class="demo flows-demo">${chart}</figure>
+  <p class="demo__note">${escapeHtml(f.note)}</p>
+</section>
+`;
 }
 
 const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
@@ -606,7 +656,7 @@ function stepFlow(steps: string[] | undefined): string {
   return `  <ol class="step-flow hero__steps">${items.join('<li class="step-separator" aria-hidden="true">→</li>')}</ol>\n`;
 }
 
-function page(locale: Locale, t: ProductText, illustration: string): { title: string; description: string; body: string } {
+function page(locale: Locale, t: ProductText, illustration: string, after = ''): { title: string; description: string; body: string } {
   const start = `<a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a>`;
   const features = t.sections.length === 3 ? 'features features--3' : 'features';
   const setup = t.setup
@@ -637,12 +687,12 @@ ${demo}<section class="home-section">
   <div class="${features}">${t.sections.map((x) => `<div class="card feature"><h2 class="h3">${escapeHtml(x.h)}</h2><p>${escapeHtml(x.p)}</p>${x.points ? `<ul class="ticks">${x.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</div>
   ${seeAlso(t.more ?? [], locale)}
 </section>
-${setup}${faq}${finalBlock(locale, t.final, t.start)}`;
+${after}${setup}${faq}${finalBlock(locale, t.final, t.start)}`;
   return { title: t.title, description: t.description, body };
 }
 
 export const analyticsPage = (locale: Locale) => page(locale, ANALYTICS[locale], demoReport(locale, 'pages'));
-export const linksPage = (locale: Locale) => page(locale, LINKS[locale], linkCard(locale, LINKS[locale].card));
+export const linksPage = (locale: Locale) => page(locale, LINKS[locale], linkCard(locale, LINKS[locale].card), flowsBlock(locale, LINKS[locale].card.flows));
 export const generatorsPage = (locale: Locale) => page(locale, GENERATORS[locale], flow(GENERATORS[locale].flow));
 export const pricingPage = (locale: Locale) => page(locale, PRICING[locale], plansBlock(PRICING[locale]));
 export const howPage = (locale: Locale) => page(locale, HOW[locale], flow(HOW[locale].flow));

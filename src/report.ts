@@ -29,17 +29,24 @@ export type Unavailable = 'not_installed' | 'cloudflare' | 'rate_limited';
 // are one pass over the rows joined with a list of dimension names, not six UNION ALL terms. The
 // value is named `val`, never `key`: json_each has a column `key`, and GROUP BY would take that one.
 const COLUMNS = { pages: 'page', sources: 'source', countries: 'country', devices: 'device', browsers: 'browser', os: 'os' } as const;
+/** A link's flows, source → destination (its `page`, edge/contract.ts `destinationOf`), as one more
+ *  dimension of the same pass: `source || ' ' || page` — a source is a host, `qr` or '' and has no
+ *  space. Up to FLOWS of them, far more than a chart's 8 × 8, so its top sources and destinations
+ *  add up. */
+const FLOW = "source || ' ' || page";
+const FLOWS = 200;
 const RANGE = 'hour >= CAST(?2 AS INTEGER) * 24 AND hour < CAST(?3 AS INTEGER) AND hour / 24 NOT IN (SELECT day FROM closed)';
-const BREAKDOWNS = `WITH closed AS (SELECT day FROM closed_days WHERE day >= CAST(?2 AS INTEGER) AND day * 24 + 24 <= CAST(?3 AS INTEGER)),
+const breakdownsSql = (dims: Record<string, string>) => `WITH closed AS (SELECT day FROM closed_days WHERE day >= CAST(?2 AS INTEGER) AND day * 24 + 24 <= CAST(?3 AS INTEGER)),
 v AS (SELECT page, source, country, device, browser, os, views FROM views_daily WHERE target = ?1 AND day IN (SELECT day FROM closed)
   UNION ALL SELECT page, source, country, device, browser, os, views FROM views_hourly WHERE target = ?1 AND ${RANGE}),
 b AS (SELECT category, hits FROM bots_daily WHERE target = ?1 AND day IN (SELECT day FROM closed)
   UNION ALL SELECT category, hits FROM bots_hourly WHERE target = ?1 AND ${RANGE}),
-d AS (SELECT j.value AS dim, CASE j.value ${Object.entries(COLUMNS)
+d AS (SELECT j.value AS dim, CASE j.value ${Object.entries(dims)
   .map(([dim, col]) => `WHEN '${dim}' THEN ${col}`)
-  .join(' ')} END AS val, sum(views) AS n FROM v CROSS JOIN json_each('${JSON.stringify(Object.keys(COLUMNS))}') j GROUP BY dim, val
+  .join(' ')} END AS val, sum(views) AS n FROM v CROSS JOIN json_each('${JSON.stringify(Object.keys(dims))}') j GROUP BY dim, val
   UNION ALL SELECT 'bots', category, sum(hits) FROM b GROUP BY category)
-SELECT dim, val AS key, n FROM (SELECT dim, val, n, row_number() OVER (PARTITION BY dim ORDER BY n DESC, val) AS r FROM d) WHERE r <= ${TOP}`;
+SELECT dim, val AS key, n FROM (SELECT dim, val, n, row_number() OVER (PARTITION BY dim ORDER BY n DESC, val) AS r FROM d) WHERE r <= CASE dim WHEN 'flows' THEN ${FLOWS} ELSE ${TOP} END`;
+const BREAKDOWNS = breakdownsSql(COLUMNS);
 
 // Answers kept for speed only, per isolate; a request already in flight is shared — the rate limit
 // included, so a burst of the same report spends one request of the limit.
@@ -77,6 +84,15 @@ function breakdownsOf(rows: Row[]): Breakdowns {
   const out = Object.fromEntries(DIMENSIONS.map((d) => [d, [] as { key: string; n: number }[]])) as Breakdowns;
   for (const r of rows) out[r.dim as keyof Breakdowns]?.push({ key: String(r.key), n: Number(r.n) });
   return out;
+}
+/** A link's breakdowns: its `pages` are its destinations, and `flows` pair them with the sources. */
+function linkBreakdownsOf(rows: Row[]): Breakdowns & { flows: { source: string; to: string; n: number }[] } {
+  const flows = rows.filter((r) => r.dim === 'flows').map((r) => {
+    const key = String(r.key);
+    const at = key.indexOf(' ');
+    return { source: key.slice(0, at), to: key.slice(at + 1), n: Number(r.n) };
+  });
+  return { ...breakdownsOf(rows), flows };
 }
 async function breakdowns(env: Env, userId: number, edge: EdgeAccount, target: string, from: number, until: number, now: number): Promise<Breakdowns> {
   return breakdownsOf((await userQuery(env, userId, edge, `b|${edge.id}|${target}|${from}|${until}`, BREAKDOWNS, [target, from, until], now)).rows);
@@ -154,7 +170,7 @@ const liveDays = (list: string) => `SELECT 'day' AS dim, json_object('day', t.da
  *  read, so the totals and the breakdowns of an answer are of the same moment (?1 target, ?2 and ?3
  *  the breakdowns' range, ?4 days). Two terms at the top level: within D1's five. */
 const LIVE_DAYS = liveDays('?2');
-const LIVE_WITH_BREAKDOWNS = `${BREAKDOWNS} UNION ALL ${liveDays('?4')}`;
+const LIVE_WITH_BREAKDOWNS = `${breakdownsSql({ ...COLUMNS, flows: FLOW })} UNION ALL ${liveDays('?4')}`;
 interface LiveDay {
   day: number;
   views: number;
@@ -212,5 +228,5 @@ export async function linkReport(env: Env, user: { id: number; plan: string }, e
     incomplete: false,
   };
   if (unavailable) return { ...report, ...(withBreakdowns ? { breakdowns: null } : {}), unavailable };
-  return withBreakdowns ? { ...report, breakdowns: breakdownsOf(rows.filter((r) => r.dim !== 'day')) } : report;
+  return withBreakdowns ? { ...report, breakdowns: linkBreakdownsOf(rows.filter((r) => r.dim !== 'day')) } : report;
 }

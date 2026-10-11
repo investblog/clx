@@ -296,6 +296,8 @@ describe('the report', () => {
     expect(r.series[10]).toEqual({ at: new Date(D0 + 10 * H).toISOString(), views: 2, bots: 1 });
     for (const dim of ['pages', 'sources', 'countries', 'devices', 'browsers', 'os']) expect(top(r.breakdowns, dim)).toBe(2);
     expect(top(r.breakdowns, 'bots')).toBe(1);
+    // Flows are a link's: a site's pages are pages, not destinations.
+    expect(r.breakdowns.flows).toBeUndefined();
     // Without breakdowns=1 the user's database is not read.
     const before = reads();
     expect((await report('period=today')).report.breakdowns).toBeUndefined();

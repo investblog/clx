@@ -2,6 +2,7 @@
 // (edge/worker.ts) redirects and counts from the config clx wrote into the fake account's database.
 import type { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseDestination } from '../edge/contract';
 import { signAccess } from '../src/auth/jwt';
 import type { EdgeAccount } from '../src/cf/connect';
 import { runLinkHosts } from '../src/cf/links';
@@ -203,7 +204,7 @@ describe('links', () => {
     expect((await addLink({ url: 'https://example.org/' })).body.error.code).toBe('link_host_required');
   });
 
-  it('a click: 302 to the URL, no-store, nothing else; counted as a view of the link', async () => {
+  it('a click: 302 to the URL, no-store, nothing else; counted as a view of the link, with where it went', async () => {
     const r = await addLink({ code: 'promo', url: 'https://shop.example.org/sale?x=1' });
     expect(r.status).toBe(201);
     // Answered before the sync, which runs after it.
@@ -214,7 +215,7 @@ describe('links', () => {
     expect(Object.fromEntries(res.headers)).toEqual({ location: 'https://shop.example.org/sale?x=1', 'cache-control': 'no-store' });
     const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
     expect(userDb().prepare('SELECT views FROM totals WHERE target = ?').get(t)).toEqual({ views: 1 });
-    expect(userDb().prepare('SELECT page, source, country, device FROM views_hourly WHERE target = ?').all(t)).toEqual([{ page: '', source: 'news.example.net', country: 'RS', device: 'desktop' }]);
+    expect(userDb().prepare('SELECT page, source, country, device FROM views_hourly WHERE target = ?').all(t)).toEqual([{ page: '>https://shop.example.org/sale?x=1', source: 'news.example.net', country: 'RS', device: 'desktop' }]);
     expect(userDb().prepare('SELECT count(*) AS n FROM visitors_daily WHERE target = ?').get(t)).toEqual({ n: 1 });
   });
 
@@ -343,6 +344,34 @@ describe('the report of a link', () => {
       { key: 'desktop', n: 1 },
       { key: 'mobile', n: 1 },
     ]);
+  });
+
+  it('flows: the clicks by source and by the rule that sent them — a rule to the main URL apart from it; 512 characters kept', async () => {
+    const long = `https://example.org/${'x'.repeat(600)}`;
+    const rules = [{ countries: ['DE'], url: 'https://example.org/de' }, { devices: ['mobile'], url: long }, { countries: ['RS'], url: 'https://example.org/' }];
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/', rules })).body.link.id;
+    await visit('https://go.example.com/promo?q', {}, 'DE');
+    await visit('https://go.example.com/promo', { referer: 'https://news.example.net/a', 'cf-connecting-ip': '198.51.100.8' }, 'DE');
+    await visit('https://go.example.com/promo', { referer: 'https://news.example.net/b', 'cf-connecting-ip': '198.51.100.9' }, 'RS');
+    // A phone in Serbia: the phone rule comes first.
+    await visit('https://go.example.com/promo', { 'user-agent': IPHONE, 'cf-connecting-ip': '198.51.100.10' }, 'RS');
+    await visit('https://go.example.com/promo', { referer: 'https://news.example.net/c', 'cf-connecting-ip': '198.51.100.11' }, 'US');
+    const b = (await call('GET', `/v1/links/${id}/report?period=today&breakdowns=1`)).body.report.breakdowns;
+    const phone = `;mobile>${long}`.slice(0, 512);
+    expect(b.flows).toEqual([
+      { source: '', to: phone, n: 1 },
+      { source: 'news.example.net', to: '>https://example.org/', n: 1 },
+      { source: 'news.example.net', to: 'DE;>https://example.org/de', n: 1 },
+      { source: 'news.example.net', to: 'RS;>https://example.org/', n: 1 },
+      { source: 'qr', to: 'DE;>https://example.org/de', n: 1 },
+    ]);
+    expect(b.pages).toEqual([
+      { key: 'DE;>https://example.org/de', n: 2 },
+      { key: phone, n: 1 },
+      { key: '>https://example.org/', n: 1 },
+      { key: 'RS;>https://example.org/', n: 1 },
+    ]);
+    expect(b.flows.map((f: { to: string }) => parseDestination(f.to))).toContainEqual({ rule: { countries: [], devices: ['mobile'] }, url: long.slice(0, 504) });
   });
 
   it('closed days from clx.cx, today from the account; the 7 days add up', async () => {

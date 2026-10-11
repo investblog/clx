@@ -39,6 +39,11 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       not the `503 Retry-After` of §8, which comes only when the host was readable and the link was
       not. Answer 503 for a host routed to the worker whose config cannot be read; until then the
       pricing page says only that links stop working.
+- [ ] **Views over the detail caps show as direct** (found 11.10 with ADR 0019): the `(other)` row
+      keeps only `page = '(other)'`, so in the `sources` breakdown its views have source `''` and the
+      app names them "Direct" (the other dimensions: "Unknown"). The flows chart already treats that
+      row as other on both sides; the per-dimension breakdowns should do the same (in `src/report.ts`,
+      not the worker).
 - [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published
       and `src/qr` gives way to the dependency (ADR 0009).
 
