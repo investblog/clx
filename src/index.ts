@@ -11,6 +11,7 @@ import { hook } from './hook';
 import { sendNotice } from './mail';
 import { appUrl, MAIL, recipient } from './mail-text';
 import { MARKDOWN_PAGES, servePage } from './markdown';
+import { mcp } from './mcp/index';
 import type { Env } from './types';
 import { IDEM_TTL } from './v1/idempotency';
 import { v1 } from './v1/index';
@@ -64,6 +65,8 @@ app.route('/auth', signup);
 app.route('/v1', v1);
 app.route('/admin', admin);
 app.route('/hook', hook);
+// The MCP server (§15, ADR 0023): its tools call this same app, so /v1 runs as for any request.
+app.route('/mcp', mcp((request, env, ctx) => app.fetch(request, env, ctx)));
 // The pages with a markdown copy: markdown to `Accept: text/markdown`, else the HTML file (§16).
 for (const path of Object.keys(MARKDOWN_PAGES)) app.on(['GET', 'HEAD'], path, (c) => servePage(c.req.raw, c.env, path));
 

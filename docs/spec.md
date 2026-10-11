@@ -926,6 +926,38 @@ that adds a site and embeds its counter at build time.
   rights of §3), `POST /v1/sites` per site, and the `snippet` from the answer embedded into every
   page at build time. The snippet is stable, so rebuilding a site needs no call; only `rotate`
   changes it.
+- **MCP** ([ADR 0023](./decisions/0023-mcp-server.md)). `POST https://clx.cx/mcp` — a stateless
+  MCP server over Streamable HTTP, the same `/v1` as tools, for agents that speak MCP (Claude Code,
+  Cursor, VS Code and the like):
+  - **one implementation**: a tool calls `/v1` inside the Worker with the caller's headers — the
+    key's scopes, allow lists, rate limit, idempotency and checks are `/v1`'s own; the MCP layer only
+    maps arguments to a request and the answer to a result;
+  - **sign-in** — an API key only, `Authorization: Bearer clx_…` (the app's session token, with
+    every scope and none of a key's limits, is refused). `initialize`, `server/discover`,
+    `tools/list` and the resources answer without one, so directories see the tools; `tools/call`
+    without one is `401` with `WWW-Authenticate: Bearer`. No OAuth for now: connectors that require
+    it (claude.ai's) cannot connect. A request with an `Origin` other than clx.cx is `403` (DNS
+    rebinding); native clients send none; no CORS;
+  - **tools** — every `/v1` call a key may make (not those for a page session only: keys, the
+    language, deleting the account), one tool each; reads are `readOnlyHint`; a change that replaces
+    or removes (update, rotate, reinstall, renew, a new link host, delete, disconnect)
+    `destructiveHint`; all but `whoami` `openWorldHint` (they reach the user's Cloudflare). A
+    mutating tool takes an optional `idempotency_key` (1–200 visible ASCII characters, as the header);
+    without it the server makes one, and a repeated call is not protected (the tool says so). An
+    error of `/v1` is the tool's result with `isError` and the same code and message (`429` with
+    its `retry_after`); an argument the tool does not list is refused. A test holds the tools to
+    `docs/openapi.yaml`;
+  - **resources** — the documents for agents: `/agents.md`, `/api.md`, `/auth.md`, `/openapi.yaml`;
+  - **protocol**: revision `2026-07-28` (no `initialize`, no session: `_meta` in every request and
+    the `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` headers matching the body; `server/discover`)
+    and, through `initialize`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`, never with
+    `Mcp-Session-Id`. `POST` only (`OPTIONS` 204, others 405), JSON answers, notifications `202`, no
+    batches; the body is capped by bytes, the answer too (refused, never cut). No SDK: the layer is
+    clx's own, after spintax.net's;
+  - **discovery**: the server card at `/.well-known/mcp/server-card.json` and `server-cards.json`
+    (SEP-2127 is a draft: a conservative superset), an entry in `/.well-known/api-catalog`,
+    `llms.txt`, and how to connect on `/agents`. A DNS-AID record (`_mcp._agents.clx.cx`) and the
+    official MCP registry are the owner's steps.
 
 ## 16. The site and the app
 

@@ -24,7 +24,7 @@ const exists = (f) => fs.existsSync(path.join(OUT, f));
 const expected = new Set(ALL_LOCALES.map((l) => fileFor('/app', l)));
 for (const p of SITE_PAGES) for (const l of p.locales) expected.add(fileFor(p.slug, l));
 const markdown = SITE_PAGES.filter((p) => p.markdown).map((p) => markdownFile(p.slug));
-const agentFiles = ['llms.txt', 'auth.md', '.well-known/auth.md', '.well-known/api-catalog', '.well-known/agent-skills/index.json', 'openapi.yaml', 'openapi.json', ...markdown];
+const agentFiles = ['llms.txt', 'auth.md', '.well-known/auth.md', '.well-known/api-catalog', '.well-known/agent-skills/index.json', '.well-known/mcp/server-card.json', '.well-known/mcp/server-cards.json', 'openapi.yaml', 'openapi.json', ...markdown];
 for (const f of [...expected, 'app.js', 'site.js', 'app.css', 'robots.txt', 'sitemap.xml', ...STATIC_FILES, ...agentFiles]) if (!exists(f)) problems.push(`missing public/${f}`);
 
 for (const config of ['wrangler.example.jsonc', 'wrangler.jsonc'].filter((f) => fs.existsSync(f))) {
@@ -89,10 +89,11 @@ for (const f of pages) {
 }
 
 // The files for agents link with absolute addresses.
-const own = new RegExp(`${ORIGIN.replaceAll('.', '\\.')}(/[^\\s)"'<>]*)`, 'gu');
+// A backtick ends an address too: markdown's code spans. /v1 and /mcp are the Worker's, not files.
+const own = new RegExp(`${ORIGIN.replaceAll('.', '\\.')}(/[^\\s)"'<>\`]*)`, 'gu');
 for (const f of agentFiles.filter((x) => exists(x) && !x.startsWith('openapi')))
   for (const [, href] of fs.readFileSync(path.join(OUT, f), 'utf8').matchAll(own))
-    if (!/^\/(v1|app|ru\/app)\b/u.test(href) && !served(href.replace(/[.,;:]+$/u, ''))) problems.push(`public/${f}: ${ORIGIN}${href} leads nowhere`);
+    if (!/^\/(v1|mcp|app|ru\/app)\b/u.test(href) && !served(href.replace(/[.,;:]+$/u, ''))) problems.push(`public/${f}: ${ORIGIN}${href} leads nowhere`);
 
 if (problems.length) {
   console.error(`check-site: ${problems.length} problem(s)\n  ${problems.join('\n  ')}`);

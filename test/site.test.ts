@@ -472,6 +472,19 @@ describe('generated pages', () => {
     expect(read(skill.url.slice(1))).toMatch(/^---\nname: clx-sites\ndescription: .+\n---\n/u);
   });
 
+  it('the MCP server card, at both paths in use, names the live server; the catalog and llms.txt point to it', () => {
+    const card = JSON.parse(read('.well-known/mcp/server-card.json'));
+    expect(read('.well-known/mcp/server-cards.json')).toBe(read('.well-known/mcp/server-card.json'));
+    expect(card).toMatchObject({ name: 'cx.clx/mcp', url: 'https://clx.cx/mcp', transport: 'streamable-http', serverInfo: { name: 'clx' }, protocolVersions: ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] });
+    expect(card.servers[0].remotes[0]).toMatchObject({ type: 'streamable-http', url: 'https://clx.cx/mcp', headers: [{ name: 'Authorization', isSecret: true }] });
+    // The registry caps a summary at 100 characters.
+    expect(card.servers[0].summary.length).toBeLessThanOrEqual(100);
+    const catalog = JSON.parse(read('.well-known/api-catalog'));
+    expect(catalog.linkset[1]).toMatchObject({ anchor: 'https://clx.cx/mcp', 'service-desc': [{ href: 'https://clx.cx/.well-known/mcp/server-card.json' }] });
+    expect(read('llms.txt')).toContain('(https://clx.cx/mcp)');
+    expect(read('agents.md')).toContain('claude mcp add --transport http clx https://clx.cx/mcp');
+  });
+
   it('the Russian footer links the English-only agent docs in English', () => {
     expect(read('ru.html')).toContain('<a href="/agents" hreflang="en">');
     expect(read('agents.html')).not.toContain('hreflang="ru"');

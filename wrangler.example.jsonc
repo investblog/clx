@@ -16,7 +16,7 @@
     "binding": "ASSETS",
     "html_handling": "drop-trailing-slash",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/auth/*", "/v1/*", "/admin/*", "/hook/*", "/", "/agents", "/api"]
+    "run_worker_first": ["/auth/*", "/v1/*", "/mcp", "/admin/*", "/hook/*", "/", "/agents", "/api"]
   },
   // Secrets (scripts/secrets.mjs): JWT_SECRET, MASTER_KEYS. Tests set their own (test/env.ts).
   "d1_databases": [

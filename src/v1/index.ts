@@ -92,7 +92,10 @@ v1.get(
     )
       .bind(p.userId)
       .first<{ cf_accounts: number; api_keys: number }>();
-    return { status: 200, body: { user, plan: planOf(p.plan), limits: LIMITS[planOf(p.plan)], use, via: p.via } };
+    // snake_case, as `use` and the rest of /v1 (the table in src/limits.ts is camelCase).
+    const l = LIMITS[planOf(p.plan)];
+    const limits = { cf_accounts: l.cfAccounts, sites: l.sites, links: l.links, rules_per_link: l.rulesPerLink, api_keys: l.apiKeys };
+    return { status: 200, body: { user, plan: planOf(p.plan), limits, use, via: p.via } };
   }),
 );
 

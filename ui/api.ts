@@ -99,7 +99,7 @@ export async function text(path: string): Promise<string> {
 export interface Me {
   user: { id: number; email: string; email_confirmed: boolean; locale: string };
   plan: 'free' | 'api';
-  limits: { cfAccounts: number; sites: number; links: number; apiKeys: number };
+  limits: { cf_accounts: number; sites: number; links: number; rules_per_link: number; api_keys: number };
   use: { cf_accounts: number; api_keys: number };
 }
 

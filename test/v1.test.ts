@@ -44,7 +44,7 @@ describe('/v1 basics', () => {
 
   it('me: plan, limits, use', async () => {
     const r = await call('GET', '/v1/me', { auth: await session(1) });
-    expect(r.body).toMatchObject({ user: { email: 'free@example.com' }, plan: 'free', limits: { cfAccounts: 1 }, use: { cf_accounts: 0 } });
+    expect(r.body).toMatchObject({ user: { email: 'free@example.com' }, plan: 'free', limits: { cf_accounts: 1, sites: 10, links: 200, rules_per_link: 10, api_keys: 1 }, use: { cf_accounts: 0 } });
   });
 });
 

@@ -1,6 +1,8 @@
-// What clx tells an AI agent: the /agents page, the skill file, auth.md and llms.txt. English only —
-// the reader is a program. Written by hand, against docs/openapi.yaml (the /api page is made from
-// it); a curl here that the API does not take is a bug of this file.
+// What clx tells an AI agent: the /agents page, the skill file, auth.md, llms.txt and the MCP server
+// card. English only — the reader is a program. Written by hand, against docs/openapi.yaml (the /api
+// page is made from it); a curl here that the API does not take is a bug of this file.
+import { SUPPORTED_VERSIONS } from '../src/mcp/protocol.ts';
+import { SERVER_INFO, TABLE } from '../src/mcp/table.ts';
 import { ORIGIN } from './pages.ts';
 
 export const SKILL = {
@@ -31,6 +33,15 @@ export function agentsBody(): string {
 </li>
 </ol>
 <p>Do not store the bootstrap token or print it in logs; do not ask for a Global API Key — clx does not take one.</p>
+
+<h2 id="mcp">If your client speaks MCP</h2>
+<p>The same API is an MCP server at <code>${ORIGIN}/mcp</code> (Streamable HTTP, stateless; revision 2026-07-28 and the older ones through <code>initialize</code>). Sign in with the same key; every call below is a tool of the same name and arguments — <code>whoami</code>, <code>connect_account</code>, <code>add_site</code>, <code>add_link</code>, <code>link_report</code> and the rest. A mutating tool takes an optional <code>idempotency_key</code>: pass one and reuse it when you retry.</p>
+<pre><code># Claude Code
+claude mcp add --transport http clx ${ORIGIN}/mcp --header "Authorization: Bearer $CLX_KEY"
+
+# Cursor, VS Code and other clients: a remote server with a header
+{ "mcpServers": { "clx": { "url": "${ORIGIN}/mcp", "headers": { "Authorization": "Bearer clx_..." } } } }</code></pre>
+<p>The server card: <a href="/.well-known/mcp/server-card.json">/.well-known/mcp/server-card.json</a>. There is no OAuth, so connectors that require it (claude.ai's) cannot connect yet.</p>
 
 <h2 id="connect">1. Connect the account</h2>
 <pre><code>export CLX=https://clx.cx
@@ -148,6 +159,9 @@ PATCH and DELETE (new per action, the same on retry).
    QR at \`GET /v1/links/{id}/qr.svg\`.
 4. \`GET /v1/sites/{id}/report?period=7d&breakdowns=1\` (and \`/v1/links/{id}/report\`). Totals arrive hourly.
 
+Over MCP: the same calls are tools of \`${ORIGIN}/mcp\` with the same key (\`whoami\`, \`connect_account\`,
+\`add_site\`, \`add_link\`, \`site_report\`, …); pass \`idempotency_key\` to mutating tools.
+
 ## Rules
 - Branch on \`error.code\`; show \`error.message\` to the person and stop on a \`4xx\` you cannot fix.
 - \`429\`: wait \`Retry-After\`. \`409 operation_in_progress\`: retry in a few seconds.
@@ -168,6 +182,8 @@ clx's management API (${ORIGIN}/v1) takes **bearer API keys**:
   \`links\`, \`reports\`) and, optionally, the Cloudflare accounts and client IPs it may be used for.
   The key is shown once; one per user on the free plan, up to 5 on the \`api\` plan (switched on by
   clx on request), revoked one by one.
+
+The MCP server (${ORIGIN}/mcp) takes the same key in the same header.
 
 ## Registration / provisioning
 There is no OAuth and no self-service registration for agents: an agent gets its key from its
@@ -193,6 +209,7 @@ export function llmsTxt(): string {
 - [Management API](${ORIGIN}/api.md): every endpoint, authentication, idempotency, errors
 - [OpenAPI](${ORIGIN}/openapi.json): the contract, machine-readable
 - [Authentication](${ORIGIN}/auth.md): how keys are issued
+- [MCP server](${ORIGIN}/mcp): the same API as MCP tools, signed in with the same key ([server card](${ORIGIN}/.well-known/mcp/server-card.json))
 - [Agent skill](${ORIGIN}/.well-known/agent-skills/${SKILL.name}/SKILL.md)
 
 ## Policies
@@ -201,6 +218,53 @@ export function llmsTxt(): string {
 - [Terms](${ORIGIN}/terms)
 - [Abuse](${ORIGIN}/abuse)
 `;
+}
+
+/** The MCP server card (ADR 0023): SEP-2127 is a draft, so a conservative superset of the shapes in
+ *  use — the discovery fields and the registry's `servers[]` with its remote — as spintax.net's. It
+ *  describes the live server at /mcp; its name and version are the server's own (src/mcp/table.ts). */
+export function mcpServerCard(): string {
+  const description = `The clx management API as MCP tools: connect a Cloudflare account, add sites and get their counter snippet, make short links with rules and QR codes, read visit and click reports. ${TABLE.length} tools, one per /v1 call an API key may make; sign in with the person's clx API key.`;
+  const auth = { type: 'bearer', header: 'Authorization', format: 'Bearer clx_…', documentation: `${ORIGIN}/auth.md` };
+  const common = {
+    protocolVersions: SUPPORTED_VERSIONS,
+    capabilities: { tools: { listChanged: false }, resources: {} },
+    authentication: auth,
+  };
+  return `${JSON.stringify(
+    {
+      $comment: 'MCP Server Card. SEP-2127 is still a draft, so this card is a conservative superset of the shapes in circulation (registry server.json remotes + discovery fields). It describes a real, live server.',
+      name: 'cx.clx/mcp',
+      title: SERVER_INFO.title,
+      description,
+      serverInfo: SERVER_INFO,
+      url: `${ORIGIN}/mcp`,
+      transport: 'streamable-http',
+      ...common,
+      version: '1',
+      servers: [
+        {
+          name: 'cx.clx/mcp',
+          title: SERVER_INFO.title,
+          description,
+          summary: 'Visit counting and short links on your own Cloudflare account, as MCP tools.',
+          version: SERVER_INFO.version,
+          websiteUrl: `${ORIGIN}/agents`,
+          icons: [{ src: `${ORIGIN}/apple-touch-icon.png`, mimeType: 'image/png', sizes: ['180x180'] }],
+          remotes: [
+            {
+              type: 'streamable-http',
+              url: `${ORIGIN}/mcp`,
+              headers: [{ name: 'Authorization', description: 'Bearer and the person’s clx API key (clx_…), issued at https://clx.cx/app#/keys', isRequired: true, isSecret: true }],
+            },
+          ],
+          ...common,
+        },
+      ],
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 export function apiCatalog(): string {
@@ -212,6 +276,11 @@ export function apiCatalog(): string {
           'service-desc': [{ href: `${ORIGIN}/openapi.json`, type: 'application/openapi+json', title: 'OpenAPI description' }],
           'service-doc': [{ href: `${ORIGIN}/api`, type: 'text/html', title: 'Management API reference' }],
           describedby: [{ href: `${ORIGIN}/agents`, type: 'text/html', title: 'Guide for AI agents' }],
+        },
+        {
+          anchor: `${ORIGIN}/mcp`,
+          'service-desc': [{ href: `${ORIGIN}/.well-known/mcp/server-card.json`, type: 'application/json', title: 'MCP server card' }],
+          'service-doc': [{ href: `${ORIGIN}/agents#mcp`, type: 'text/html', title: 'Connecting over MCP' }],
         },
       ],
     },

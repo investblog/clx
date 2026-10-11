@@ -90,8 +90,8 @@ export function confirmAction(text: string, ask: { title: string; body: string; 
 
 export async function accountsPage(me: Me): Promise<HTMLElement> {
   const { accounts } = await call<{ accounts: Account[] }>('GET', '/v1/accounts');
-  const room = me.use.cf_accounts < me.limits.cfAccounts;
-  const head = pageHead(t.accounts.title, room ? h('a', { class: 'btn btn--primary', href: '#/connect' }, t.accounts.connect) : h('span', { class: 'muted' }, t.accounts.atLimit(me.use.cf_accounts, me.limits.cfAccounts)));
+  const room = me.use.cf_accounts < me.limits.cf_accounts;
+  const head = pageHead(t.accounts.title, room ? h('a', { class: 'btn btn--primary', href: '#/connect' }, t.accounts.connect) : h('span', { class: 'muted' }, t.accounts.atLimit(me.use.cf_accounts, me.limits.cf_accounts)));
   if (!accounts.length) return h('div', {}, head, h('div', { class: 'card empty-state' }, h('p', {}, t.accounts.empty), h('p', {}, h('a', { href: '#/connect' }, t.accounts.emptyLink))));
   return h(
     'div',
@@ -386,8 +386,8 @@ export async function keysPage(me: Me, redraw: (message?: string) => void): Prom
   return h(
     'div',
     { class: 'stack stack--md' },
-    pageHead(t.titles.keys, me.use.api_keys < me.limits.apiKeys ? add : null),
-    h('p', { class: 'muted' }, i1, h('a', { href: '/agents' }, iLink ?? ''), `${i2} ${me.plan === 'api' ? k.api(me.limits.apiKeys) : k.free}`),
+    pageHead(t.titles.keys, me.use.api_keys < me.limits.api_keys ? add : null),
+    h('p', { class: 'muted' }, i1, h('a', { href: '/agents' }, iLink ?? ''), `${i2} ${me.plan === 'api' ? k.api(me.limits.api_keys) : k.free}`),
     keys.length
       ? table(
           [[k.colKey], [k.colScopes], [k.colAccounts, 'medium'], [k.colIps, 'low'], [k.colCreated, 'low'], [k.colUsed, 'medium'], ['']],

@@ -23,12 +23,12 @@ components:
       name: Idempotency-Key
       in: header
       required: false
-      schema: { type: string, minLength: 1, maxLength: 200 }
+      schema: { type: string, minLength: 1, maxLength: 200, pattern: '^[!-~]{1,200}$' }
     Id:
       name: id
       in: path
       required: true
-      schema: { type: string }
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$', description: 'an id of clx: 22 characters of base64url' }
   schemas:
     Error:
       type: object
@@ -254,8 +254,8 @@ paths:
                 properties:
                   user: { type: object, properties: { id: { type: integer }, email: { type: string }, email_confirmed: { type: boolean }, locale: { type: string, enum: [en, ru], description: "The language of the app after sign-in and of clx's e-mails" } } }
                   plan: { type: string, enum: [free, api] }
-                  limits: { type: object }
-                  use: { type: object }
+                  limits: { type: object, description: "the plan's limits", properties: { cf_accounts: { type: integer }, sites: { type: integer }, links: { type: integer }, rules_per_link: { type: integer }, api_keys: { type: integer } } }
+                  use: { type: object, description: "what is in use now", properties: { cf_accounts: { type: integer }, api_keys: { type: integer } } }
                   via: { type: string, enum: [session, key] }
         default: { $ref: '#/components/responses/Error' }
     patch:

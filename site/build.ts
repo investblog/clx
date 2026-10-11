@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import TurndownService from 'turndown';
-import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, skillMd } from './agents.ts';
+import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, mcpServerCard, skillMd } from './agents.ts';
 import { apiBody, apiJson, loadOpenapi } from './api.ts';
 import { ALL_LOCALES, LOCALES, ORIGIN, REPO, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
@@ -113,6 +113,8 @@ write('llms.txt', llmsTxt());
 write('auth.md', authMd());
 write('.well-known/auth.md', authMd());
 write('.well-known/api-catalog', apiCatalog());
+// The MCP server card (ADR 0023) at both paths in use: Cloudflare's announcement and isitagentready's probe.
+for (const f of ['server-card.json', 'server-cards.json']) write(`.well-known/mcp/${f}`, mcpServerCard());
 const skill = skillMd();
 write(`.well-known/agent-skills/${SKILL.name}/SKILL.md`, skill);
 write(
