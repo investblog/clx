@@ -40,6 +40,47 @@ describe('generated pages', () => {
     execFileSync(process.execPath, ['site/build.ts'], { stdio: 'pipe' });
   });
 
+  it('keywords.json: every page worth a link, in its languages; anchors pass the link pipeline’s rules', () => {
+    const raw = read('keywords.json');
+    expect(raw.charCodeAt(0)).not.toBe(0xfeff);
+    const map = JSON.parse(raw) as { generated: string; pages: { url: string; locale: string; type: string; primary: string; keywords: string[]; title: string; tags: string[]; excerpt: string; date: string }[] };
+    expect(Number.isNaN(Date.parse(map.generated))).toBe(false);
+    const targets = SITE_PAGES.filter((p) => p.indexed && !p.legal).flatMap((p) => p.locales.map((l) => urlFor(p.slug, l)));
+    expect(map.pages.map((e) => e.url).sort()).toEqual([...targets].sort());
+    const word = /[\p{L}\p{N}]+(?:['-][\p{L}\p{N}]+)*/u.source;
+    const plain = new RegExp(`^${word}(?: ${word})*$`, 'u');
+    for (const l of ['en', 'ru']) {
+      const all = map.pages.filter((e) => e.locale === l).flatMap((e) => [e.primary, ...e.keywords]);
+      expect(new Set(all.map((a) => a.toLowerCase())).size, `${l}: an anchor of two targets`).toBe(all.length);
+    }
+    for (const e of map.pages) {
+      expect(/^\/ru(\/|$)/u.test(new URL(e.url).pathname) === (e.locale === 'ru'), e.url).toBe(true);
+      expect(e.type).toBe(e.url === urlFor('/', e.locale as 'en' | 'ru') ? 'general' : 'product');
+      expect(e.keywords.length, e.url).toBeGreaterThanOrEqual(3);
+      expect(e.keywords.length, e.url).toBeLessThanOrEqual(5);
+      expect(e.title && e.excerpt && e.tags.length, e.url).toBeTruthy();
+      expect(e.date).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+      for (const a of [e.primary, ...e.keywords]) {
+        expect(a, e.url).toMatch(plain);
+        const words = a.toLowerCase().split(' ');
+        expect(words.length, a).toBeGreaterThanOrEqual(2);
+        expect(words.length, a).toBeLessThanOrEqual(7);
+        // No word twice, nor its root (the first five letters of a longer word), the parts of a
+        // hyphenated word counted on their own.
+        const roots = words.flatMap((w) => w.split('-')).map((w) => (w.length > 5 ? w.slice(0, 5) : w));
+        expect(new Set(roots).size, a).toBe(roots.length);
+        // The page's language: English in Latin letters; Russian in Cyrillic, Latin only for names
+        // (clx, Cloudflare, LiveInternet, QR, AGPL, API).
+        if (e.locale === 'en') expect(a, a).toMatch(/^[\p{Script=Latin}\p{N} '-]+$/u);
+        else {
+          expect(a, a).toMatch(/^[\p{Script=Cyrillic}\p{Script=Latin}\p{N} '-]+$/u);
+          expect(a.split(' ').filter((w) => /\p{Script=Cyrillic}/u.test(w)).length, a).toBeGreaterThanOrEqual(1);
+          for (const w of a.split(/[ -]/u).filter((x) => /\p{Script=Latin}/u.test(x))) expect(['clx', 'Cloudflare', 'Workers', 'LiveInternet', 'QR', 'AGPL', 'API'], a).toContain(w);
+        }
+      }
+    }
+  });
+
   it('every page of the table, in its languages, with canonical and hreflang; the 404 is noindex', () => {
     for (const p of SITE_PAGES)
       for (const l of p.locales) {

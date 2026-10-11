@@ -50,6 +50,7 @@ public/*.html
 public/ru/
 public/robots.txt
 public/sitemap.xml
+public/keywords.json
 public/*.md
 public/llms.txt
 public/openapi.*

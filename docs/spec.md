@@ -1005,6 +1005,12 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   with XSLT it becomes a page in the site's style, one row per page with its languages; elsewhere it
   is plain XML. A `<url>` holds only `loc`, `xhtml:link`, `changefreq` and `priority`
   ([ADR 0020](./decisions/0020-sitemap-view-xslt.md)).
+- **Anchor map.** `/keywords.json` gives each indexed page and language except the legal ones the
+  words other sites may link to it with: a `primary` anchor and 3–5 others, `type` (`general` for a
+  home page, `product` for the rest), the page's own title and description, tags, a date. Anchors
+  and tags live in `site/keywords.ts`; title and description are taken from the rendered page. A
+  test checks the pipeline's mechanical rules; that an anchor is a noun phrase and says what its
+  page says is checked by reading ([ADR 0025](./decisions/0025-anchor-map.md)).
 - **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`) and the site's script
   (`public/site.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
   result before every deploy. Nothing generated is committed.

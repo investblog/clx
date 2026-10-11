@@ -1,6 +1,7 @@
 // node site/build.ts — prints every page of the table (site/pages.ts) × its languages into public/,
 // writes the app's page of each language (app.html, ru/app.html), robots.txt and sitemap.xml. Run by
 // scripts/build-ui.mjs; the output is not committed. Node runs this file as is (type stripping).
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,6 +14,7 @@ import { home } from './home.ts';
 import { faqGroups, faqPage } from './faq.ts';
 import { analyticsPage, generatorsPage, howPage, linksPage, openSourcePage, pricingPage } from './products.ts';
 import { bitlyPage, clckPage, liveinternetPage, parentPage, plausiblePage } from './compare.ts';
+import { KEYWORDS } from './keywords.ts';
 import { escapeHtml, footer, header, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
 
@@ -72,10 +74,11 @@ function structuredData(page: PageDef, locale: Locale, content: { title: string;
   return [crumbs, { '@type': 'FAQPage', inLanguage: lang, mainEntity: questions.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }];
 }
 
-function render(page: PageDef, locale: Locale): string {
-  const content = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(locale) ?? null);
+function render(page: PageDef, locale: Locale): { html: string; title: string; description?: string } {
+  const content: { title: string; description?: string; body: string } | null = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(locale) ?? null);
   if (!content) throw new Error(`no template for ${page.slug}`);
-  return layout({ page, locale, ...content, jsonLd: page.indexed ? structuredData(page, locale, content) : undefined });
+  const html = layout({ page, locale, ...content, jsonLd: page.indexed ? structuredData(page, locale, content) : undefined });
+  return { html, title: content.title, description: content.description };
 }
 
 function write(file: string, text: string): void {
@@ -94,10 +97,21 @@ function toMarkdown(html: string): string {
   return `${turndown.turndown(main).replace(/\]\(\//gu, `](${ORIGIN}/`)}\n`;
 }
 
+// The anchor map for sites that link here (site/keywords.ts): an entry per page and language, its title
+// and excerpt the page's own. The date is the last change of the site's source, or today outside git.
+let changed = new Date().toISOString().slice(0, 10);
+try {
+  changed = execFileSync('git', ['log', '-1', '--format=%cs', '--', 'site'], { encoding: 'utf8' }).trim() || changed;
+} catch {
+  // not a git checkout
+}
+const anchors: Record<string, unknown>[] = [];
 for (const page of SITE_PAGES)
   for (const locale of page.locales) {
-    const html = render(page, locale);
+    const { html, title, description } = render(page, locale);
     write(fileFor(page.slug, locale), html);
+    const kw = KEYWORDS[page.slug]?.[locale];
+    if (kw) anchors.push({ url: urlFor(page.slug, locale), locale, type: page.slug === '/' ? 'general' : 'product', primary: kw.primary, keywords: kw.keywords, title: title.replace(/ — clx$/u, ''), tags: kw.tags, excerpt: description, date: changed });
     // The home page's markdown is the index of the docs (llms.txt), not its marketing text.
     if (page.markdown && locale === 'en') write(markdownFile(page.slug), page.slug === '/' ? llmsTxt() : toMarkdown(html));
   }
@@ -128,6 +142,7 @@ write(
     2,
   )}\n`,
 );
+write('keywords.json', `${JSON.stringify({ generated: new Date().toISOString(), pages: anchors }, null, 2)}\n`);
 write('openapi.yaml', openapi.text);
 write('openapi.json', apiJson(openapi.doc));
 
