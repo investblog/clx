@@ -92,10 +92,10 @@ const en: Strings = {
     },
     why: {
       h2: 'Why clx',
-      links: [['Where your data lives', '/how-it-works'], ['Open source', '/open-source'], ['clx and 301.st', '/vs-301']],
+      links: [['Where your data lives', '/how-it-works'], ['No shared footprint, in detail', '/for-site-generators'], ['Open source', '/open-source'], ['clx and 301.st', '/vs-301']],
       items: [
         ['Your data stays with you', 'Visits, clicks and their breakdowns live in a D1 database in your Cloudflare account. clx.cx stores only totals by hour and by day.'],
-        ['Nothing third-party in your pages', 'The snippet is served from your own domain and sets no cookies.'],
+        ['No shared footprint across your sites', 'Every site gets its own path, script and collector names and snippet code, generated from a random seed. The counter loads from your own domain and reports to it, with no cookie and no third-party host: nothing in the pages ties your sites to each other or to clx.'],
         ['Cloudflare’s free plan is often enough', 'Workers Free allows 100,000 requests and 100,000 D1 writes a day per account, shared with your other workers: for a typical account about 11,000 counted events a day at worst, usually several times that. clx warns you when the account nears its quota.'],
         ['Open source', 'The worker, clx.cx and these pages are open under AGPL-3.0: read what runs in your account.'],
       ],
@@ -190,10 +190,10 @@ const ru: Strings = {
     },
     why: {
       h2: 'Почему clx',
-      links: [['Где лежат ваши данные', '/how-it-works'], ['Открытый код', '/open-source'], ['clx и 301.ru', '/vs-301']],
+      links: [['Где лежат ваши данные', '/how-it-works'], ['Подробнее о следе', '/for-site-generators'], ['Открытый код', '/open-source'], ['clx и 301.ru', '/vs-301']],
       items: [
         ['Данные остаются у вас', 'Посещения, клики и их разбивки лежат в базе D1 в вашем аккаунте Cloudflare. На clx.cx хранятся только итоги по часам и дням.'],
-        ['Ничего чужого на страницах', 'Сниппет грузится с вашего же домена и не ставит cookie.'],
+        ['Без общего следа между сайтами', 'У каждого сайта свой путь, свои имена скрипта и сборщика и свой код сниппета — из случайного зерна. Счётчик грузится с вашего же домена и шлёт отметки туда же, без cookie и стороннего хоста: по страницам не связать ваши сайты ни между собой, ни с clx.'],
         ['Часто хватает бесплатного Cloudflare', 'Workers Free даёт аккаунту 100 000 запросов и 100 000 записей D1 в сутки — на все его воркеры: типичному аккаунту это ~11 000 событий в сутки в худшем случае, обычно в несколько раз больше. clx предупредит, когда аккаунт подойдёт к квоте.'],
         ['Открытый код', 'Воркер, clx.cx и эти страницы открыты под AGPL-3.0: видно, что работает в вашем аккаунте.'],
       ],
