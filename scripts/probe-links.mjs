@@ -150,7 +150,7 @@ try {
   const dbs = await cfAdmin('GET', `/accounts/${account}/d1/database?name=clx-edge`);
   const db = dbs.find((d) => d.name === 'clx-edge');
   const q = async (sql) => (await cfAdmin('POST', `/accounts/${account}/d1/database/${db.uuid}/query`, { sql }))[0].results;
-  const target = (await q(`SELECT data FROM cfg WHERE key = 'link:p${run}' ORDER BY revision DESC LIMIT 1`)).map((r) => JSON.parse(r.data).t)[0];
+  const target = (await q(`SELECT data FROM cfg WHERE key = 'link:${host}/p${run}' ORDER BY revision DESC LIMIT 1`)).map((r) => JSON.parse(r.data).t)[0];
   const totals = await until(() => q(`SELECT views, bots FROM totals WHERE target = '${target}'`), (r) => r?.[0]?.views >= 3, 1);
   const detail = await q(`SELECT source, device, country, views FROM views_hourly WHERE target = '${target}' ORDER BY source, device`);
   step('the clicks counted in the account: 3 views, one from the QR, one from a phone', totals?.[0]?.views === 3 && detail.some((r) => r.source === 'qr') && detail.some((r) => r.device === 'mobile' && r.country === loc), JSON.stringify(detail));
