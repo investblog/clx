@@ -971,6 +971,7 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   token's rights, where data lives, leaving) and `/open-source` (AGPL, the released bundles, running
   one's own copy) are linked from the footer, which also carries the 301 glyph linking to
   https://301.st (https://301.ru in Russian); the home page rotates the banners of our services
-  (ADR 0018). Pages link each other in their text (`seeAlso` in `site/layout.ts`): the tools to
+  (ADR 0018); a page's closing call to sign up is drawn as clx's own banner of the same shape (its
+  mark, the heading, the free plan in a line, the button as its only link). Pages link each other in their text (`seeAlso` in `site/layout.ts`): the tools to
   each other, to their comparison and to their group on `/faq`; a test requires every indexed page
   but the home page and the legal ones to be linked from another page's text.

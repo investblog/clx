@@ -5,7 +5,8 @@ import { STRINGS } from './i18n.ts';
 import { escapeHtml } from './layout.ts';
 import type { Locale } from './pages.ts';
 import { pageQuestions } from './products.ts';
-import { appPathFor, pathFor } from './urls.ts';
+import { finalBlock } from './promo.ts';
+import { pathFor } from './urls.ts';
 
 interface FaqText {
   title: string;
@@ -63,8 +64,6 @@ export function faqPage(locale: Locale): { title: string; description: string; b
   <p class="lead">${escapeHtml(t.lead)}</p>
 </section>
 ${groups}
-<section class="home-final">
-  <p class="actions"><a class="btn btn--primary btn--lg" href="${appPathFor(locale)}#/signup">${escapeHtml(t.start)}</a></p>
-</section>`;
+${finalBlock(locale, STRINGS[locale].home.final, t.start)}`;
   return { title: t.title, description: t.description, body };
 }

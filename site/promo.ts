@@ -4,8 +4,10 @@
 // links to a service's Russian site. 301.st is clx's parent: its Russian site is 301.ru.
 import fs from 'node:fs';
 import path from 'node:path';
+import { STRINGS } from './i18n.ts';
 import { escapeHtml } from './layout.ts';
 import type { Locale } from './pages.ts';
+import { appPathFor } from './urls.ts';
 
 const logo = (file: string) => fs.readFileSync(path.join(import.meta.dirname, 'brand', 'promo', file), 'utf8').trim();
 
@@ -105,4 +107,20 @@ export function promoBlock(locale: Locale, ids: readonly string[] = PROMOS.map((
   </a>`;
   });
   return `<section class="home-section promo-slot">\n  ${banners.join('\n  ')}\n</section>`;
+}
+
+const CLX_MARK = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'favicon.svg'), 'utf8').trim();
+
+/** The page's closing call to sign up, drawn as clx's own banner: the mark, the heading, the plan in a
+ *  line, the button. Not one link like the banners above: the button is its only link. */
+export function finalBlock(locale: Locale, title: string, cta: string): string {
+  const s = STRINGS[locale].home;
+  return `<section class="home-section final-slot">
+  <div class="promo promo--clx">
+    <span class="promo__glow" aria-hidden="true"></span>
+    <span class="promo__mark" aria-hidden="true">${CLX_MARK}</span>
+    <div class="promo__body"><h2 class="promo__title">${escapeHtml(title)}</h2><p class="promo__text">${escapeHtml(s.note)}</p></div>
+    <a class="promo__cta" href="${appPathFor(locale)}#/signup">${escapeHtml(cta)} <span aria-hidden="true">→</span></a>
+  </div>
+</section>`;
 }

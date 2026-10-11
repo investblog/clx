@@ -8,6 +8,7 @@ import { chartOptions, demoReport, themed } from './demo.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
 import type { Locale } from './pages.ts';
+import { finalBlock } from './promo.ts';
 import { appPathFor } from './urls.ts';
 
 interface ProductText {
@@ -636,10 +637,7 @@ ${demo}<section class="home-section">
   <div class="${features}">${t.sections.map((x) => `<div class="card feature"><h2 class="h3">${escapeHtml(x.h)}</h2><p>${escapeHtml(x.p)}</p>${x.points ? `<ul class="ticks">${x.points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</div>
   ${seeAlso(t.more ?? [], locale)}
 </section>
-${setup}${faq}<section class="home-final">
-  <h2>${escapeHtml(t.final)}</h2>
-  <p class="actions">${start}</p>
-</section>`;
+${setup}${faq}${finalBlock(locale, t.final, t.start)}`;
   return { title: t.title, description: t.description, body };
 }
 

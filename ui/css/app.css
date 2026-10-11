@@ -8,8 +8,8 @@
 @media (max-width:768px){:root{--gutter:var(--page-gutter-mobile)}}
 body{font-size:var(--fs-body);line-height:var(--lh-body);overflow-x:clip}
 h2{font-size:var(--fs-xl);margin:var(--space-5) 0 var(--space-3)}
-main a:not(.btn):not(.promo){color:var(--primary-hover);text-decoration:none}
-main a:not(.btn):not(.promo):hover{text-decoration:underline}
+main a:not(.btn):not(.promo):not(.promo__cta){color:var(--primary-hover);text-decoration:none}
+main a:not(.btn):not(.promo):not(.promo__cta):hover{text-decoration:underline}
 .muted{color:var(--text-muted)}
 .text-warning{color:var(--warning)}
 svg.icon{fill:currentColor;vertical-align:-0.125em}
@@ -197,25 +197,29 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .home-api{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-5);align-items:center}
 .home-api h2{margin-top:0}
 /* Banners of our services (site/promo.ts), after wpps.ru's: one shown, each with its brand pair. */
-.promo-slot{margin-top:var(--space-6);margin-bottom:var(--space-6)}
+.promo-slot,.final-slot{margin-top:var(--space-6);margin-bottom:var(--space-6)}
 .promo{--promo-a:#4da3ff;--promo-b:#4D48ED;--promo-cta-bg:#4da3ff;--promo-cta-bg-hover:#7dbcff;--promo-cta-fg:#0b0d12;--promo-glow:.7;position:relative;overflow:hidden;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-5);padding:var(--space-5) var(--space-6);background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-xl);color:inherit;text-decoration:none;transition:border-color var(--transition-md),box-shadow var(--transition-md)}
 .promo[hidden]{display:none}
 .promo--catchall{--promo-a:#5E8BFF;--promo-b:#F75622;--promo-cta-bg:#5E8BFF;--promo-cta-bg-hover:#7DA1FF}
 .promo--generator{--promo-a:#4db7bf;--promo-b:#7c6dbf;--promo-cta-bg:#4db7bf;--promo-cta-bg-hover:#6fc9d0}
 :root[data-theme="light"] .promo{--promo-cta-bg:#0055DC;--promo-cta-bg-hover:#0047B8;--promo-cta-fg:#fff;--promo-glow:.45}
+.promo--clx,:root[data-theme="light"] .promo--clx{--promo-a:#4D48ED;--promo-b:#4da3ff;--promo-cta-bg:var(--primary);--promo-cta-bg-hover:color-mix(in srgb,var(--primary) 82%,#000);--promo-cta-fg:var(--btn-text-on-dark)}
 :root[data-theme="light"] .promo--generator{--promo-cta-bg:#1d7a82;--promo-cta-bg-hover:#16646b}
-.promo:hover{border-color:color-mix(in srgb,var(--promo-a) 45%,transparent);box-shadow:0 18px 45px color-mix(in srgb,var(--promo-a) 18%,transparent)}
+a.promo:hover{border-color:color-mix(in srgb,var(--promo-a) 45%,transparent);box-shadow:0 18px 45px color-mix(in srgb,var(--promo-a) 18%,transparent)}
 .promo:focus-visible{outline:2px solid var(--promo-a);outline-offset:3px}
 .promo__glow{position:absolute;inset:0;pointer-events:none;opacity:var(--promo-glow);background:radial-gradient(55% 140% at 10% 50%,color-mix(in srgb,var(--promo-a) 30%,transparent),transparent 70%),radial-gradient(40% 120% at 34% 110%,color-mix(in srgb,var(--promo-b) 24%,transparent),transparent 70%)}
 .promo__mark{position:relative;display:block;width:6rem;color:var(--text-main)}
 .promo__mark svg{display:block;width:100%;height:auto;max-height:5rem}
-.promo--301 .promo__mark{width:4rem}
+.promo--301 .promo__mark,.promo--clx .promo__mark{width:4rem}
 .promo__body{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-2);min-width:0}
 .promo__eyebrow{font-size:var(--fs-xs);font-weight:var(--fw-medium);padding:.2em .6em;border-radius:var(--r-pill);background:color-mix(in srgb,var(--promo-cta-bg) 14%,transparent);color:var(--text-main)}
 .promo__title{font-size:var(--fs-xl);font-weight:var(--fw-semibold);line-height:1.25;color:var(--text-main)}
 .promo__text{font-size:var(--fs-sm);line-height:1.5;color:var(--text-muted);max-width:60ch}
-.promo__cta{position:relative;display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-5);border-radius:var(--r-pill);background:var(--promo-cta-bg);color:var(--promo-cta-fg);font-size:var(--fs-sm);font-weight:var(--fw-semibold);white-space:nowrap;transition:background var(--transition-fast)}
-.promo:hover .promo__cta{background:var(--promo-cta-bg-hover)}
+.promo__title,.promo__text{margin:0}
+.promo__cta:focus-visible{outline:2px solid var(--promo-a);outline-offset:3px}
+.promo--clx .promo__cta:focus-visible{outline-color:var(--primary-hover)}
+.promo__cta{position:relative;text-decoration:none;display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-5);border-radius:var(--r-pill);background:var(--promo-cta-bg);color:var(--promo-cta-fg);font-size:var(--fs-sm);font-weight:var(--fw-semibold);white-space:nowrap;transition:background var(--transition-fast)}
+a.promo:hover .promo__cta,.promo__cta:hover{background:var(--promo-cta-bg-hover)}
 @media (max-width:720px){.promo{grid-template-columns:1fr;justify-items:center;text-align:center;padding:var(--space-5) var(--space-4);gap:var(--space-4)}.promo__body{align-items:center}.promo__cta{width:100%;justify-content:center}}
 /* Links to related pages in the text (site/layout.ts seeAlso). */
 .see-also{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-2) var(--space-5);margin:var(--space-5) 0 0}
@@ -254,9 +258,6 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .faq details{padding:var(--space-3) 0;border-bottom:1px solid var(--border-subtle)}
 .faq summary{cursor:pointer;font-weight:var(--fw-semibold)}
 .faq details p{margin:var(--space-2) 0 0}
-.home-final{max-width:820px;margin:calc(var(--space-6) * 1.5) auto;padding:var(--space-6) var(--space-4);border-radius:var(--radius-xl);background:radial-gradient(ellipse at top,color-mix(in srgb,var(--primary) 22%,transparent),transparent 70%),var(--bg-elevated);text-align:center}
-.home-final h2{margin:0 0 var(--space-4);font-size:clamp(22px,3vw,30px)}
-.home-final .actions{justify-content:center}
 @media (max-width:720px){.demo__tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.demo__row,.home-steps,.tools,.features,.features--3,.plans,.home-api{grid-template-columns:minmax(0,1fr)}.demo__period,.demo__size--wide{display:none}.demo__size--narrow{display:block}.link-card__body{grid-template-columns:minmax(0,1fr)}.link-card__qr{width:180px;margin:0 auto}.hero__steps{flex-direction:column}.hero__steps .step-separator{transform:rotate(90deg)}.flow{flex-direction:column}.flow__step{width:100%}.flow__arrow{transform:rotate(90deg)}}
 /* The docs for agents (site/agents.ts, site/api.ts): /agents, /api. */
 .doc{max-width:820px;margin:var(--space-5) 0}

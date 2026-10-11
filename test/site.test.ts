@@ -171,6 +171,22 @@ describe('generated pages', () => {
     expect(fs.readFileSync('public/site.js', 'utf8')).toContain('[data-promo]');
   });
 
+  it('the closing call to sign up is clx’s own banner: its mark, a heading, one link to sign-up, out of the rotation', () => {
+    const mark = fs.readFileSync('public/favicon.svg', 'utf8').trim();
+    for (const slug of ['/', '/analytics', '/faq', '/pricing', '/vs-301', '/bitly-alternative', '/clck-alternative'])
+      for (const l of SITE_PAGES.find((p) => p.slug === slug)!.locales) {
+        const html = read(fileFor(slug, l));
+        expect(html).not.toContain('home-final');
+        const slot = html.match(/<section class="home-section final-slot">[\s\S]*?<\/section>/u)![0];
+        expect(slot).toContain('<div class="promo promo--clx">');
+        expect(slot).toContain(`<span class="promo__mark" aria-hidden="true">${mark}</span>`);
+        expect(slot).toMatch(/<h2 class="promo__title">[^<]+<\/h2>/u);
+        expect([...slot.matchAll(/<a /gu)]).toHaveLength(1);
+        expect(slot).toContain(`<a class="promo__cta" href="${l === 'en' ? '/app' : '/ru/app'}#/signup">`);
+        expect(slot).not.toMatch(/data-promo|style=|<script/u);
+      }
+  });
+
   it('the comparison pages: in their language’s footer only; clx’s bar highlighted; sources linked; lengths, nothing inline', () => {
     const pages = SITE_PAGES.filter((p) => p.compare && p.locales.length === 1);
     expect(pages.map((p) => `${p.locales.join()}${p.slug}`)).toEqual(['en/bitly-alternative', 'en/plausible-alternative', 'ru/clck-alternative', 'ru/liveinternet-alternative']);

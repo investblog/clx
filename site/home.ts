@@ -5,7 +5,7 @@ import { REPO, type Locale } from './pages.ts';
 import { demoReport } from './demo.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
-import { promoBlock } from './promo.ts';
+import { finalBlock, promoBlock } from './promo.ts';
 import { appPathFor, pathFor } from './urls.ts';
 
 export function home(locale: Locale): { title: string; description: string; body: string } {
@@ -61,9 +61,6 @@ ${demoReport(locale, 'sources')}
   <p class="faq__more"><a href="${pathFor('/faq', locale)}">${escapeHtml(s.faq.more)} →</a></p>
 </section>
 ${promoBlock(locale)}
-<section class="home-final">
-  <h2>${escapeHtml(s.final)}</h2>
-  <p class="actions">${start}</p>
-</section>`;
+${finalBlock(locale, s.final, s.start)}`;
   return { title: s.title, description: s.description, body };
 }

@@ -5,7 +5,7 @@
 import Rank from 'affiliate-charts/charts-rank.js';
 import { chartOptions, themed } from './demo.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
-import { promoBlock } from './promo.ts';
+import { finalBlock, promoBlock } from './promo.ts';
 import type { Locale } from './pages.ts';
 import { appPathFor } from './urls.ts';
 
@@ -459,10 +459,7 @@ ${aside}<section class="home-section narrow-section">
   <p>${escapeHtml(t.sources.checked)}</p>
   <ul>${t.sources.links.map((s) => `<li>${source(s, !!t.ours)}</li>`).join('')}</ul>
 </section>
-${t.ours ? `${promoBlock(locale, [t.ours])}\n` : ''}<section class="home-final">
-  <h2>${escapeHtml(t.final)}</h2>
-  <p class="actions">${start}</p>
-</section>`;
+${t.ours ? `${promoBlock(locale, [t.ours])}\n` : ''}${finalBlock(locale, t.final, t.start)}`;
   return { title: t.title, description: t.description, body };
 }
 
