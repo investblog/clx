@@ -1,6 +1,6 @@
 ---
 title: clx — Cloudflare behaviour checked live
-updated: 2026-10-07
+updated: 2026-10-11
 ---
 
 # Cloudflare behaviour checked live
@@ -104,3 +104,9 @@ something clx does with its token. The zone's own mail stays on an outside serve
 | Email Routing works on a subdomain while the apex MX points elsewhere: `POST /zones/{zone}/email/routing/dns {"name": "t.<zone>"}` adds MX and SPF on that name only (plus `cf2024-1._domainkey.<zone>`). The zone then reports `enabled: true, status: misconfigured` (`mx.foreign` for the apex) — a report only; the apex records stay. The docs do not say what the call does without `name` — never send it so on a zone with outside mail. | 07.10.2026 | the probes' inbox |
 | A routing rule and `support_subaddress` (`PATCH /zones/{zone}/email/routing`) take effect after a delay: mail sent seconds after was refused `550 5.1.1 Address does not exist`, a minute or two later it went through. | 07.10.2026 | the probes' inbox |
 | Plus-addressing works on a subdomain: one literal rule `probe@t.<zone>` → a Worker gets `probe+<tag>@t.<zone>`, and the Worker's `message.to` is the full address, tag included. | 07.10.2026 | the probes' inbox (`mailbox/`) |
+
+## Reaching visitors in Russia (the site's Russian questions)
+
+| Fact | Checked | Used in |
+|---|---|---|
+| Russian ISPs cut connections to Cloudflare after about the first 16 KB (Cloudflare's own report, June 2025; not measured from inside Russia by clx). What clx serves stays far below: the TLS handshake with a Cloudflare edge reads 3,860 bytes (TLS 1.3, `openssl s_client` to clx.cx), a link's 302 is headers only — under 1 KB with Cloudflare's own — and the counter is a script under 600 bytes (`test/snippet.test.ts`) and an empty `204` per view. | 11.10.2026 | /ru/analytics, /ru/short-links questions |
