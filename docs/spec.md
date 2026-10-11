@@ -921,15 +921,25 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
 - **Addresses.** The site at the root: `/`, `/analytics`, `/short-links`, `/for-site-generators`, `/pricing`,
   `/faq`, `/privacy`, `/terms`, `/abuse` in English, the same
   under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` (and
-  `/ru/app`, ADR 0015) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
+  `/ru/app`, ADRs 0015, 0017) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
   canonical and hreflang (with `x-default` on English), the sitemap, robots.txt, the header's menu
   and the footer all derive from it. The language comes from the address only. On a phone the menu
   folds behind a button only when `/theme.js` ran (it marks the page and opens the menu); without
   scripts it is a row of links.
-- **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`) and the site's script
-  (`public/site.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
+- **The app in the site's frame** ([ADR 0017](./decisions/0017-app-in-the-site-frame.md)). The
+  app's page carries the site's header (menu, theme; no language switch, no link to the app) and
+  footer; the app's sections and sign-out are a row under the header. Signed in, an account of the
+  other language moves the app to its own address. The site's link to the app says "Dashboard"
+  instead of "Sign in" where the app left its mark (`localStorage` `clx-signed-in`, read by
+  `/theme.js`).
+- **Sitemap.** `/sitemap.xml` (indexed pages × languages, hreflang alternates) carries
+  `<xhtml:script src="/sitemap.js"/>` at the end of its last `<url>`: in a browser it becomes a page
+  in the site's style, one row per page with its languages. The schema allows an element of another
+  namespace there; whether Search Console flags it is checked after the release.
+- **Build.** `scripts/build-ui.mjs` bundles the app (`public/app.js`), the site's script
+  (`public/site.js`) and the sitemap's view (`public/sitemap.js`), then `site/build.ts` writes the pages; `scripts/check-site.mjs` checks the
   result before every deploy. Nothing generated is committed.
 - **Languages.** English and Russian for the site; the app and the e-mails too
   ([ADR 0015](./decisions/0015-app-language.md)): the app at `/app` and `/ru/app` speaks the

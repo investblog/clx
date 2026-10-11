@@ -19,13 +19,18 @@ svg.icon{fill:currentColor;vertical-align:-0.125em}
 .brand{display:inline-flex;align-items:center;margin:0 auto 0 0;font-size:var(--fs-lg);font-weight:var(--fw-semibold)}
 .brand a{display:inline-flex;align-items:center;gap:var(--space-2);color:var(--text);text-decoration:none}
 .brand__mark{width:24px;height:24px;color:var(--logo)}
-/* The app's navigation (ui/main.ts): beside the brand; on a phone a row of its own that scrolls. */
-.brand:has(+ .shell-nav){margin-right:var(--space-3)}
-.shell-nav{display:flex;gap:var(--space-1);margin-right:auto;min-width:0;overflow-x:auto;scrollbar-width:none}
+/* The site's header links to the app with "Sign in", or "Dashboard" in a browser with a session
+   (site/layout.ts; public/theme.js marks the page .signed-in before the first paint). */
+.signed-in .when-signed-out,:root:not(.signed-in) .when-signed-in{display:none}
+/* The app's sections (ui/main.ts): a row under the site's header, the sign-out button at its end; on a
+   phone the sections scroll. Empty while signed out. */
+.app-nav{border-bottom:1px solid var(--border-subtle);background:var(--bg-elevated)}
+.app-nav:empty{display:none}
+.app-nav__inner{max-width:1200px;margin:0 auto;padding:var(--space-1) var(--gutter);display:flex;align-items:center;gap:var(--space-3)}
+.shell-nav{display:flex;gap:var(--space-1);margin:0 auto 0 calc(-1 * var(--space-3));min-width:0;overflow-x:auto;scrollbar-width:none}
 .shell-nav a{padding:var(--space-1) var(--space-3);border-radius:var(--radius);color:var(--text-muted);font-size:var(--fs-sm);text-decoration:none;white-space:nowrap}
 .shell-nav a:hover{color:var(--text)}
 .shell-nav a[aria-current]{color:var(--text);background:var(--bg-soft)}
-@media (max-width:720px){.topbar__inner{flex-wrap:wrap}.brand:has(+ .shell-nav){margin-right:auto}.shell-nav{order:3;flex-basis:100%;margin:0 calc(-1 * var(--space-3))}}
 /* Dialogs on <dialog> (ui/dialog.ts): a confirmation over the page. */
 .dialog{width:min(440px,calc(100vw - 2 * var(--gutter)));padding:var(--space-5);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg-elevated);color:var(--text);box-shadow:var(--shadow-lg)}
 .dialog::backdrop{background:rgb(0 0 0 / 0.55)}

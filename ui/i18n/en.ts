@@ -5,7 +5,6 @@ export const en: Dict = {
   name: 'English',
   shell: {
     nav: { accounts: 'Accounts', sites: 'Sites', links: 'Links', keys: 'API keys', me: 'Profile' },
-    theme: 'Switch theme',
     signOut: 'Sign out',
     signOutFailed: 'Signing out failed — the session has not ended. Check the network and try again.',
     toHome: '← To the start',
@@ -53,9 +52,6 @@ export const en: Dict = {
     signIn: 'Sign in',
     signUp: 'Sign up',
     forgot: 'Forgot the password?',
-    privacy: 'Privacy',
-    terms: 'Terms',
-    abuse: 'Abuse',
     closed: (what: string) => `${what} does not work yet: the service is still being set up. Come back later.`,
     waitHuman: 'Wait for the "I am human" check.',
     sending: 'Sending…',

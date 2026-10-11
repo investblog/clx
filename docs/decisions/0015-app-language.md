@@ -19,7 +19,8 @@ to ask yet, while an e-mail is sent when nobody has a page open at all.
 - The account keeps a language (`users.locale`, `en` or `ru`). Sign-up writes the language of the
   page it came from; the profile page changes it (`PATCH /v1/me {locale}`, page session only);
   `GET /v1/me` returns it. Signed in, the app speaks the account's language whichever address it was
-  opened at.
+  opened at — since ADR 0017 by moving to that language's address, as the site's header around it
+  is printed in the address's language.
 - Every e-mail speaks the account's language and links to the app of that language. An e-mail to an
   address that already has an account (a repeated sign-up) speaks that account's language, not the
   sign-up page's.

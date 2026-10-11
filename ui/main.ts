@@ -1,9 +1,9 @@
-// The page's entry: the shell (brand, navigation, theme, sign-out), sign-in, the hash router over the
+// The page's entry: the row of the app's sections (under the site's header), sign-in, the hash router over the
 // pages, the language (ADR 0015).
 import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
 import { get, logout, refresh, SignedOut, type Me } from './api';
 import { h, s } from './dom';
-import { pageLocale, setLocale, t } from './i18n';
+import { appPath, asLocale, pageLocale, setLocale, t } from './i18n';
 import { linkPage, linksPage } from './links';
 import { mePage, unconfirmedBanner } from './me';
 import { reportPage } from './report';
@@ -27,24 +27,23 @@ const NAV: [Section, string][] = [
 ];
 const sectionOf = (path: string): Section => (path.startsWith('/sites') ? 'sites' : path.startsWith('/links') ? 'links' : path === '/keys' ? 'keys' : path === '/me' ? 'me' : 'accounts');
 
-function themeButton(): HTMLElement {
-  const b = h('button', { type: 'button', class: 'btn-close', 'aria-label': t.shell.theme, title: t.shell.theme }, icon('theme-light-dark'));
-  b.addEventListener('click', () => {
-    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem('clx-theme', next);
-    } catch {
-      // private mode: the theme just isn't remembered
-    }
-  });
-  return b;
+/** Whether this browser has a session, for the site's header: its link to the app says "Dashboard"
+ *  then (public/theme.js reads the mark before the first paint). */
+function markSignedIn(on: boolean): void {
+  document.documentElement.classList.toggle('signed-in', on);
+  try {
+    if (on) localStorage.setItem('clx-signed-in', '1');
+    else localStorage.removeItem('clx-signed-in');
+  } catch {
+    // private mode: the site just says "Sign in"
+  }
 }
 
-/** The top bar; with `current`, the signed-in navigation and the sign-out button. */
+/** The row of the app's sections under the site's header (site/build.ts prints the header, the menu
+ *  and the theme switch of public/theme.js); with `current`, the sections and the sign-out button,
+ *  else empty. */
 function drawShell(current?: Section): void {
-  const brand = h('p', { class: 'brand' }, h('a', { href: '#/' }, s('svg', { class: 'icon brand__mark', 'aria-hidden': 'true' }, s('use', { href: '/icons.svg#i-mono-clx' })), h('span', {}, 'clx')));
-  if (!current) return void shell.replaceChildren(h('div', { class: 'topbar__inner' }, brand, themeButton()));
+  if (!current) return void shell.replaceChildren();
   const nav = h('nav', { class: 'shell-nav', 'aria-label': 'clx' }, ...NAV.map(([id, href]) => h('a', { href, ...(id === current ? { 'aria-current': 'page' } : {}) }, t.shell.nav[id])));
   const out = h('button', { type: 'button', class: 'btn-close', 'aria-label': t.shell.signOut, title: t.shell.signOut }, icon('log-out'));
   out.addEventListener('click', async () => {
@@ -59,13 +58,14 @@ function drawShell(current?: Section): void {
     history.replaceState(null, '', '#/');
     showLogin();
   });
-  shell.replaceChildren(h('div', { class: 'topbar__inner' }, brand, nav, themeButton(), out));
+  shell.replaceChildren(h('div', { class: 'app-nav__inner' }, nav, out));
   // On a narrow screen the navigation scrolls: the current item in view.
   const at = nav.querySelector<HTMLElement>('[aria-current]');
   if (at && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = at.offsetLeft - nav.offsetLeft;
 }
 
 function showLogin(message = ''): void {
+  markSignedIn(false);
   setLocale(pageLocale);
   drawShell();
   app.replaceChildren(loginPage(() => void route(), message));
@@ -135,7 +135,12 @@ async function route(): Promise<void> {
     // language wins over the address's from here on.
     const me = await get<Me>('/v1/me');
     if (mine !== seq) return;
-    setLocale(me.user.locale);
+    markSignedIn(true);
+    // The site's header around the app is printed in the address's language: an account of another
+    // language moves to its own address, the same page.
+    const own = asLocale(me.user.locale);
+    if (own !== pageLocale) return location.replace(`${appPath(own)}${location.hash}`);
+    setLocale(own);
     const [el, title] = await page(me, path, mine);
     if (mine !== seq) return;
     drawShell(sectionOf(path));

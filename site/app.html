@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- The app's page, one per language (site/build.ts: /app, /ru/app). The language here is the one of
-     the address, used until the person signs in; then the account's (ADR 0015). ui/main.ts draws
-     everything inside. -->
+     the address, used until the person signs in; then the account's, and the app moves to that
+     language's address (ADR 0015). The site's header and footer are printed in by site/build.ts;
+     ui/main.ts draws the app's sections (#shell) and everything inside <main>. -->
 <html lang="%LANG%" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
@@ -16,7 +17,9 @@
     <script src="/app.js" defer></script>
   </head>
   <body>
-    <header class="topbar" id="shell"></header>
+%HEADER%
+    <div class="app-nav" id="shell"></div>
     <main id="app"></main>
+%FOOTER%
   </body>
 </html>

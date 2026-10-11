@@ -180,6 +180,20 @@ describe('generated pages', () => {
     expect(attrs.get('aria-expanded')).toBe('false');
   });
 
+  it('theme.js switches the theme from the header’s button, on the site and in the app alike', () => {
+    let click: ((e: { target: unknown }) => void) | undefined;
+    const stored = new Map<string, string>();
+    class Element {}
+    const theme = Object.assign(Object.create(Element.prototype) as object, { closest: (sel: string) => (sel === '#theme' ? theme : null) });
+    const dataset: Record<string, string> = { theme: 'dark' };
+    const document = { documentElement: { classList: { add: () => {} }, dataset }, addEventListener: (_t: string, fn: typeof click) => (click = fn) };
+    vm.runInNewContext(read('theme.js'), { document, Element, localStorage: { getItem: () => null, setItem: (k: string, v: string) => stored.set(k, v) } });
+    click!({ target: theme });
+    expect([dataset.theme, stored.get('clx-theme')]).toEqual(['light', 'light']);
+    click!({ target: theme });
+    expect(dataset.theme).toBe('dark');
+  });
+
   it('the example link’s QR code is the one the app would make for its address', () => {
     const svg = read('short-links.html').match(/<div class="link-card__qr">(<svg[\s\S]*?<\/svg>)/u)![1]!;
     const drawn = new Set([...svg.matchAll(/M(\d+) (\d+)h1v1h-1z/gu)].map((m) => `${Number(m[1]) - 4},${Number(m[2]) - 4}`));
@@ -192,6 +206,36 @@ describe('generated pages', () => {
   it('the app has a page per language, which sets the language until sign-in (ADR 0015)', () => {
     expect(read('app.html')).toContain('<html lang="en"');
     expect(read('ru/app.html')).toContain('<html lang="ru"');
+  });
+
+  it('the app keeps the site’s header and footer in its language, without the link to itself', () => {
+    const app = read('ru/app.html');
+    const header = app.match(/<header[\s\S]*?<\/header>/u)![0];
+    expect(header).toContain('href="/ru/analytics"');
+    expect(header).toContain('id="site-nav-toggle"');
+    expect(header).toContain('id="theme"');
+    expect(header).not.toContain('href="/ru/app"');
+    expect(header).not.toContain('lang-switch');
+    expect(app).toContain('<div class="app-nav" id="shell"></div>');
+    expect(app).toContain('<footer class="site-foot">');
+    expect(app).toContain('href="/ru/privacy"');
+  });
+
+  it('the site’s link to the app has both labels; the page shows one by the mark theme.js sets', () => {
+    const header = read('ru/analytics.html').match(/<header[\s\S]*?<\/header>/u)![0];
+    expect(header).toContain('<a class="btn btn--ghost btn--sm" href="/ru/app"><span class="when-signed-out">Войти</span><span class="when-signed-in">Кабинет</span></a>');
+    const marked = (stored: string | null) => {
+      const classes = new Set<string>();
+      const document = { documentElement: { classList: { add: (c: string) => classes.add(c) }, dataset: {} }, addEventListener: () => {} };
+      vm.runInNewContext(read('theme.js'), { document, Element: class {}, localStorage: { getItem: (k: string) => (k === 'clx-signed-in' ? stored : null) } });
+      return classes.has('signed-in');
+    };
+    expect([marked('1'), marked(null)]).toEqual([true, false]);
+  });
+
+  it('the sitemap carries its view for a person at the end of the last <url>', () => {
+    expect(read('sitemap.xml')).toMatch(/<priority>[\d.]+<\/priority>\n {4}<xhtml:script src="\/sitemap\.js"\/>\n {2}<\/url>\n<\/urlset>\n$/u);
+    expect(read('sitemap.xml').match(/xhtml:script/gu)).toHaveLength(1);
   });
 
   it('robots.txt keeps crawlers off the app and the API; the sitemap lists indexed pages only', () => {

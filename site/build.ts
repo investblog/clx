@@ -12,7 +12,7 @@ import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
 import { faqGroups, faqPage } from './faq.ts';
 import { analyticsPage, generatorsPage, linksPage, pricingPage } from './products.ts';
-import { escapeHtml, layout } from './layout.ts';
+import { escapeHtml, footer, header, layout } from './layout.ts';
 import { alternatesFor, appPathFor, fileFor, pathFor, urlFor } from './urls.ts';
 
 const OUT = 'public';
@@ -97,9 +97,11 @@ for (const page of SITE_PAGES)
     // The home page's markdown is the index of the docs (llms.txt), not its marketing text.
     if (page.markdown && locale === 'en') write(markdownFile(page.slug), page.slug === '/' ? llmsTxt() : toMarkdown(html));
   }
-// The app's page of each language: app.html, ru/app.html.
+// The app's page of each language: app.html, ru/app.html — with the site's header and footer, so the
+// menu and the way back to the site stay in the app.
 const appPage = fs.readFileSync(path.join(here, 'app.html'), 'utf8');
-for (const locale of ALL_LOCALES) write(fileFor('/app', locale), appPage.replace('%LANG%', LOCALES[locale].htmlLang));
+for (const locale of ALL_LOCALES)
+  write(fileFor('/app', locale), appPage.replace('%LANG%', LOCALES[locale].htmlLang).replace('%HEADER%', () => header(null, locale)).replace('%FOOTER%', () => footer(locale)));
 
 // For agents (docs/spec.md §16): the docs index, how auth works (Cloudflare's scanner reads the root
 // copy), the API catalog (RFC 9727), the skill with its digest (Agent Skills Discovery 0.2), the contract.
@@ -142,6 +144,9 @@ const urls = SITE_PAGES.filter((p) => p.indexed).flatMap((p) =>
       .join('\n'),
   ),
 );
+// The view for a person (site/sitemap-view.ts) goes at the end of the last <url>: the schema takes an
+// element of another namespace only there, and the script then finds every <url> parsed.
+urls.push(urls.pop()!.replace(/\n {2}<\/url>$/u, '\n    <xhtml:script src="/sitemap.js"/>\n  </url>'));
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join('\n')}\n</urlset>\n`);
 
 console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, the app in each, robots.txt, sitemap.xml`);

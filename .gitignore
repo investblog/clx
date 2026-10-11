@@ -45,6 +45,7 @@ temp/
 # built by scripts/build-ui.mjs: the app and site scripts, the stylesheet, the site pages, app.html, robots.txt, sitemap.xml
 public/app.js
 public/site.js
+public/sitemap.js
 public/app.css
 public/*.html
 public/ru/

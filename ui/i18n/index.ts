@@ -8,7 +8,7 @@ export type Locale = 'en' | 'ru';
 export const LOCALES: readonly Locale[] = ['en', 'ru'];
 const DICTS: Record<Locale, Dict> = { en, ru };
 
-const asLocale = (v: unknown): Locale => (v === 'ru' ? 'ru' : 'en');
+export const asLocale =(v: unknown): Locale => (v === 'ru' ? 'ru' : 'en');
 /** The language of the address this page was opened at. */
 export const pageLocale: Locale = asLocale(document.documentElement.lang);
 export let locale: Locale = pageLocale;

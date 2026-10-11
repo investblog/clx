@@ -7,6 +7,8 @@ export interface Strings {
   /** `<title>` suffix and the brand's accessible name. */
   brand: string;
   signIn: string;
+  /** The same link once this browser has signed in to the app. */
+  dashboard: string;
   theme: string;
   language: string;
   home: {
@@ -50,6 +52,7 @@ export interface Strings {
 const en: Strings = {
   brand: 'clx',
   signIn: 'Sign in',
+  dashboard: 'Dashboard',
   theme: 'Switch theme',
   language: 'Language',
   home: {
@@ -142,6 +145,7 @@ const en: Strings = {
 const ru: Strings = {
   brand: 'clx',
   signIn: 'Войти',
+  dashboard: 'Кабинет',
   theme: 'Сменить тему',
   language: 'Язык',
   home: {

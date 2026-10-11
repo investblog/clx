@@ -49,8 +49,8 @@ const jsonLdBlock = (nodes: Record<string, unknown>[]): string =>
 const icon = (name: string, cls = 'icon') => `<svg class="${cls}" aria-hidden="true"><use href="/icons.svg#i-mono-${name}"></use></svg>`;
 
 /** Links to the page in its other languages — from the same list as the `<link rel="alternate">`. */
-function langSwitch(page: PageDef, locale: Locale): string {
-  if (!page.indexed || page.locales.length < 2) return '';
+function langSwitch(page: PageDef | null, locale: Locale): string {
+  if (!page?.indexed || page.locales.length < 2) return '';
   const items = page.locales
     .filter((l) => l !== locale)
     .map((l) => `<a class="lang-switch" href="${pathFor(page.slug, l)}" hreflang="${LOCALES[l].htmlLang}" lang="${LOCALES[l].htmlLang}">${escapeHtml(LOCALES[l].label)}</a>`);
@@ -60,9 +60,9 @@ function langSwitch(page: PageDef, locale: Locale): string {
 /** The menu: the table's `nav` pages, printed in the page, beside the brand. On a phone it folds behind
  *  the menu button — last in the header, where it shows — only once /theme.js has marked the page `js`
  *  (that file also opens it and moves focus into it); without scripts it stays a row of links. */
-function nav(page: PageDef, locale: Locale): { menu: string; button: string } {
+function nav(page: PageDef | null, locale: Locale): { menu: string; button: string } {
   const s = STRINGS[locale];
-  const items = navPages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}"${p.slug === page.slug ? ' aria-current="page"' : ''}>${escapeHtml(s.nav[p.nav!])}</a>`);
+  const items = navPages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}"${p.slug === page?.slug ? ' aria-current="page"' : ''}>${escapeHtml(s.nav[p.nav!])}</a>`);
   if (!items.length) return { menu: '', button: '' };
   return {
     menu: `<nav class="site-nav" id="site-nav" aria-label="${escapeHtml(s.nav.menu)}">${items.join('')}</nav>`,
@@ -70,22 +70,29 @@ function nav(page: PageDef, locale: Locale): { menu: string; button: string } {
   };
 }
 
-function header(page: PageDef, locale: Locale): string {
+/** The site's header. The app's page (site/build.ts) prints the same one with `page` null: no language
+ *  switch (the app follows the account's language) and no link to the app; ui/main.ts draws the app's
+ *  sections in a row under it. On the site the link to the app says "Sign in", or "Dashboard" once
+ *  the app has marked this browser signed in (/theme.js shows one of the two before the first paint). */
+export function header(page: PageDef | null, locale: Locale): string {
   const s = STRINGS[locale];
   const { menu, button } = nav(page, locale);
+  const app = page
+    ? `<a class="btn btn--ghost btn--sm" href="${appPathFor(locale)}"><span class="when-signed-out">${escapeHtml(s.signIn)}</span><span class="when-signed-in">${escapeHtml(s.dashboard)}</span></a>`
+    : '';
   return `<header class="topbar">
   <div class="topbar__inner">
     <p class="brand"><a href="${pathFor('/', locale)}">${icon('clx', 'icon brand__mark')}<span>clx</span></a></p>
     ${menu}
     ${langSwitch(page, locale)}
     <button type="button" class="btn-close" id="theme" aria-label="${escapeHtml(s.theme)}" title="${escapeHtml(s.theme)}">${icon('theme-light-dark')}</button>
-    <a class="btn btn--ghost btn--sm" href="${appPathFor(locale)}">${escapeHtml(s.signIn)}</a>
+    ${app}
     ${button}
   </div>
 </header>`;
 }
 
-function footer(locale: Locale): string {
+export function footer(locale: Locale): string {
   const s = STRINGS[locale];
   const links = footPages(locale).map((p) =>
     p.locales.includes(locale)

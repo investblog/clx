@@ -62,16 +62,14 @@ async function turnstile(box: HTMLElement): Promise<{ token: () => string; reset
 const card = (title: string, ...children: (Node | null)[]) => h('section', { class: 'auth-card login' }, h('h1', { class: 'h3' }, title), ...children);
 const field = (label: string, input: HTMLInputElement, hint?: string) => h('div', { class: 'field' }, h('label', { class: 'field-label', for: input.id }, label), input, hint ? h('p', { class: 'field-hint' }, hint) : null);
 
-/** Under every signed-out page: its sisters, the legal pages, and the app in the other language — at the same page. */
+/** Under every signed-out page: its sisters and the app in the other language — at the same page. The
+ *  legal pages are in the site's footer under it (site/build.ts). */
 function footer(): HTMLElement {
   const other = LOCALES.filter((l) => l !== locale).map((l) => h('a', { href: `${appPath(l)}${location.hash}`, hreflang: l, lang: l }, dictOf(l).name));
   const links: [string, string][] = [
     ['#/', t.auth.signIn],
     ['#/signup', t.auth.signUp],
     ['#/reset', t.auth.forgot],
-    [sitePath('/privacy'), t.auth.privacy],
-    [sitePath('/terms'), t.auth.terms],
-    [sitePath('/abuse'), t.auth.abuse],
   ];
   return h('p', { class: 'muted text-sm' }, ...links.flatMap(([href, text], i) => [i ? ' · ' : '', h('a', { href }, text)]), ...other.flatMap((a) => [' · ', a]));
 }

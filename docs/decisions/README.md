@@ -22,3 +22,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0014](./0014-a-key-on-free.md) | The free plan has one API key; the api plan on request, unpaid for now | 10.10.2026 | §1, §8, §10, §15 |
 | [0015](./0015-app-language.md) | The app's language comes from the address until sign-in, then from the account | 10.10.2026 | §9, §15, §16 |
 | [0016](./0016-brand-and-report-charts.md) | A violet brand with its own mark; the report is drawn by affiliate-charts | 10.10.2026 | §10, §16 |
+| [0017](./0017-app-in-the-site-frame.md) | The app sits in the site's frame; the sitemap has a view for people | 11.10.2026 | §10, §16 |
