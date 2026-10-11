@@ -377,7 +377,7 @@ describe('generated pages', () => {
   it('the example link’s QR code is the one the app would make for its address', () => {
     const svg = read('short-links.html').match(/<div class="link-card__qr">(<svg[\s\S]*?<\/svg>)/u)![1]!;
     const drawn = new Set([...svg.matchAll(/M(\d+) (\d+)h1v1h-1z/gu)].map((m) => `${Number(m[1]) - 4},${Number(m[2]) - 4}`));
-    const { data } = generateMatrix('https://go.example.com/spring?q', { ecc: 'M' });
+    const { data } = generateMatrix('https://k7q.example.com/spring?q', { ecc: 'M' });
     const expected = new Set(data.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`${x},${y}`] : []))));
     expect(drawn.size).toBeGreaterThan(100);
     expect([...drawn].sort()).toEqual([...expected].sort());

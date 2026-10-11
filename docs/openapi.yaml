@@ -54,8 +54,11 @@ components:
                 route_not_ours (a route clx made was changed outside clx and left in place).
                 Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
                 invalid_password (DELETE /v1/me).
-                Links: link_host_required (set the account's link host first), link_exists (the
-                code is taken in that account).
+                Links: link_exists (the code is taken on that link host), link_host_not_ready (links go
+                on an active host only), link_host_in_use
+                (DELETE /v1/link-hosts/{id} while live links are on it). In a link host's `error`:
+                dns_record_exists (the named host already has a DNS record — never taken over),
+                domain_taken (another worker's custom domain), domain_not_ours.
             message: { type: string }
             details: { type: object }
     Key:
@@ -130,20 +133,25 @@ components:
             step: { type: string }
             error: { type: [object, 'null'] }
             updated_at: { type: string, format: date-time }
-        link_host:
-          oneOf: [{ $ref: '#/components/schemas/LinkHost' }, { type: 'null' }]
-          description: The account's link host (GET /v1/accounts/{id} only)
+        link_hosts:
+          type: array
+          items: { $ref: '#/components/schemas/LinkHost' }
+          description: The account's link hosts (GET /v1/accounts/{id} only)
         created_at: { type: string, format: date-time }
     LinkHost:
       type: object
       properties:
-        host: { type: string }
+        id: { type: string }
+        account_id: { type: string }
+        site_id: { type: [string, 'null'], description: 'the site it was made for; null for a host the user named' }
+        host: { type: string, description: 'k7q.example.com — a random 3-character label under the site''s host, or the named host' }
         state:
           type: string
-          enum: [route_pending, active, route_conflict]
-          description: 'route_pending — the route `<host>/*` is still to be made (the cron retries); route_conflict — another worker holds it, see error'
-        config: { type: string, enum: [pending, synced] }
+          enum: [pending, active, conflict, deleted]
+          description: 'pending — its custom domain is being made (the cron retries); active — Cloudflare made it, with its DNS record and certificate; conflict — see error'
+        config: { type: string, enum: [pending, synced], description: 'whether the worker has it yet; short links answer once active and synced' }
         error: { type: [object, 'null'] }
+        created_at: { type: string, format: date-time }
     Rule:
       type: object
       required: [url]
@@ -151,13 +159,14 @@ components:
       properties:
         countries: { type: array, items: { type: string, pattern: '^[A-Z]{2}$' } }
         devices: { type: array, items: { type: string, enum: [mobile, desktop] } }
-        url: { type: string, format: uri, description: 'https:// only, up to 2048 characters, not on the link host' }
+        url: { type: string, format: uri, description: 'https:// only, up to 2048 characters, not on a link host of the account' }
     Link:
       type: object
       properties:
         id: { type: string }
         account_id: { type: string }
-        code: { type: string }
+        link_host_id: { type: string }
+        code: { type: string, description: 'unique on its link host' }
         short_url: { type: [string, 'null'], description: 'https://<link host>/<code>' }
         url: { type: string, description: 'where it leads when no rule matches' }
         rules: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Rule' }, description: 'the first match wins' }
@@ -414,25 +423,6 @@ paths:
       responses:
         '202': { description: Started, content: { application/json: { schema: { type: object, properties: { account: { $ref: '#/components/schemas/Account' } } } } } }
         default: { $ref: '#/components/responses/Error' }
-  /v1/accounts/{id}/link-host:
-    put:
-      summary: Set the account's link host (scope sites) — a host in one of its zones, routed whole to clx-edge
-      description: |
-        The account must be `ready`. The host needs a proxied DNS record — clx does not create it
-        (§13 item 2): e.g. `AAAA <host> 100::`, proxied. Setting another host replaces this one: its
-        route is deleted and the links move to the new host with their codes.
-      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [host]
-              properties:
-                host: { type: string, description: 'go.example.com — a host of a zone in that account' }
-      responses:
-        '202': { description: Set, content: { application/json: { schema: { type: object, properties: { link_host: { $ref: '#/components/schemas/LinkHost' } } } } } }
-        default: { $ref: '#/components/responses/Error' }
   /v1/accounts/{id}/token:
     post:
       summary: Renew the working token with a new bootstrap token (scope accounts)
@@ -510,6 +500,52 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { type: object, properties: { report: { $ref: '#/components/schemas/Report' } } } } } }
         default: { $ref: '#/components/responses/Error' }
+  /v1/link-hosts:
+    get:
+      summary: Link hosts (scope links); `account_id` narrows to one account
+      parameters: [{ name: account_id, in: query, required: false, schema: { type: string } }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { link_hosts: { type: array, items: { $ref: '#/components/schemas/LinkHost' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Add a link host (scope links) — one per site if wished; clx makes it a custom domain of clx-edge
+      description: |
+        `{site_id}` makes `<label>.<site host>` (a leading `www.` dropped) with a random label of 3
+        characters; `{account_id, host}` takes a host you name, in one of the account's zones. The
+        account must be `ready`. clx makes the host a Workers Custom Domain of clx-edge: Cloudflare
+        creates its DNS record and certificate, so you create no record. A host that already has a
+        DNS record is never taken over: a random label is tried again with another, a named host
+        ends `conflict` (`dns_record_exists`). Answers `202`; poll GET until `state` is `active` and
+        `config` is `synced` (usually seconds). Up to the plan's site limit per user.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              oneOf:
+                - { required: [site_id], not: { anyOf: [{ required: [account_id] }, { required: [host] }] } }
+                - { required: [account_id, host], not: { required: [site_id] } }
+              properties:
+                site_id: { type: string, description: 'the site to make a host for; alone' }
+                account_id: { type: string, description: 'with host' }
+                host: { type: string, description: 'with account_id: a host of a zone in that account, such as k7q.example.com' }
+      responses:
+        '202': { description: Started, content: { application/json: { schema: { type: object, properties: { link_host: { $ref: '#/components/schemas/LinkHost' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/link-hosts/{id}:
+    get:
+      summary: One link host (scope links)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { link_host: { $ref: '#/components/schemas/LinkHost' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Delete a link host (scope links) — refused while live links are on it; its custom domain and DNS record go
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { type: object, properties: { link_host: { $ref: '#/components/schemas/LinkHost' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
   /v1/links:
     get:
       summary: Links (scope links); `account_id` narrows to one account
@@ -518,7 +554,7 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { type: object, properties: { links: { type: array, items: { $ref: '#/components/schemas/Link' } } } } } } }
         default: { $ref: '#/components/responses/Error' }
     post:
-      summary: Add a short link (scope links) on the account's link host
+      summary: Add a short link (scope links) on one of the account's link hosts
       description: |
         A click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of
         the link, with source `qr` when the address carries `?q` (the QR code's) — or as a bot when
@@ -530,11 +566,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [account_id, url]
+              required: [link_host_id, url]
               properties:
-                account_id: { type: string }
+                link_host_id: { type: string, description: 'the link host it lives on (POST /v1/link-hosts)' }
                 code: { type: string, pattern: '^[A-Za-z0-9_-]{3,32}$', description: 'a random 6 characters when not given' }
-                url: { type: string, format: uri, description: 'https:// only, up to 2048 characters, not on the link host' }
+                url: { type: string, format: uri, description: 'https:// only, up to 2048 characters, not on a link host of the account' }
                 rules: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Rule' } }
       responses:
         '201': { description: Added, content: { application/json: { schema: { type: object, properties: { link: { $ref: '#/components/schemas/Link' } } } } } }
@@ -572,8 +608,8 @@ paths:
       description: |
         The `?q` makes a scan count with source `qr`; the worker does not pass it on. One `<rect>` and
         one `<path>`, integer coordinates, a quiet zone of 4 modules, error correction M. Without
-        `size` the SVG has no width and height and scales to its container. It follows the link host:
-        a replaced host makes earlier printed codes stop working.
+        `size` the SVG has no width and height and scales to its container. It carries the link's own
+        host, which never changes; deleting that host stops its printed codes.
       parameters:
         - { $ref: '#/components/parameters/Id' }
         - { name: size, in: query, required: false, schema: { type: integer, minimum: 64, maximum: 9999 }, description: pixels }

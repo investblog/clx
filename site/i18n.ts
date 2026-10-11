@@ -120,7 +120,7 @@ const en: Strings = {
       h2: 'Questions',
       items: [
         ['Do I need a Cloudflare account?', 'Yes. clx counts sites served by Cloudflare, and short links need a domain of yours there: clx.cx carries none of your traffic.'],
-        ['What does clx create in my account?', 'One worker, one D1 database and the routes of your sites and link host, with a working token of its own. Disconnecting removes what clx created and lists anything it could not; the working token you revoke yourself in Cloudflare — clx gives you the link.'],
+        ['What does clx create in my account?', 'One worker, one D1 database, the routes of your sites and the custom domains of your link hosts, with a working token of its own. Disconnecting removes what clx created and lists anything it could not; the working token you revoke yourself in Cloudflare — clx gives you the link.'],
         ['Does it cost anything?', 'The free plan costs nothing and needs no card; the worker runs on your Cloudflare quotas.'],
         ['Can I read the code?', 'All of it, on GitHub, under AGPL-3.0.'],
       ],
@@ -218,7 +218,7 @@ const ru: Strings = {
       h2: 'Вопросы',
       items: [
         ['Нужен ли аккаунт Cloudflare?', 'Да. clx считает сайты, которые обслуживает Cloudflare, а коротким ссылкам нужен ваш домен там же: через clx.cx ваш трафик не идёт.'],
-        ['Что clx создаёт в моём аккаунте?', 'Один воркер, одну базу D1 и маршруты ваших сайтов и хоста ссылок — со своим рабочим токеном. При отключении clx удаляет созданное и перечисляет, что удалить не смог; рабочий токен вы отзываете сами в Cloudflare — clx даёт ссылку.'],
+        ['Что clx создаёт в моём аккаунте?', 'Один воркер, одну базу D1, маршруты ваших сайтов и собственные домены хостов ссылок — со своим рабочим токеном. При отключении clx удаляет созданное и перечисляет, что удалить не смог; рабочий токен вы отзываете сами в Cloudflare — clx даёт ссылку.'],
         ['Это платно?', 'Бесплатный тариф ничего не стоит и не требует карты; воркер работает в ваших квотах Cloudflare.'],
         ['Можно посмотреть код?', 'Весь, на GitHub, под AGPL-3.0.'],
       ],

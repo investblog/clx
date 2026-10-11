@@ -13,7 +13,7 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0005](./0005-upgrade-advice.md) | Upgrade advice: once a UTC day, backpressure read from size, 401 left to the token check | 06.10.2026 | §8 |
 | [0006](./0006-backups-after-release.md) | Backups of the clx.cx database to R2 — after the release | 06.10.2026 | §13 |
 | [0007](./0007-both-crons-at-upload.md) | The working cron is set at upload, next to the self-check | 06.10.2026 | §4, §5 |
-| [0008](./0008-link-host-and-codes.md) | One link host per account, links keyed by code alone | 06.10.2026 | §6 |
+| [0008](./0008-link-host-and-codes.md) | One link host per account, links keyed by code alone (superseded by 0024) | 06.10.2026 | §6 |
 | [0009](./0009-qr-copy-in-repo.md) | The QR library is copied into the repository until it is on npm | 06.10.2026 | §6, §11, §14 |
 | [0010](./0010-session-version-starts-at-sign-up.md) | A new user's session version starts at the sign-up time | 07.10.2026 | §9 |
 | [0011](./0011-zone-picker.md) | The host fields suggest the account's zones | 10.10.2026 | §10, §15 |
@@ -29,3 +29,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0021](./0021-language-switch-in-the-header.md) | The language switch is in the header, the app's too; the profile has none | 11.10.2026 | §10, §16 |
 | [0022](./0022-og-card-flows.md) | The Open Graph card's picture is a sankey of made-up flows, one per page | 11.10.2026 | §16 |
 | [0023](./0023-mcp-server.md) | An MCP server at /mcp over the same /v1, signed in with the API key | 11.10.2026 | §15 |
+| [0024](./0024-link-host-per-site.md) | Link hosts per site, random labels, made as Workers Custom Domains | 11.10.2026 | §3, §6, §13, §15 |

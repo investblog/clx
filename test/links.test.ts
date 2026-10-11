@@ -58,9 +58,16 @@ async function ready(): Promise<string> {
   return body.account.id;
 }
 
-const setHost = (host: string) => call('PUT', `/v1/accounts/${accountId}/link-host`, { body: { host } });
-const addLink = (body: Record<string, unknown>) => call('POST', '/v1/links', { body: { account_id: accountId, ...body } });
+/** The latest link host made (setHost): links are added on it. */
+let hostId = '';
+const setHost = async (host: string) => {
+  const r = await call('POST', '/v1/link-hosts', { body: { account_id: accountId, host } });
+  if (r.body.link_host?.id) hostId = r.body.link_host.id;
+  return r;
+};
+const addLink = (body: Record<string, unknown>) => call('POST', '/v1/links', { body: { link_host_id: hostId, ...body } });
 const routes = () => fakeCf.routes.get('zone1') ?? [];
+const domains = () => [...fakeCf.domains.values()];
 const userDb = (): DatabaseSync => {
   const id = fakeCf.scripts.get('clx-edge')!.bindings.find((b) => b.name === 'DB')!.id!;
   return fakeCf.dbs.get(id)!.db;
@@ -89,24 +96,15 @@ const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KH
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 const visit = (url: string, headers: Record<string, string> = {}, country?: string) => viaWorker(url, { headers: { 'user-agent': CHROME, 'cf-connecting-ip': '198.51.100.7', ...headers } }, country);
 
-describe('the link host', () => {
-  it('gets no route while another operation holds the account; the cron makes it after', async () => {
-    const hold = (until: number | null) => env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(until).run();
-    await hold(Date.now() + 60_000);
-    expect((await setHost('go.example.com')).body.link_host.state).toBe('route_pending');
-    expect(routes()).toEqual([]);
-    await hold(null);
-    await runLinkHosts(env, Date.now() + 61_000);
-    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host.state).toBe('active');
-    expect(routes()).toHaveLength(1);
-  });
-
-  it('routes the whole host to clx-edge and reaches the worker; the account shows it', async () => {
+describe('link hosts', () => {
+  it('a named host becomes a custom domain of clx-edge — no route, no DNS record to make — and reaches the worker', async () => {
     const r = await setHost('go.example.com');
     expect(r.status).toBe(202);
-    expect(r.body.link_host).toMatchObject({ host: 'go.example.com', state: 'active' });
-    expect(routes()).toEqual([expect.objectContaining({ pattern: 'go.example.com/*', script: 'clx-edge' })]);
-    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host).toMatchObject({ host: 'go.example.com', state: 'active', config: 'synced' });
+    expect(r.body.link_host).toMatchObject({ host: 'go.example.com', state: 'active', site_id: null, account_id: accountId });
+    expect(domains()).toEqual([expect.objectContaining({ hostname: 'go.example.com', service: 'clx-edge', zone_id: 'zone1' })]);
+    expect(routes()).toEqual([]);
+    expect((await call('GET', `/v1/link-hosts/${hostId}`)).body.link_host).toMatchObject({ state: 'active', config: 'synced' });
+    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_hosts).toEqual([expect.objectContaining({ host: 'go.example.com' })]);
     // Nothing on it passes through: there is no origin behind a link host.
     expect(await visit('https://go.example.com/')).toMatchObject({ status: 404, body: '', origin: false });
     expect(await visit('https://go.example.com/nope')).toMatchObject({ status: 404, body: '', origin: false });
@@ -114,94 +112,159 @@ describe('the link host', () => {
     expect(await visit('https://example.com/nope')).toMatchObject({ origin: true });
   });
 
-  it('a host in no zone is refused; the same host again changes nothing', async () => {
-    expect((await setHost('go.nowhere.net')).body.error.code).toBe('zone_not_found');
-    await setHost('go.example.com');
-    expect((await setHost('go.example.com')).status).toBe(202);
-    expect(routes()).toHaveLength(1);
+  it('one per site: a random 3-character label under the site’s host, www. dropped; the sites’ links share nothing', async () => {
+    const a = (await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'www.example.com' } })).body.site;
+    const b = (await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'blog.example.com' } })).body.site;
+    const ha = (await call('POST', '/v1/link-hosts', { body: { site_id: a.id } })).body.link_host;
+    const hb = (await call('POST', '/v1/link-hosts', { body: { site_id: b.id } })).body.link_host;
+    expect(ha).toMatchObject({ site_id: a.id, state: 'active', host: expect.stringMatching(/^[a-z0-9]{3}\.example\.com$/u) });
+    expect(hb.host).toMatch(/^[a-z0-9]{3}\.blog\.example\.com$/u);
+    // The same code on two hosts: two links, each on its own host.
+    for (const h of [ha, hb]) expect((await call('POST', '/v1/links', { body: { link_host_id: h.id, code: 'promo', url: `https://${h.host === ha.host ? 'a' : 'b'}.example.org/` } })).status).toBe(201);
+    expect((await visit(`https://${ha.host}/promo`)).headers.get('location')).toBe('https://a.example.org/');
+    expect((await visit(`https://${hb.host}/promo`)).headers.get('location')).toBe('https://b.example.org/');
+    expect((await call('GET', `/v1/link-hosts?account_id=${accountId}`)).body.link_hosts).toHaveLength(2);
   });
 
-  it('another host replaces it: the old route goes, the links answer on the new host', async () => {
-    await setHost('go.example.com');
-    await addLink({ code: 'promo', url: 'https://shop.example.org/sale' });
-    const r = await setHost('l.example.com');
-    expect(r.body.link_host).toMatchObject({ host: 'l.example.com', state: 'active' });
-    expect(routes().map((x) => x.pattern)).toEqual(['l.example.com/*']);
-    expect(await visit('https://l.example.com/promo')).toMatchObject({ status: 302 });
-    expect(await visit('https://go.example.com/promo')).toMatchObject({ origin: true });
-    expect((await call('GET', '/v1/links')).body.links[0].short_url).toBe('https://l.example.com/promo');
-  });
-
-  it('a host another worker holds is route_conflict: not a link host for the worker', async () => {
-    fakeCf.takenHosts.add('go.example.com');
-    expect((await setHost('go.example.com')).body.link_host).toMatchObject({ state: 'route_conflict', error: { code: 'route_conflict' } });
+  it('a host with someone’s DNS record is never taken over: a site’s random label takes another, a named host is conflict', async () => {
+    const site = (await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'example.com' } })).body.site;
+    // The first label drawn already has a record: the host ends on the next one.
+    const real = crypto.getRandomValues.bind(crypto);
+    let n = 0;
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(a: T): T => {
+      if (a instanceof Uint8Array && a.length === 3) a.set(n++ < 1 ? [0, 0, 0] : [1, 1, 1]);
+      else real(a as never);
+      return a;
+    });
+    fakeCf.dnsRecords.add('aaa.example.com');
+    try {
+      expect((await call('POST', '/v1/link-hosts', { body: { site_id: site.id } })).body.link_host).toMatchObject({ host: 'bbb.example.com', state: 'active' });
+    } finally {
+      vi.restoreAllMocks();
+    }
+    fakeCf.dnsRecords.add('go.example.com');
+    expect((await setHost('go.example.com')).body.link_host).toMatchObject({ state: 'conflict', error: { code: 'dns_record_exists', host: 'go.example.com' } });
+    expect([...fakeCf.domains.values()].map((d) => d.hostname)).toEqual(['bbb.example.com']);
     await runSites(env);
     expect(await visit('https://go.example.com/x1y2z3')).toMatchObject({ origin: true });
   });
 
-  it('the same host again after a conflict tries the route once more', async () => {
-    fakeCf.takenHosts.add('go.example.com');
-    expect((await setHost('go.example.com')).body.link_host.state).toBe('route_conflict');
-    fakeCf.takenHosts.clear();
-    fakeCf.routes.clear();
-    expect((await setHost('go.example.com')).body.link_host).toMatchObject({ state: 'active', error: null });
+  it('a pending host is not in the worker’s config and takes no links; a site’s random host on another worker’s domain takes the next label', async () => {
+    const hold = (until: number | null) => env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(until).run();
+    await hold(Date.now() + 60_000);
+    expect((await setHost('go.example.com')).body.link_host.state).toBe('pending');
+    expect(await addLink({ code: 'promo', url: 'https://shop.example.org/' })).toMatchObject({ status: 409, body: { error: { code: 'link_host_not_ready' } } });
     await runSites(env);
-    expect(await visit('https://go.example.com/x1y2z3')).toMatchObject({ status: 404, origin: false });
+    expect(await visit('https://go.example.com/x1y2z3')).toMatchObject({ origin: true });
+    await hold(null);
+    const site = (await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'example.com' } })).body.site;
+    const real = crypto.getRandomValues.bind(crypto);
+    let n = 0;
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(a: T): T => {
+      if (a instanceof Uint8Array && a.length === 3) a.set(n++ < 1 ? [2, 2, 2] : [3, 3, 3]);
+      else real(a as never);
+      return a;
+    });
+    fakeCf.domains.set('dx', { id: 'dx', hostname: 'ccc.example.com', service: 'their-worker', zone_id: 'zone1' });
+    try {
+      expect((await call('POST', '/v1/link-hosts', { body: { site_id: site.id } })).body.link_host).toMatchObject({ host: 'ddd.example.com', state: 'active' });
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
-  it('a site host cannot be the link host, nor the link host a site: one passes through, the other does not', async () => {
+  it('a deleted host’s name stays taken until its custom domain is removed', async () => {
+    await setHost('go.example.com');
+    const hold = (until: number | null) => env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(until).run();
+    await hold(Date.now() + 60_000);
+    expect((await call('DELETE', `/v1/link-hosts/${hostId}`)).body.link_host).toMatchObject({ state: 'deleted' });
+    expect(domains()).toHaveLength(1);
+    expect((await setHost('go.example.com')).status).toBe(409);
+    await hold(null);
+    // Still serving, it is no link's target either — a rule's included.
+    await setHost('l.example.com');
+    expect(await addLink({ url: 'https://shop.example.org/', rules: [{ devices: ['mobile'], url: 'https://go.example.com/x' }] })).toMatchObject({ status: 400, body: { error: { details: { field: 'rules[0].url' } } } });
+    await env.DB.prepare('UPDATE link_hosts SET updated_at = 0').run();
+    await runLinkHosts(env);
+    expect(domains().map((d) => d.hostname)).toEqual(['l.example.com']);
+    expect((await setHost('go.example.com')).body.link_host).toMatchObject({ host: 'go.example.com', state: 'active' });
+  });
+
+  it('{} or half of a named host is refused as such', async () => {
+    expect((await call('POST', '/v1/link-hosts', { body: {} })).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'account_id' } });
+    expect((await call('POST', '/v1/link-hosts', { body: { account_id: accountId } })).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'host' } });
+  });
+
+  it('another worker’s custom domain on the host is conflict, never adopted', async () => {
+    fakeCf.domains.set('dx', { id: 'dx', hostname: 'go.example.com', service: 'their-worker', zone_id: 'zone1' });
+    expect((await setHost('go.example.com')).body.link_host).toMatchObject({ state: 'conflict', error: { code: 'domain_taken', worker: 'their-worker' } });
+  });
+
+  it('a host in no zone, a site’s host, a host a link points at, a second time: refused', async () => {
+    expect((await setHost('go.nowhere.net')).body.error.code).toBe('zone_not_found');
     expect((await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'example.com' } })).status).toBe(202);
     expect(await setHost('example.com')).toMatchObject({ status: 409, body: { error: { details: { field: 'host' } } } });
     await setHost('go.example.com');
     expect(await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'go.example.com' } })).toMatchObject({ status: 409, body: { error: { details: { field: 'host' } } } });
-    expect(await visit('https://example.com/about')).toMatchObject({ origin: true });
-  });
-
-  it('a replacement refused in the batch keeps the current link host', async () => {
-    await setHost('go.example.com');
-    // A site for the new host appears after the check, while the zone is looked up.
-    fakeCf.onZones = async () => {
-      fakeCf.onZones = null;
-      await env.DB.prepare(
-        "INSERT INTO sites (id, account_id, user_id, target, host, zone_id, seed, state, revision, created_at, updated_at) VALUES ('race', ?, 1, 'srace', 'l.example.com', 'zone1', 'seed', 'active', 0, 0, 0)",
-      )
-        .bind(accountId)
-        .run();
-    };
-    expect((await setHost('l.example.com')).status).toBe(409);
-    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host).toMatchObject({ host: 'go.example.com', state: 'active' });
-    expect(routes().map((x) => x.pattern)).toEqual(['go.example.com/*']);
-  });
-
-  it('a route Cloudflare could not make now is made by the cron', async () => {
-    fakeCf.failOnce.add('/workers/routes');
-    expect((await setHost('go.example.com')).body.link_host.state).toBe('route_pending');
-    await env.DB.prepare('UPDATE link_hosts SET updated_at = 0').run();
-    expect(await runLinkHosts(env)).toBe(1);
-    expect((await call('GET', `/v1/accounts/${accountId}`)).body.account.link_host.state).toBe('active');
-  });
-
-  it('a host a link points at cannot become the link host', async () => {
-    await setHost('go.example.com');
+    expect(await setHost('go.example.com')).toMatchObject({ status: 409, body: { error: { details: { field: 'host' } } } });
     await addLink({ code: 'promo', url: 'https://l.example.com/x' });
     expect(await setHost('l.example.com')).toMatchObject({ status: 409, body: { error: { details: { field: 'host' } } } });
-    expect(routes().map((x) => x.pattern)).toEqual(['go.example.com/*']);
+    expect(await call('POST', '/v1/link-hosts', { body: { site_id: 'nope' } })).toMatchObject({ status: 404, body: { error: { details: { field: 'site_id' } } } });
   });
 
-  it('disconnect removes the link host route with the rest', async () => {
+  it('as many as the plan has sites, counted per user', async () => {
+    for (let i = 0; i < 10; i++) expect((await setHost(`h${i}.example.com`)).status).toBe(202);
+    expect((await setHost('h10.example.com')).body.error).toMatchObject({ code: 'limit_reached', details: { limit: 10 } });
+  });
+
+  it('while another operation holds the account the domain waits; the cron makes it after; one Cloudflare could not make now too', async () => {
+    const hold = (until: number | null) => env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(until).run();
+    await hold(Date.now() + 60_000);
+    expect((await setHost('go.example.com')).body.link_host.state).toBe('pending');
+    expect(domains()).toEqual([]);
+    await hold(null);
+    await runLinkHosts(env, Date.now() + 61_000);
+    expect((await call('GET', `/v1/link-hosts/${hostId}`)).body.link_host.state).toBe('active');
+    fakeCf.failOnce.add('/workers/domains');
+    expect((await setHost('l.example.com')).body.link_host.state).toBe('pending');
+    await env.DB.prepare('UPDATE link_hosts SET updated_at = 0').run();
+    await runLinkHosts(env);
+    expect((await call('GET', `/v1/link-hosts/${hostId}`)).body.link_host.state).toBe('active');
+  });
+
+  it('deleting one: refused while links are on it; then its custom domain goes, and the host stops answering', async () => {
     await setHost('go.example.com');
+    const link = (await addLink({ code: 'promo', url: 'https://shop.example.org/' })).body.link;
+    expect(await call('DELETE', `/v1/link-hosts/${hostId}`)).toMatchObject({ status: 409, body: { error: { code: 'link_host_in_use', details: { links: 1 } } } });
+    await call('DELETE', `/v1/links/${link.id}`);
+    expect((await call('DELETE', `/v1/link-hosts/${hostId}`)).body.link_host.state).toBe('deleted');
+    expect(domains()).toEqual([]);
+    await runSites(env);
+    expect(await visit('https://go.example.com/promo')).toMatchObject({ origin: true });
+    // A custom domain someone pointed at another worker is left, and said so.
+    await setHost('l.example.com');
+    fakeCf.domains.get(domains()[0]!.id)!.service = 'their-worker';
+    expect((await call('DELETE', `/v1/link-hosts/${hostId}`)).body.link_host).toMatchObject({ state: 'deleted', error: { code: 'domain_not_ours' } });
+    expect(domains()).toHaveLength(1);
+  });
+
+  it('deleting a site leaves its link host; disconnect removes the custom domains with the rest', async () => {
+    const site = (await call('POST', '/v1/sites', { body: { account_id: accountId, host: 'example.com' } })).body.site;
+    await call('POST', '/v1/link-hosts', { body: { site_id: site.id } });
+    await call('DELETE', `/v1/sites/${site.id}`);
+    expect(domains()).toHaveLength(1);
     const r = await call('DELETE', `/v1/accounts/${accountId}`);
     expect(r.body.left).toEqual([]);
-    expect(routes()).toEqual([]);
+    expect(domains()).toEqual([]);
   });
 });
 
 describe('links', () => {
   beforeEach(async () => void (await setHost('go.example.com')));
 
-  it('needs a link host first', async () => {
+  it('needs a link host of the caller', async () => {
     await env.DB.prepare('DELETE FROM link_hosts').run();
-    expect((await addLink({ url: 'https://example.org/' })).body.error.code).toBe('link_host_required');
+    expect((await addLink({ url: 'https://example.org/' })).body.error).toMatchObject({ code: 'not_found', details: { field: 'link_host_id' } });
   });
 
   it('a click: 302 to the URL, no-store, nothing else; counted as a view of the link, with where it went', async () => {

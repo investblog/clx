@@ -106,7 +106,7 @@ const GROUPS: { title: string; id: string; match: (route: string) => boolean }[]
   { title: 'You and your API keys', id: 'me', match: (r) => r.startsWith('/v1/me') || r.startsWith('/v1/keys') },
   { title: 'Cloudflare accounts', id: 'accounts', match: (r) => r.startsWith('/v1/accounts') },
   { title: 'Sites', id: 'sites', match: (r) => r.startsWith('/v1/sites') },
-  { title: 'Links', id: 'links', match: (r) => r.startsWith('/v1/links') },
+  { title: 'Link hosts and links', id: 'links', match: (r) => r.startsWith('/v1/links') || r.startsWith('/v1/link-hosts') },
 ];
 const ORDER = ['me', 'accounts', 'sites', 'links', 'reports'];
 

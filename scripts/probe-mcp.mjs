@@ -90,7 +90,7 @@ try {
   const discover = await mcp('server/discover');
   step('2026-07-28: server/discover', discover.body.result?.supportedVersions?.[0] === '2026-07-28');
   const list = await mcp('tools/list');
-  step('the tools, listed without a key', list.body.result?.tools?.length === 23, String(list.body.result?.tools?.length));
+  step('the tools, listed without a key', list.body.result?.tools?.length === 26, String(list.body.result?.tools?.length));
   const anon = await mcp('tools/call', { name: 'whoami', arguments: {} });
   step('a call without a key: 401 and WWW-Authenticate', anon.status === 401 && /^Bearer /u.test(anon.auth ?? ''), anon.auth);
   const me = await tool('whoami', {}, key);

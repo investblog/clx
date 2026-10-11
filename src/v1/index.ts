@@ -5,7 +5,7 @@ import { Hono, type Context } from 'hono';
 import { CfError } from '../cf/api';
 import { accountView, connect, workingToken, type EdgeAccount } from '../cf/connect';
 import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
-import { addLink, deleteLink, linkHostView, linkView, liveLinkHost, patchLink, setLinkHost, type LinkRow } from '../cf/links';
+import { addLink, addLinkHost, deleteLink, deleteLinkHost, linkHostById, linkHostView, linkView, patchLink, type LinkHostRow, type LinkRow } from '../cf/links';
 import { addSite, deleteSite, listZones, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { verifyPassword } from '../auth/password';
 import { sha256 } from '../lib/crypto';
@@ -294,8 +294,8 @@ v1.get(
       ? await c.env.DB.prepare('SELECT kind, state, step, data, updated_at FROM operations WHERE id = ?').bind(edge.operation_id).first<{ kind: string; state: string; step: string; data: string; updated_at: number }>()
       : null;
     const operation = op ? { kind: op.kind, state: op.state, step: op.step, error: (JSON.parse(op.data) as { error?: unknown }).error ?? null, updated_at: new Date(op.updated_at).toISOString() } : null;
-    const host = await liveLinkHost(c.env.DB, edge.id);
-    return { status: 200, body: { account: { ...accountView(edge), operation, link_host: host ? linkHostView(host, edge.synced_revision) : null } } };
+    const hosts = (await c.env.DB.prepare("SELECT * FROM link_hosts WHERE account_id = ? AND state != 'deleted' ORDER BY created_at").bind(edge.id).all<LinkHostRow>()).results;
+    return { status: 200, body: { account: { ...accountView(edge), operation, link_hosts: hosts.map((h) => linkHostView(h, edge.synced_revision)) } } };
   }),
 );
 
@@ -305,17 +305,6 @@ v1.get(
     requireAccountRead(p);
     const edge = await accountOf(c, p);
     return { status: 200, body: await listZones(await workingToken(c.env, edge), edge.cf_account_id) };
-  }),
-);
-
-v1.put(
-  '/accounts/:id/link-host',
-  handle({ scope: 'sites' }, async (c, p, body) => {
-    const edge = await accountOf(c, p);
-    const host = typeof body.host === 'string' ? body.host.trim().toLowerCase().replace(/\.$/u, '') : '';
-    const set = await setLinkHost(c.env, p, edge, host);
-    sync(c, p, edge.id);
-    return { status: 202, body: { link_host: linkHostView(set, edge.synced_revision) } };
   }),
 );
 
@@ -441,23 +430,89 @@ v1.delete(
 
 // ---- Short links (§6) ----
 
-/** A link of the caller, with its account and link host; one outside the key's allow list is not found. */
+// ---- Link hosts (§6, ADR 0024) ----
+
+/** A link host of the caller, with its account; one outside the key's allow list is not found. */
+async function linkHostOf(c: C, p: Principal, id: string, field?: string): Promise<{ host: LinkHostRow; edge: EdgeAccount }> {
+  const host = await linkHostById(c.env.DB, id);
+  const edge = host ? await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ? AND user_id = ?').bind(host.account_id, p.userId).first<EdgeAccount>() : null;
+  if (!host || !edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such link host.', field ? { field } : undefined);
+  return { host, edge };
+}
+
+v1.post(
+  '/link-hosts',
+  handle({ scope: 'links' }, async (c, p, body) => {
+    let edge: EdgeAccount;
+    let site: SiteRow | undefined;
+    if (body.site_id !== undefined) {
+      if (body.host !== undefined || body.account_id !== undefined) fail(400, 'invalid_request', 'Give "site_id", or "account_id" and "host" — not both.', { field: 'site_id' });
+      site = (await c.env.DB.prepare('SELECT * FROM sites WHERE id = ? AND user_id = ?').bind(typeof body.site_id === 'string' ? body.site_id : '', p.userId).first<SiteRow>()) ?? undefined;
+      const e = site ? await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(site.account_id).first<EdgeAccount>() : null;
+      if (!site || !e || !mayTouch(p, e.cf_account_id)) return fail(404, 'not_found', 'No such site.', { field: 'site_id' });
+      edge = e;
+    } else {
+      if (typeof body.account_id !== 'string' || typeof body.host !== 'string') fail(400, 'invalid_request', 'Give "site_id", or "account_id" and "host".', { field: typeof body.account_id !== 'string' ? 'account_id' : 'host' });
+      const e = await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ? AND user_id = ?').bind(body.account_id, p.userId).first<EdgeAccount>();
+      if (!e || !mayTouch(p, e.cf_account_id)) return fail(404, 'not_found', 'No such account.', { field: 'account_id' });
+      edge = e;
+    }
+    const host = typeof body.host === 'string' ? body.host.trim().toLowerCase().replace(/\.$/u, '') : undefined;
+    const made = await addLinkHost(c.env, p, edge, site ? { site } : { host });
+    sync(c, p, edge.id);
+    return { status: 202, body: { link_host: linkHostView(made, edge.synced_revision) } };
+  }),
+);
+
+v1.get(
+  '/link-hosts',
+  handle({ scope: 'links' }, async (c, p) => {
+    const accountId = c.req.query('account_id') ?? null;
+    const rows = (
+      await c.env.DB.prepare(
+        "SELECT h.*, e.cf_account_id, e.synced_revision FROM link_hosts h JOIN edge_accounts e ON e.id = h.account_id WHERE e.user_id = ?1 AND h.state != 'deleted' AND (?2 IS NULL OR h.account_id = ?2) ORDER BY h.created_at",
+      )
+        .bind(p.userId, accountId)
+        .all<LinkHostRow & { cf_account_id: string; synced_revision: number }>()
+    ).results.filter((r) => mayTouch(p, r.cf_account_id));
+    return { status: 200, body: { link_hosts: rows.map((r) => linkHostView(r, r.synced_revision)) } };
+  }),
+);
+
+v1.get(
+  '/link-hosts/:id',
+  handle({ scope: 'links' }, async (c, p) => {
+    const { host, edge } = await linkHostOf(c, p, c.req.param('id') ?? '');
+    return { status: 200, body: { link_host: linkHostView(host, edge.synced_revision) } };
+  }),
+);
+
+v1.delete(
+  '/link-hosts/:id',
+  handle({ scope: 'links' }, async (c, p) => {
+    const { host, edge } = await linkHostOf(c, p, c.req.param('id') ?? '');
+    const gone = await deleteLinkHost(c.env, p, edge, host);
+    sync(c, p, edge.id);
+    return { status: 200, body: { link_host: linkHostView(gone, edge.synced_revision) } };
+  }),
+);
+
+/** A link of the caller, with its account and host; one outside the key's allow list is not found. */
 async function linkOf(c: C, p: Principal): Promise<{ link: LinkRow; edge: EdgeAccount; host: string | null }> {
   const link = await c.env.DB.prepare('SELECT * FROM links WHERE id = ? AND user_id = ?').bind(c.req.param('id'), p.userId).first<LinkRow>();
   const edge = link ? await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(link.account_id).first<EdgeAccount>() : null;
   if (!link || !edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such link.');
-  return { link, edge, host: (await liveLinkHost(c.env.DB, edge.id))?.host ?? null };
+  const host = await linkHostById(c.env.DB, link.host_id);
+  return { link, edge, host: host && host.state !== 'deleted' ? host.host : null };
 }
 
 v1.post(
   '/links',
   handle({ scope: 'links' }, async (c, p, body) => {
-    const accountId = typeof body.account_id === 'string' ? body.account_id : '';
-    const edge = await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ? AND user_id = ?').bind(accountId, p.userId).first<EdgeAccount>();
-    if (!edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such account.', { field: 'account_id' });
-    const link = await addLink(c.env, p, edge, { code: body.code, url: body.url, rules: body.rules });
+    const { host, edge } = await linkHostOf(c, p, typeof body.link_host_id === 'string' ? body.link_host_id : '', 'link_host_id');
+    const link = await addLink(c.env, p, host, { code: body.code, url: body.url, rules: body.rules });
     sync(c, p, edge.id);
-    return { status: 201, body: { link: linkView(link, (await liveLinkHost(c.env.DB, edge.id))?.host ?? null, edge.synced_revision) } };
+    return { status: 201, body: { link: linkView(link, host.host, edge.synced_revision) } };
   }),
 );
 
@@ -467,7 +522,7 @@ v1.get(
     const accountId = c.req.query('account_id') ?? null;
     const rows = (
       await c.env.DB.prepare(
-        "SELECT l.*, e.cf_account_id, e.synced_revision, h.host AS link_host FROM links l JOIN edge_accounts e ON e.id = l.account_id LEFT JOIN link_hosts h ON h.account_id = l.account_id AND h.state != 'deleted' WHERE l.user_id = ?1 AND l.state != 'deleted' AND (?2 IS NULL OR l.account_id = ?2) ORDER BY l.created_at",
+        "SELECT l.*, e.cf_account_id, e.synced_revision, h.host AS link_host FROM links l JOIN edge_accounts e ON e.id = l.account_id LEFT JOIN link_hosts h ON h.id = l.host_id AND h.state != 'deleted' WHERE l.user_id = ?1 AND l.state != 'deleted' AND (?2 IS NULL OR l.account_id = ?2) ORDER BY l.created_at",
       )
         .bind(p.userId, accountId)
         .all<LinkRow & { cf_account_id: string; synced_revision: number; link_host: string | null }>()
@@ -495,7 +550,7 @@ v1.get('/links/:id/qr.svg', async (c) => {
   requireScope(p, 'links');
   const { link, host } = await linkOf(c, p);
   if (link.state === 'deleted') fail(404, 'not_found', 'No such link.');
-  if (!host) fail(409, 'link_host_required', 'This account has no link host.');
+  if (!host) fail(404, 'not_found', 'The link host of this link is gone.');
   const size = c.req.query('size');
   if (size !== undefined && !/^(6[4-9]|[7-9]\d|[1-9]\d{2,3})$/u.test(size)) fail(400, 'invalid_request', '"size" must be an integer 64–9999 (pixels); without it the SVG scales to its container.', { field: 'size' });
   const svg = renderSvg(generateMatrix(`https://${host}/${link.code}?q`, { ecc: 'M' }), size ? { size: Number(size) } : {});

@@ -17,6 +17,7 @@ import type { Env } from '../types';
 import { ApiError, fail, newId } from '../v1/http';
 import { cf, CfError, scriptDigest, type CallLog } from './api';
 import { edgeById, lease, owned, release, step, workingToken, type EdgeAccount } from './connect';
+import { dropDomain, recordedDomains } from './links';
 import { dropRoute, recordedRoutes } from './sites';
 
 const SCRIPT = 'clx-edge';
@@ -485,15 +486,23 @@ export async function disconnect(env: Env, principal: string, edge: EdgeAccount)
     const log: CallLog = { db, edgeAccountId: current.id, principal };
     let script = !!current.script_owned;
     let database = current.d1_id;
-    // The sites' routes first: a route left without its worker would only fail.
+    // The sites' routes and the link hosts' custom domains first: left without their worker they
+    // would only fail.
     let routes = await recordedRoutes(db, current.id);
-    if (token && (script || database || routes.length)) {
+    let domains = await recordedDomains(db, current.id);
+    if (token && (script || database || routes.length || domains.length)) {
       try {
         while (routes.length) {
           const r = routes[0]!;
           // A route the user pointed elsewhere is theirs now: named, not deleted.
           if ((await dropRoute(token, log, r.zone_id, r.route_id, r.pattern)) === 'not_ours') left.push(`route ${r.pattern} (changed outside clx)`);
           routes = routes.slice(1);
+        }
+        while (domains.length) {
+          const d = domains[0]!;
+          // Removing the custom domain removes the DNS record Cloudflare made for it.
+          if ((await dropDomain(token, log, current.cf_account_id, d.id, d.host)) === 'not_ours') left.push(`custom domain ${d.host} (changed outside clx)`);
+          domains = domains.slice(1);
         }
         if (script) {
           const digest = await scriptDigest(token, current.cf_account_id, SCRIPT);
@@ -512,6 +521,7 @@ export async function disconnect(env: Env, principal: string, edge: EdgeAccount)
       }
     }
     for (const r of routes) left.push(`route ${r.pattern}`);
+    for (const d of domains) left.push(`custom domain ${d.host}`);
     if (script) left.push('worker clx-edge');
     if (database) left.push(`database clx-edge (${database})`);
     await db.batch([

@@ -42,7 +42,7 @@ back.
 
 ```
  visitor ──► example.com/<path>/<c> ┐                        ┌─ clx.cx (our account, Workers Paid)
- visitor ──► go.example.com/<code> ┤  user's Cloudflare      │  • sign-in, sign-up
+ visitor ──► k7q.example.com/<code> ┤  user's Cloudflare      │  • sign-in, sign-up
                                    ▼  account (Free)         │  • connecting a Cloudflare account
                            worker clx-edge ── D1 clx-edge ◄──┼─ • report breakdowns: reading D1
                                    │  ▲                      │    through the D1 REST API on demand
@@ -93,7 +93,7 @@ Why:
 | the user's zones | `GET /zones?account.id=` | Zone Read |
 | routes: list, create, delete | `/zones/{zone}/workers/routes` | Workers Routes Read, Write |
 | account usage for upgrade advice (§8) | `POST /client/v4/graphql` | Account Analytics Read |
-| link host without a DNS record | Workers Custom Domains or DNS | see §13 item 2 |
+| link hosts: custom domains of `clx-edge` (Cloudflare makes their DNS records) | `/accounts/{id}/workers/domains` | Workers Scripts Write, Zone Read, Workers Routes Write — no DNS right (checked live, §13 item 2) |
 
    Not taken: KV, Pages, Transform/Redirect Rules, SSL, WAF, Firewall, Cache, zone Analytics, API Tokens
    Edit. Whether a Pages check is needed — open question §13 item 9.
@@ -133,7 +133,7 @@ Why:
   `edge/released.json` lists the sha256 of every bundle ever committed — the code clx may call its
   own. Before a rollout it is checked with `GET /admin/edge/bundle-info` (a broken bundle must never
   reach all accounts at once).
-- **Resource ownership.** clx.cx records what it creates: the database UUID, route IDs, and a mark
+- **Resource ownership.** clx.cx records what it creates: the database UUID, route IDs, custom domain IDs (link hosts, §6), and a mark
   that the `clx-edge` script is ours — set just before the upload, cleared only when clx has deleted
   it. If `clx-edge` (worker or database) already exists and is not in our records, the install stops
   with `name_taken` and touches nothing. Rollback and disconnect delete only what is recorded.
@@ -207,7 +207,7 @@ Why:
   hours of silence — "no connection" in the UI and one e-mail to the user when it begins. A push
   ends it; an account with no connection still takes new sites, but a rollout skips it (its update
   would wait for a `setup_ok` that will not come).
-- **Disconnecting clx** by the user: the working token removes the recorded routes, deletes the
+- **Disconnecting clx** by the user: the working token removes the recorded routes and custom domains, deletes the
   recorded worker (if its code is a clx bundle) and database; we delete the ciphertext. What could
   not be deleted — the token is revoked or lacks a right, the worker was changed — is listed in the
   answer for the user to remove by hand. The working token cannot delete itself (it has no API
@@ -346,26 +346,44 @@ Why:
 
 ## 6. Short links, QR, rules
 
-- **Link host** — the user's choice: a subdomain (`go.example.com`) or a separate domain in their
-  account; **one per Cloudflare account** (`PUT /v1/accounts/{id}/link-host`). Route
-  `go.example.com/*` → `clx-edge`. How the subdomain gets its DNS record — §13 item 2. Another host
-  replaces it: the old route is deleted and the links move to the new host with their codes; a host
-  a link points at cannot become the link host, nor can a site's host (a site's host passes
-  everything outside the counter through, a link host nothing), and a link host cannot become a
-  site. The same host again after a `route_conflict` tries the route once more. The whole host is the worker's and has no origin:
-  nothing on it passes through — a path that is not a code, an unknown code or a method other than
-  `GET`/`HEAD` gets a plain `404` with no clx text.
+- **Link hosts** ([ADR 0024](./decisions/0024-link-host-per-site.md)) — **as many per Cloudflare
+  account as the plan has sites** (counted per user, deleted ones not), so that each site of a
+  network can have its own and its links share nothing with another site's
+  (`POST /v1/link-hosts`):
+  - `{site_id}` — a host under the site's host (`www.` dropped) with a **random label of 3 characters**
+    `[a-z0-9]`: `k7q.example.com`; `{account_id, host}` — a host the user names, in one of the
+    account's zones;
+  - clx makes it a **Workers Custom Domain** of `clx-edge` with the working token's own rights
+    (`PUT /accounts/{id}/workers/domains`): Cloudflare creates the proxied DNS record and the
+    certificate, and the host answers within seconds; no route. A host that already has a DNS record
+    is refused by Cloudflare (`409`, code `100117`) — someone's record is never taken over: a random
+    label is tried again with another (up to 5 times), a named host ends `conflict` with
+    `error.code` `dns_record_exists`. Checked live — `docs/cloudflare-facts.md`;
+  - states: `pending` (being made; the minute cron retries), `active`, `conflict`, `deleted`; a host
+    enters the worker's config and takes links (`409 link_host_not_ready` before) only once `active`,
+    so a random label may still change while it is pending; a deleted host's name stays taken until
+    its custom domain is removed;
+    `config` `pending` → `synced` as for a site. `DELETE /v1/link-hosts/{id}` is refused while live
+    links are on it (`409 link_host_in_use`); deleting removes the custom domain and with it its
+    DNS record. Deleting a site leaves its link hosts (their links may be printed);
+  - clx deletes only a custom domain it recorded and whose service is `clx-edge` (§4 ownership);
+    disconnecting removes them all before the worker;
+  - a site's host cannot be a link host nor the reverse, and a link host cannot be a link's target
+    (no loops). The whole host is the worker's and has no origin: nothing on it passes through — a
+    path that is not a code, an unknown code or a method other than `GET`/`HEAD` gets a plain `404`
+    with no clx text.
 - **Link:** a code (3–32 characters `[A-Za-z0-9_-]`, chosen or a random 6) → target; `302`,
   `cache-control: no-store` (every click must reach the worker), no other headers and no body. A
   click (`GET`; a `HEAD` is redirected, not counted) is written as a view of target `l<id>` (page —
   where it was sent, see Rules below; source — the `Referer` host, or `qr`), with its daily visitor hash like a site's; a bot is
   redirected too and counted as a bot. The code never changes (printed QR codes carry it): a new
-  code is a new link; a deleted link frees its code and keeps its totals. A code is unique within
-  the account — one link host per account, so the worker looks a link up by its code alone. Config
-  keys: `linkhost:<host>` and `link:<code>` ([ADR 0008](./decisions/0008-link-host-and-codes.md)).
+  code is a new link; a deleted link frees its code and keeps its totals. A link belongs to one link
+  host and its code is unique on that host; the worker looks a link up by the host and the code.
+  Config keys: `linkhost:<host>` and `link:<host>/<code>` (ADR 0024; ADR 0008 had one host and
+  `link:<code>`).
 - **QR** — SVG via `@301st/qr-svg` (§11), built on clx.cx (download as SVG; `GET
   /v1/links/{id}/qr.svg`, error correction M, an optional `size` in pixels). The address in the QR
-  is `go.example.com/<code>?q`; the worker records `?q` as source `qr` and does not pass it on.
+  is `k7q.example.com/<code>?q`; the worker records `?q` as source `qr` and does not pass it on.
   Built on clx.cx, not in the browser, so that API clients get it too.
 - **Rules:** `{countries?, devices?, url}` — countries as ISO alpha-2 codes (`cf.country`), devices
   `mobile`/`desktop` (as the collector tells them), at least one of the two; the first match wins,
@@ -376,7 +394,7 @@ Why:
   link has no other use for: no new column or migration, and while the rules stay the same no
   extra row (the destination follows from the country and the device, already in the row).
   Clicks counted by a bundle before this record `''` ([ADR 0019](./decisions/0019-link-flows.md)).
-- **Targets:** `https://` only, not on the link host (no loops), up to 2048 characters.
+- **Targets:** `https://` only, not on a link host of the account (no loops), up to 2048 characters.
 - **Sync clx.cx → worker** — everything the worker serves for the account: its sites (config of §5)
   and its links with rules. A delete-then-insert sync can leave sites or links without settings for
   as long as the second half fails, and rewriting everything on every change would cost an account
@@ -709,7 +727,7 @@ Pages:
   (`GET /v1/accounts/{id}/zones`; a host in none of them is flagged before sending) — clx.cx still
   finds the zone itself, as the API does ([ADR 0011](./decisions/0011-zone-picker.md)) — the
   snippet, excluded paths, rotate, delete, route status.
-- **Links:** the link host, a list of links with 7-day clicks, create and edit, rules, QR (SVG).
+- **Links:** the link hosts (one per site at a click), a list of links with 7-day clicks, create and edit, rules, QR (SVG).
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
   "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques". Tiles, the series and
   the breakdowns are drawn by `affiliate-charts` ([ADR 0016](./decisions/0016-brand-and-report-charts.md)).
@@ -754,8 +772,8 @@ moving into `clx-edge`).
    (`/accounts/{id}/workers/domains`) — per the docs (`workers/configuration/routing/custom-domains`,
    04.10.2026) it creates the DNS record and certificate itself and cannot sit on a host with a
    CNAME; the token rights are not documented; (b) DNS Write and a proxied `AAAA 100::`; (c) the user
-   creates the record by following instructions. **MVP — (c)**, no extra rights; (a) is tried on a
-   test account at stage 2.
+   creates the record by following instructions. MVP was (c). **Since 11.10.2026 — (a)**: with the
+   working token's rights alone it works and never takes over an existing record (ADR 0024).
 3. **The D1 REST API** accepts several statements separated by `;` or as an array (API docs,
    04.10.2026) but does not promise a transaction — so the config sync (§6) and snapshots (§7) are built
    so that a partial failure is safe. (On a Free account 05.10.2026 a call whose second of three
@@ -889,13 +907,13 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_required`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_in_use`, `link_host_not_ready`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.
 - **Endpoints** (everything is scoped to the clx account of the key; another account's object is
   `404`, never `403`; a key outside its allow list or scope gets `404` or `403 scope_required` — paths
-  under `/v1/accounts` need `accounts`, `/v1/sites` and the link host `sites`, `/v1/links` `links`
+  under `/v1/accounts` need `accounts`, `/v1/sites` `sites`, `/v1/link-hosts` and `/v1/links` `links`
   (each also reads its own objects; reading accounts is open to `sites` too — a build pipeline
   needs the account ids), the reports `reports`):
 
@@ -916,8 +934,8 @@ that adds a site and embeds its counter at build time.
 | `PATCH /v1/sites/{id}` | excluded paths |
 | `POST /v1/sites/{id}/rotate` | a new seed → new `<path>`, names and snippet (§5); the old path counts for 30 more days |
 | `DELETE /v1/sites/{id}` | remove the route; totals stay until the account is disconnected |
-| `PUT /v1/accounts/{id}/link-host` `{host}` | the link host of that Cloudflare account (§6) |
-| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules (§6) |
+| `POST /v1/link-hosts` `{site_id}` or `{account_id, host}`, `GET /v1/link-hosts?account_id=`, `GET`/`DELETE /v1/link-hosts/{id}` | link hosts, one per site if wished (§6) → `202`, poll `GET` until `active` and `synced` |
+| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6) |
 | `GET /v1/links/{id}/qr.svg` | the QR code |
 | `GET /v1/sites/{id}/report?period=`, `GET /v1/links/{id}/report?period=` | totals and series; `&breakdowns=1` adds the breakdowns (§7) |
 
@@ -940,7 +958,7 @@ that adds a site and embeds its counter at build time.
     rebinding); native clients send none; no CORS;
   - **tools** — every `/v1` call a key may make (not those for a page session only: keys, the
     language, deleting the account), one tool each; reads are `readOnlyHint`; a change that replaces
-    or removes (update, rotate, reinstall, renew, a new link host, delete, disconnect)
+    or removes (update, rotate, reinstall, renew, delete, disconnect)
     `destructiveHint`; all but `whoami` `openWorldHint` (they reach the user's Cloudflare). A
     mutating tool takes an optional `idempotency_key` (1–200 visible ASCII characters, as the header);
     without it the server makes one, and a repeated call is not protected (the tool says so). An

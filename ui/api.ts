@@ -121,14 +121,18 @@ export interface Account {
   advice: { level: string; metric: string | null; metrics: Record<string, MetricAdvice>; unavailable?: string[]; suggest?: string; at: string } | null;
   operation?: { kind: string; state: string; step: string; error: { code?: string; message?: string } | null; updated_at: string } | null;
   /** GET /v1/accounts/{id} only */
-  link_host?: LinkHost | null;
+  link_hosts?: LinkHost[];
   created_at: string;
 }
 export interface LinkHost {
+  id: string;
+  account_id: string;
+  site_id: string | null;
   host: string;
   state: string;
   config: 'pending' | 'synced';
   error: { code?: string; [k: string]: unknown } | null;
+  created_at: string;
 }
 export interface Key {
   id: string;

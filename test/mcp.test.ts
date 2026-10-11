@@ -118,8 +118,8 @@ describe('the tools', () => {
     expect(tools.every((t) => t.inputSchema.additionalProperties === false)).toBe(true);
     expect(tools.find((t) => t.name === 'disconnect_account')!.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.find((t) => t.name === 'site_report')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true });
-    // A change replaces what was there: an update, a rotation, a new link host are destructive too.
-    for (const n of ['update_link', 'rotate_site', 'set_link_host']) expect(tools.find((t) => t.name === n)!.annotations.destructiveHint).toBe(true);
+    // A change replaces what was there: an update, a rotation are destructive too, as deletes are.
+    for (const n of ['update_link', 'rotate_site', 'delete_link_host']) expect(tools.find((t) => t.name === n)!.annotations.destructiveHint).toBe(true);
     expect(tools.find((t) => t.name === 'add_link')!.annotations).toMatchObject({ destructiveHint: false, readOnlyHint: false });
     expect(tools.find((t) => t.name === 'whoami')!.annotations.openWorldHint).toBe(false);
   });

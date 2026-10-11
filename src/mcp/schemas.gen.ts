@@ -143,39 +143,6 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "query": [],
     "body": []
   },
-  "set_link_host": {
-    "description": "Set the account's link host (scope sites) — a host in one of its zones, routed whole to clx-edge\n\nThe account must be `ready`. The host needs a proxied DNS record — clx does not create it\n(§13 item 2): e.g. `AAAA <host> 100::`, proxied. Setting another host replaces this one: its\nroute is deleted and the links move to the new host with their codes.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{1,64}$",
-          "description": "an id of clx: 22 characters of base64url"
-        },
-        "host": {
-          "type": "string",
-          "description": "go.example.com — a host of a zone in that account"
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200,
-          "pattern": "^[!-~]{1,200}$",
-          "description": "Sent as the Idempotency-Key: the same key and arguments within 24 hours return the first answer and change nothing again. Without one the server makes one, and a repeated call is not protected."
-        }
-      },
-      "required": [
-        "id",
-        "host"
-      ],
-      "additionalProperties": false
-    },
-    "query": [],
-    "body": [
-      "host"
-    ]
-  },
   "renew_token": {
     "description": "Renew the working token with a new bootstrap token (scope accounts)",
     "inputSchema": {
@@ -410,6 +377,133 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     ],
     "body": []
   },
+  "list_link_hosts": {
+    "description": "Link hosts (scope links); `account_id` narrows to one account",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "query": [
+      "account_id"
+    ],
+    "body": []
+  },
+  "add_link_host": {
+    "description": "Add a link host (scope links) — one per site if wished; clx makes it a custom domain of clx-edge\n\n`{site_id}` makes `<label>.<site host>` (a leading `www.` dropped) with a random label of 3\ncharacters; `{account_id, host}` takes a host you name, in one of the account's zones. The\naccount must be `ready`. clx makes the host a Workers Custom Domain of clx-edge: Cloudflare\ncreates its DNS record and certificate, so you create no record. A host that already has a\nDNS record is never taken over: a random label is tried again with another, a named host\nends `conflict` (`dns_record_exists`). Answers `202`; poll GET until `state` is `active` and\n`config` is `synced` (usually seconds). Up to the plan's site limit per user.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "site_id": {
+          "type": "string",
+          "description": "the site to make a host for; alone"
+        },
+        "account_id": {
+          "type": "string",
+          "description": "with host"
+        },
+        "host": {
+          "type": "string",
+          "description": "with account_id: a host of a zone in that account, such as k7q.example.com"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[!-~]{1,200}$",
+          "description": "Sent as the Idempotency-Key: the same key and arguments within 24 hours return the first answer and change nothing again. Without one the server makes one, and a repeated call is not protected."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "site_id"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "account_id"
+                ]
+              },
+              {
+                "required": [
+                  "host"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "account_id",
+            "host"
+          ],
+          "not": {
+            "required": [
+              "site_id"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": [
+      "site_id",
+      "account_id",
+      "host"
+    ]
+  },
+  "get_link_host": {
+    "description": "One link host (scope links)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "description": "an id of clx: 22 characters of base64url"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": []
+  },
+  "delete_link_host": {
+    "description": "Delete a link host (scope links) — refused while live links are on it; its custom domain and DNS record go",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "description": "an id of clx: 22 characters of base64url"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[!-~]{1,200}$",
+          "description": "Sent as the Idempotency-Key: the same key and arguments within 24 hours return the first answer and change nothing again. Without one the server makes one, and a repeated call is not protected."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": []
+  },
   "list_links": {
     "description": "Links (scope links); `account_id` narrows to one account",
     "inputSchema": {
@@ -427,12 +521,13 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": []
   },
   "add_link": {
-    "description": "Add a short link (scope links) on the account's link host\n\nA click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of\nthe link, with source `qr` when the address carries `?q` (the QR code's) — or as a bot when\nthe client is one (curl, a script, a crawler: it is redirected all the same). `config` turns\n`synced` once the worker has the link (seconds).",
+    "description": "Add a short link (scope links) on one of the account's link hosts\n\nA click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of\nthe link, with source `qr` when the address carries `?q` (the QR code's) — or as a bot when\nthe client is one (curl, a script, a crawler: it is redirected all the same). `config` turns\n`synced` once the worker has the link (seconds).",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "account_id": {
-          "type": "string"
+        "link_host_id": {
+          "type": "string",
+          "description": "the link host it lives on (POST /v1/link-hosts)"
         },
         "code": {
           "type": "string",
@@ -442,7 +537,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
         "url": {
           "type": "string",
           "format": "uri",
-          "description": "https:// only, up to 2048 characters, not on the link host"
+          "description": "https:// only, up to 2048 characters, not on a link host of the account"
         },
         "rules": {
           "type": "array",
@@ -474,7 +569,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
               "url": {
                 "type": "string",
                 "format": "uri",
-                "description": "https:// only, up to 2048 characters, not on the link host"
+                "description": "https:// only, up to 2048 characters, not on a link host of the account"
               }
             }
           }
@@ -488,14 +583,14 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
         }
       },
       "required": [
-        "account_id",
+        "link_host_id",
         "url"
       ],
       "additionalProperties": false
     },
     "query": [],
     "body": [
-      "account_id",
+      "link_host_id",
       "code",
       "url",
       "rules"
@@ -564,7 +659,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
               "url": {
                 "type": "string",
                 "format": "uri",
-                "description": "https:// only, up to 2048 characters, not on the link host"
+                "description": "https:// only, up to 2048 characters, not on a link host of the account"
               }
             }
           }
@@ -615,7 +710,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": []
   },
   "link_qr": {
-    "description": "The QR code of the link (scope links) — an SVG of `https://<link host>/<code>?q`\n\nThe `?q` makes a scan count with source `qr`; the worker does not pass it on. One `<rect>` and\none `<path>`, integer coordinates, a quiet zone of 4 modules, error correction M. Without\n`size` the SVG has no width and height and scales to its container. It follows the link host:\na replaced host makes earlier printed codes stop working.",
+    "description": "The QR code of the link (scope links) — an SVG of `https://<link host>/<code>?q`\n\nThe `?q` makes a scan count with source `qr`; the worker does not pass it on. One `<rect>` and\none `<path>`, integer coordinates, a quiet zone of 4 modules, error correction M. Without\n`size` the SVG has no width and height and scales to its container. It carries the link's own\nhost, which never changes; deleting that host stops its printed codes.",
     "inputSchema": {
       "type": "object",
       "properties": {

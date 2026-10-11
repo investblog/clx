@@ -47,7 +47,8 @@ export function build() {
     const description = [op.summary, op.description].filter(Boolean).join('\n\n').trim();
     out[t.name] = {
       description,
-      inputSchema: { type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false },
+      // A body of one shape or another (POST /v1/link-hosts): the choice goes with it.
+      inputSchema: { type: 'object', properties, ...(required.length ? { required } : {}), ...(body?.oneOf ? { oneOf: body.oneOf } : {}), additionalProperties: false },
       query,
       body: fields,
     };

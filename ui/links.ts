@@ -1,7 +1,8 @@
-// Pages of stages 5b–5c (docs/spec.md §10): short links — the link host of each account, the list with
+// Pages of stages 5b–5c (docs/spec.md §10): short links — the link hosts (one per site, ADR 0024), the list with
 // 7-day clicks, adding and editing a link (drawers), and a link's page with its URL, QR code and
 // delete. Every action is a /v1 call.
 import { ApiError, call, text, type Account, type LinkHost, type Me } from './api';
+import type { Site } from './sites';
 import { action, badge, cell, confirmAction, notice, pageHead, table, type Live, type Tone } from './accounts';
 import { openDrawer } from './dialog';
 import { codeBlock, h } from './dom';
@@ -17,6 +18,7 @@ export interface Rule {
 export interface Link {
   id: string;
   account_id: string;
+  link_host_id: string;
   code: string;
   short_url: string | null;
   url: string;
@@ -27,65 +29,80 @@ export interface Link {
   created_at: string;
 }
 
-const HOST_TONE: Record<string, Tone> = { active: 'success', route_conflict: 'danger' };
+const HOST_TONE: Record<string, Tone> = { active: 'success', conflict: 'danger' };
 const usable = (a: Account) => a.state === 'ready' || a.state === 'no_connection';
 
-/** The accounts a link can live in, each with its link host (read one by one: only GET one has it). */
-async function accountsWithHosts(): Promise<Account[]> {
-  const { accounts } = await call<{ accounts: Account[] }>('GET', '/v1/accounts');
-  return Promise.all(accounts.filter(usable).map(async (a) => (await call<{ account: Account }>('GET', `/v1/accounts/${a.id}`)).account));
-}
-
-/** Set or replace an account's link host: the DNS record is the user's to make (§13 item 2). */
-function hostDrawer(a: Account, done: () => void): void {
+/** A link host for a site — a random 3-character name under its address — or one the user names
+ *  (ADR 0024). clx makes it a custom domain of its worker: the user creates no DNS record. */
+function hostDrawer(kind: 'site' | 'named', accounts: Account[], sites: Site[], done: () => void): void {
   const c = t.links;
-  openDrawer(c.hostTitle(a.name ?? a.cf_account_id), (close) => {
-    const input = h('input', { class: 'input', id: 'link-host', placeholder: 'go.example.com', autocomplete: 'off', spellcheck: 'false', value: a.link_host?.host ?? '' });
-    const zones = zoneHost(input, () => a.id);
-    const save = async (key: string) => {
-      if (!input.value.trim()) throw new ApiError(400, 'invalid_request', c.needHost);
-      await call('PUT', `/v1/accounts/${a.id}/link-host`, { host: input.value.trim() }, key);
-      close();
-      done();
-    };
+  openDrawer(kind === 'site' ? c.hostForSite : c.hostNamed, (close) => {
+    const site = dropdown(
+      sites.map((s) => ({ value: s.id, label: s.host })),
+      { id: 'link-host-site' },
+    );
+    const account = dropdown(
+      accounts.map((a) => ({ value: a.id, label: a.name ?? a.cf_account_id })),
+      { id: 'link-host-account' },
+    );
+    const input = h('input', { class: 'input', id: 'link-host', placeholder: 'k7q.example.com', autocomplete: 'off', spellcheck: 'false' });
+    const zones = zoneHost(input, () => account.value());
     return h(
       'div',
       { class: 'stack stack--md' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-host' }, c.linkHost), zones.el),
+      kind === 'site'
+        ? h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-host-site' }, c.site), site.el, h('p', { class: 'field-hint' }, c.siteHint))
+        : h('div', { class: 'stack stack--sm' }, h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-host-account' }, t.sites.colAccount), account.el), h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-host' }, c.linkHost), zones.el)),
       h('p', { class: 'muted text-sm' }, c.hostHint),
-      a.link_host ? h('p', { class: 'muted text-sm' }, c.hostMove) : null,
       h(
         'div',
         { class: 'actions' },
-        // Replacing a host breaks QR codes printed with the old one: asked first.
-        a.link_host ? confirmAction(c.changeHost, { title: c.changeHost, body: c.hostMove, confirmLabel: c.changeHost }, save, 'btn--primary') : action(c.setHost, 'btn--primary', save),
+        action(c.addHost, 'btn--primary', async (key) => {
+          if (kind === 'named' && !input.value.trim()) throw new ApiError(400, 'invalid_request', c.needHost);
+          await call('POST', '/v1/link-hosts', kind === 'site' ? { site_id: site.value() } : { account_id: account.value(), host: input.value.trim() }, key);
+          close();
+          done();
+        }),
       ),
     );
   });
 }
 
-function hostsCard(accounts: Account[], redraw: () => void): HTMLElement {
+function hostsCard(hosts: LinkHost[], accounts: Account[], sites: Site[], redraw: () => void): HTMLElement {
   const c = t.links;
+  const name = (id: string) => {
+    const a = accounts.find((x) => x.id === id);
+    return a ? (a.name ?? a.cf_account_id) : '—';
+  };
+  const forSite = h('button', { type: 'button', class: 'btn btn--primary btn--sm' }, c.hostForSite);
+  forSite.addEventListener('click', () => hostDrawer('site', accounts, sites, redraw));
+  const named = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, c.hostNamed);
+  named.addEventListener('click', () => hostDrawer('named', accounts, sites, redraw));
   return h(
     'section',
     { class: 'stack stack--sm' },
     h('h3', { class: 'h4' }, c.hosts),
-    table(
-      [[t.sites.colAccount], [c.linkHost], [t.sites.colState, 'medium'], ['']],
-      accounts.map((a) => {
-        const lh = a.link_host as LinkHost | null | undefined;
-        const set = h('button', { type: 'button', class: `btn btn--sm ${lh ? 'btn--ghost' : 'btn--primary'}` }, lh ? c.changeHost : c.setHost);
-        set.addEventListener('click', () => hostDrawer(a, redraw));
-        return h(
-          'tr',
-          {},
-          cell(a.name ?? a.cf_account_id),
-          cell(lh ? h('span', {}, lh.host, lh.error?.code ? h('span', { class: 'action-status' }, ` ${errorText(lh.error.code, lh.error.code)}`) : null) : h('span', { class: 'muted' }, c.noHost)),
-          cell(lh ? badge((c.hostState as Record<string, string>)[lh.state] ?? lh.state, HOST_TONE[lh.state]) : '—', 'medium'),
-          cell(set),
-        );
-      }),
-    ),
+    hosts.length
+      ? table(
+          [[c.linkHost], [t.sites.colAccount, 'medium'], [t.sites.colState], ['']],
+          hosts.map((lh) =>
+            h(
+              'tr',
+              {},
+              cell(h('span', {}, lh.host, lh.error?.code ? h('span', { class: 'action-status' }, ` ${errorText(lh.error.code, lh.error.code)}`) : null)),
+              cell(name(lh.account_id), 'medium'),
+              cell(badge((c.hostState as Record<string, string>)[lh.state] ?? lh.state, HOST_TONE[lh.state])),
+              cell(
+                confirmAction(c.removeHost, { title: c.removeHost, body: c.removeHostAsk, confirmLabel: c.removeConfirm }, async (key) => {
+                  await call('DELETE', `/v1/link-hosts/${lh.id}`, undefined, key);
+                  redraw();
+                }, 'btn--ghost btn--sm'),
+              ),
+            ),
+          ),
+        )
+      : h('p', { class: 'muted' }, c.noHosts),
+    h('div', { class: 'actions' }, sites.length ? forSite : null, named),
   );
 }
 
@@ -127,17 +144,17 @@ function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } 
   };
 }
 
-function newLinkDrawer(me: Me, accounts: Account[], go: (hash: string) => void): void {
+function newLinkDrawer(me: Me, hosts: LinkHost[], go: (hash: string) => void): void {
   const c = t.links;
   openDrawer(c.add, (close) => {
-    const account = dropdown(accounts.map((a) => ({ value: a.id, label: `${a.link_host!.host} — ${a.name ?? a.cf_account_id}` })), { id: 'link-account' });
+    const host = dropdown(hosts.map((lh) => ({ value: lh.id, label: lh.host })), { id: 'link-account' });
     const code = h('input', { class: 'input', id: 'link-code', placeholder: c.codePlaceholder, autocomplete: 'off', spellcheck: 'false' });
     const url = h('input', { class: 'input', id: 'link-url', required: '', placeholder: 'https://example.com/landing', autocomplete: 'off', spellcheck: 'false' });
     const rules = rulesEditor([]);
     return h(
       'div',
       { class: 'stack stack--md' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-account' }, c.linkHost), account.el),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-account' }, c.linkHost), host.el),
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-code' }, c.code), code, h('p', { class: 'field-hint' }, c.codeHint)),
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-url' }, c.url), url),
       rules.el,
@@ -146,7 +163,7 @@ function newLinkDrawer(me: Me, accounts: Account[], go: (hash: string) => void):
         { class: 'actions' },
         action(c.create, 'btn--primary', async (key) => {
           if (!url.value.trim()) throw new ApiError(400, 'invalid_request', c.needUrl);
-          const r = await call<{ link: Link }>('POST', '/v1/links', { account_id: account.value(), url: url.value.trim(), rules: rules.value(), ...(code.value.trim() ? { code: code.value.trim() } : {}) }, key);
+          const r = await call<{ link: Link }>('POST', '/v1/links', { link_host_id: host.value(), url: url.value.trim(), rules: rules.value(), ...(code.value.trim() ? { code: code.value.trim() } : {}) }, key);
           close();
           go(`#/links/${r.link.id}`);
         }),
@@ -158,15 +175,23 @@ function newLinkDrawer(me: Me, accounts: Account[], go: (hash: string) => void):
 
 export async function linksPage(me: Me, go: (hash: string) => void, redraw: () => void): Promise<HTMLElement> {
   const c = t.links;
-  const [{ links }, accounts] = await Promise.all([call<{ links: Link[] }>('GET', '/v1/links'), accountsWithHosts()]);
-  const withHost = accounts.filter((a) => a.link_host);
+  const [{ links }, { accounts: all }, { link_hosts: hosts }, { sites: allSites }] = await Promise.all([
+    call<{ links: Link[] }>('GET', '/v1/links'),
+    call<{ accounts: Account[] }>('GET', '/v1/accounts'),
+    call<{ link_hosts: LinkHost[] }>('GET', '/v1/link-hosts'),
+    call<{ sites: Site[] }>('GET', '/v1/sites'),
+  ]);
+  const accounts = all.filter(usable);
+  const sites = allSites.filter((s) => s.state !== 'deleted' && accounts.some((a) => a.id === s.account_id));
+  // Links go on a working host only (the API says link_host_not_ready otherwise).
+  const live = hosts.filter((lh) => lh.state === 'active');
   const add = h('button', { type: 'button', class: 'btn btn--primary' }, c.add);
-  add.addEventListener('click', () => newLinkDrawer(me, withHost, go));
-  const empty = !accounts.length ? c.noAccount : !withHost.length ? c.needHostFirst : c.empty;
+  add.addEventListener('click', () => newLinkDrawer(me, live, go));
+  const empty = !accounts.length ? c.noAccount : !live.length ? c.needHostFirst : c.empty;
   return h(
     'div',
     { class: 'stack stack--md' },
-    pageHead(t.titles.links, withHost.length ? add : null),
+    pageHead(t.titles.links, live.length ? add : null),
     links.length
       ? paged(
           links.map((l) =>
@@ -182,7 +207,7 @@ export async function linksPage(me: Me, go: (hash: string) => void, redraw: () =
           (rows) => table([[c.colLink], [c.colTarget, 'medium'], [c.colClicks], ['', 'low']], rows),
         )
       : h('div', { class: 'card empty-state' }, h('p', {}, empty)),
-    accounts.length ? hostsCard(accounts, redraw) : null,
+    accounts.length ? hostsCard(hosts, accounts, sites, redraw) : null,
   );
 }
 

@@ -1,7 +1,7 @@
 // clx-edge — the worker clx installs into a user's Cloudflare account (docs/spec.md §4, §5). One
 // bundle for everyone; a deployment's own settings come in bindings, the sites in the synced config
 // (§6). It answers only its own paths — a site's script and collector, and the short links of the
-// account's link host — and passes every other request through to the origin, so a probe under a
+// account's link hosts — and passes every other request through to the origin, so a probe under a
 // site's path gets the site's own answer. While
 // clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
 import { bodyHead, click, collect, countryOf } from './collect';
@@ -73,12 +73,12 @@ export default {
         return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
       }
     }
-    // The link host is routed whole and has no origin behind it: nothing there passes through.
+    // A link host is the worker's custom domain and has no origin behind it: nothing passes through.
     // Unreadable config: as for a site, behave as if the host were not ours.
     if (await configFor<object>(env, linkHostKey(url.hostname)).catch(() => null)) {
       const code = url.pathname.slice(1);
       if (!CODE.test(code) || (request.method !== 'GET' && request.method !== 'HEAD')) return new Response(null, { status: 404 });
-      const link = await configFor<LinkConfig>(env, linkKey(code)).then(
+      const link = await configFor<LinkConfig>(env, linkKey(url.hostname, code)).then(
         (l) => l ?? false,
         () => null,
       );

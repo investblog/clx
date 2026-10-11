@@ -3,15 +3,15 @@
 //
 // The stage 5a live check (docs/spec.md §6): short links on the user's own link host. On the
 // throwaway account of .secrets/test-cloudflare.env, as .secrets/user-probe@clx.cx.txt:
-//   1. connect and install; a fresh host of the test zone gets a proxied `AAAA 100::` record (stand
-//      prep with the Global key — clx does not make DNS records, §13 item 2);
-//   2. that host becomes the link host (the route made with the working token); a link with a rule
+//   1. connect and install; a fresh host of the test zone becomes a link host — a custom domain of
+//      clx-edge whose DNS record Cloudflare makes (ADR 0024); none is made here;
+//   2. a link on it with a rule
 //      by country and device;
 //   3. clicks: 302 with no-store and no body, the rules by the visitor's country and device, `?q` as
 //      source qr, a plain 404 for anything else; the clicks in the account's own D1 and in the
 //      link's report (stage 5b: today live, breakdowns in the same read), each click's destination;
 //   4. a change of the URL reaches the worker, a delete makes it a 404;
-//   5. disconnect (the link host route goes with it), the DNS record deleted, cleanup.
+//   5. disconnect (the custom domain and its record go with it), cleanup.
 // A few minutes; no cron is waited for. Write the output to a file, never through `| head` — a cut
 // pipe stops the probe before its cleanup. Nothing secret is printed.
 import fs from 'node:fs';
@@ -86,6 +86,7 @@ const key = `Bearer ${issued.body.key}`;
 let boot = null;
 let accountId = null;
 let record = null;
+let hostId = null;
 try {
   const groups = await cfAdmin('GET', `/accounts/${account}/tokens/permission_groups`);
   const id = (name) => groups.find((g) => g.name === name).id;
@@ -99,12 +100,12 @@ try {
   const acc = await until(async () => (await clx('GET', `/v1/accounts/${accountId}`, key)).body.account, (a) => a?.state !== 'installing', 5);
   step('connected and installed', acc?.state === 'ready', acc?.state);
 
-  record = await cfAdmin('POST', `/zones/${zone.id}/dns_records`, { type: 'AAAA', name: host, content: '100::', proxied: true, ttl: 1 });
-  step('stand: a proxied AAAA 100:: record', Boolean(record?.id), host);
-
-  const set = await clx('PUT', `/v1/accounts/${accountId}/link-host`, key, { host }, `probe-host-${run}`);
-  const lh = await until(async () => (await clx('GET', `/v1/accounts/${accountId}`, key)).body.account?.link_host, (h) => h?.config === 'synced', 2);
-  step('the link host: route made, synced', set.status === 202 && lh?.state === 'active' && lh?.config === 'synced', JSON.stringify(lh ?? set.body));
+  // A link host as a custom domain of clx-edge (ADR 0024): no DNS record is made for it here.
+  const set = await clx('POST', '/v1/link-hosts', key, { account_id: accountId, host }, `probe-host-${run}`);
+  hostId = set.body.link_host?.id;
+  const lh = await until(async () => (await clx('GET', `/v1/link-hosts/${hostId}`, key)).body.link_host, (h) => h?.state === 'active' && h?.config === 'synced', 2);
+  record = (await cfAdmin('GET', `/zones/${zone.id}/dns_records?name=${host}`))[0] ?? null;
+  step('the link host: a custom domain, its DNS record made by Cloudflare, synced', set.status === 202 && lh?.state === 'active' && lh?.config === 'synced' && record?.proxied === true, `${host} ${record?.type ?? 'no record'}`);
 
   // The visitor's country as Cloudflare sees this machine, for a rule that must match it.
   const loc = (await (await fetch(`https://${host}/cdn-cgi/trace`)).text()).match(/^loc=([A-Z]{2})$/mu)?.[1] ?? 'XX';
@@ -113,7 +114,7 @@ try {
     '/v1/links',
     key,
     {
-      account_id: accountId,
+      link_host_id: hostId,
       code: `p${run}`,
       url: 'https://example.com/a',
       rules: [
@@ -179,13 +180,17 @@ try {
   const deleted = await until(() => hit(short), (r) => r.status === 404, 2, 5000);
   step('a deleted link is a 404', deleted.status === 404, String(deleted.status));
 
-  const gone = await clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-disconnect-${run}`);
-  const routes = await cfAdmin('GET', `/zones/${zone.id}/workers/routes`);
-  step('disconnect: the link host route goes too', gone.status === 200 && gone.body.left?.length === 0 && !routes.some((r) => r.pattern === `${host}/*`), JSON.stringify(gone.body.left ?? gone.body.error));
+  const gone = await until(() => clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-disconnect-${run}`), (r) => r.status !== 409, 2, 3_000);
+  const domainsLeft = (await cfAdmin('GET', `/accounts/${account}/workers/domains?hostname=${host}`)).length;
+  const recordsLeft = (await cfAdmin('GET', `/zones/${zone.id}/dns_records?name=${host}`)).length;
+  step('disconnect: the custom domain and its DNS record go too', gone.status === 200 && gone.body.left?.length === 0 && !domainsLeft && !recordsLeft, JSON.stringify(gone.body.left ?? gone.body.error));
   accountId = null;
+  record = null;
 } finally {
-  if (accountId) await clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-cleanup-${run}`).catch(() => undefined);
-  if (record?.id) await cfAdmin('DELETE', `/zones/${zone.id}/dns_records/${record.id}`).catch((e) => step('DNS record deleted', false, String(e)));
+  // Disconnected before the tokens go: without its working token clx cannot remove what it made.
+  if (accountId) await until(() => clx('DELETE', `/v1/accounts/${accountId}`, key, undefined, `probe-cleanup-${run}`), (r) => r.status !== 409, 2, 3_000).catch(() => undefined);
+  for (const d of await cfAdmin('GET', `/accounts/${account}/workers/domains?hostname=${host}`).catch(() => [])) await cfAdmin('DELETE', `/accounts/${account}/workers/domains/${d.id}`).catch(() => undefined);
+  if (record?.id) await cfAdmin('DELETE', `/zones/${zone.id}/dns_records/${record.id}`).catch(() => undefined);
   const left = (await cfAdmin('GET', `/accounts/${account}/tokens?per_page=50`)).filter((t) => t.id === boot?.id || /^clx-[A-Za-z0-9_-]{22}$/u.test(t.name));
   for (const t of left) await cfAdmin('DELETE', `/accounts/${account}/tokens/${t.id}`);
   const again = await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });

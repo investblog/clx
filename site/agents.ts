@@ -74,19 +74,19 @@ curl -s -X POST $CLX/v1/accounts \\
 <p>The answer carries <code>site.snippet</code>: <code>inline</code> (a <code>&lt;script&gt;</code> under 600 bytes) or <code>script_tag</code> (an external <code>&lt;script src="…"&gt;</code> with <code>defer</code> — use it if the site's CSP forbids inline scripts). Put one of them into every page, e.g. before <code>&lt;/body&gt;</code>. The snippet is stable — a rebuild needs no call; only <code>POST /v1/sites/{id}/rotate</code> changes it. The counter answers once <code>site.config</code> is <code>synced</code> and <code>site.state</code> is <code>active</code> (seconds). <code>route_conflict</code> means another worker already holds the host's route: show <code>error</code> to the person.</p>
 
 <h2 id="links">3. Short links and QR codes</h2>
-<p>Links live on a link host — a subdomain given wholly to <code>clx-edge</code>, e.g. <code>go.example.com</code>, with no site on it. It needs a proxied DNS record that clx does not make: the person (or you, if you have their Cloudflare access) adds <code>AAAA go.example.com 100::</code>, proxied. Setting the host takes the scope <code>sites</code> (it routes a host, as a site does); the links themselves, <code>links</code>. Then:</p>
-<pre><code>curl -s -X PUT $CLX/v1/accounts/&lt;account.id&gt;/link-host \\
+<p>Links live on a link host — a host given wholly to <code>clx-edge</code>, with no site on it. Make one per site, so the sites' links share nothing: <code>{"site_id"}</code> gives a random three-character name under the site's host, such as <code>k7q.example.com</code>; <code>{"account_id", "host"}</code> takes a host you name. clx makes it a custom domain of the worker: Cloudflare creates its DNS record and certificate — add no record yourself. A host that already has a record is never taken over (a named one ends <code>conflict</code>). Poll <code>GET /v1/link-hosts/{id}</code> until <code>state</code> is <code>active</code> and <code>config</code> <code>synced</code> (seconds). Both take the scope <code>links</code>:</p>
+<pre><code>curl -s -X POST $CLX/v1/link-hosts \\
   -H "Authorization: Bearer $CLX_KEY" -H "Idempotency-Key: host-1" \\
-  -H "Content-Type: application/json" -d '{"host": "go.example.com"}'
+  -H "Content-Type: application/json" -d '{"site_id": "&lt;site.id&gt;"}'
 
 curl -s -X POST $CLX/v1/links \\
   -H "Authorization: Bearer $CLX_KEY" -H "Idempotency-Key: link-spring-1" \\
   -H "Content-Type: application/json" \\
-  -d '{"account_id": "&lt;account.id&gt;", "url": "https://example.com/spring", "code": "spring",
+  -d '{"link_host_id": "&lt;link_host.id&gt;", "url": "https://example.com/spring", "code": "spring",
        "rules": [{"countries": ["DE", "AT"], "url": "https://example.com/de/spring"},
                  {"devices": ["mobile"], "url": "https://example.com/m/spring"}]}'</code></pre>
 <p><code>link.short_url</code> is the address to share. Rules are tried in order; the first match wins, else <code>url</code>. The QR code is <code>GET /v1/links/{id}/qr.svg?size=512</code> with the same <code>Authorization</code> header — scans count with source <code>qr</code>.</p>
-<p>To check a link, open it without following the redirect: <code>curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://go.example.com/spring</code> → <code>302</code> and the target. Such a <code>GET</code> is counted as a bot (curl and scripts are), not as a view — a person's click in a browser is a view; a <code>HEAD</code> (<code>curl -I</code>) is redirected but not counted. A rule by country can only be seen from that country; the <code>rules</code> in the link's answer are what the worker applies.</p>
+<p>To check a link, open it without following the redirect: <code>curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://k7q.example.com/spring</code> → <code>302</code> and the target. Such a <code>GET</code> is counted as a bot (curl and scripts are), not as a view — a person's click in a browser is a view; a <code>HEAD</code> (<code>curl -I</code>) is redirected but not counted. A rule by country can only be seen from that country; the <code>rules</code> in the link's answer are what the worker applies.</p>
 
 <h2 id="reports">4. Reports</h2>
 <pre><code>curl -s "$CLX/v1/sites/&lt;site.id&gt;/report?period=7d&amp;breakdowns=1" -H "Authorization: Bearer $CLX_KEY"</code></pre>
@@ -101,7 +101,7 @@ curl -s -X POST $CLX/v1/links \\
 <li>Send an <code>Idempotency-Key</code> with every POST, PUT, PATCH and DELETE: a new key per intended action, the same key when you retry it. A retry then never does the thing twice.</li>
 <li><code>429</code>: wait <code>Retry-After</code> seconds. <code>409 operation_in_progress</code>: another operation on the account is running — wait a few seconds and retry. <code>5xx</code> and <code>cloudflare_unavailable</code>: retry with backoff, with the same Idempotency-Key.</li>
 <li>Branch on <code>error.code</code>; show <code>error.message</code> to the person when you stop. Do not loop on a <code>4xx</code>.</li>
-<li>clx changes nothing in the person's zones but the routes it makes for <code>clx-edge</code>. Zone settings are theirs: Cloudflare Web Analytics can stay on (clx answers carry no HTML, so it does not interfere; turn it off in the dashboard if one counter is enough), and Browser Integrity Check may refuse scripted clicks on short links.</li>
+<li>clx changes nothing in the person's zones but the routes it makes for <code>clx-edge</code> and the custom domains of link hosts (Cloudflare makes their DNS records, never over an existing one). Zone settings are theirs: Cloudflare Web Analytics can stay on (clx answers carry no HTML, so it does not interfere; turn it off in the dashboard if one counter is enough), and Browser Integrity Check may refuse scripted clicks on short links.</li>
 <li>Disconnecting (<code>DELETE /v1/accounts/{id}</code>) removes <code>clx-edge</code> and its database; the answer names the working token for the person to revoke in Cloudflare, and anything clx could not delete in <code>left</code>.</li>
 </ul>
 
@@ -113,8 +113,8 @@ connect:       POST /v1/accounts {cf_account_id, bootstrap_token} -&gt; 202; pol
                while pending|installing; ready, else show error
 bootstrap:     Account API Tokens Edit + Account Settings Read, Entire Account, expires tomorrow
 site:          POST /v1/sites {account_id, host} -&gt; site.snippet.inline | script_tag
-link host:     AAAA &lt;host&gt; 100:: proxied, then PUT /v1/accounts/{id}/link-host {host}
-link:          POST /v1/links {account_id, url, code?, rules?} -&gt; link.short_url
+link host:     POST /v1/link-hosts {site_id} | {account_id, host} -&gt; 202; poll GET until active+synced
+link:          POST /v1/links {link_host_id, url, code?, rules?} -&gt; link.short_url
 qr:            GET /v1/links/{id}/qr.svg?size=512
 report:        GET /v1/{sites|links}/{id}/report?period=today|7d|30d&amp;breakdowns=1
 limits:        120 req/min per key (429 + Retry-After); reads of the account's database for reports
@@ -154,9 +154,10 @@ PATCH and DELETE (new per action, the same on retry).
 1. \`POST /v1/accounts {"cf_account_id", "bootstrap_token"}\` → \`202\`; poll \`GET /v1/accounts/{id}\`
    while \`state\` is \`pending\` or \`installing\`; go on at \`ready\`, else show \`error\` to the person.
 2. \`POST /v1/sites {"account_id", "host"}\` → embed \`site.snippet.inline\` (or \`script_tag\`) in every page.
-3. Links: the person adds \`AAAA <host> 100::\` proxied; \`PUT /v1/accounts/{id}/link-host {"host"}\`;
-   \`POST /v1/links {"account_id", "url", "code"?, "rules"?}\` → \`link.short_url\`;
-   QR at \`GET /v1/links/{id}/qr.svg\`.
+3. Links: a link host per site — \`POST /v1/link-hosts {"site_id"}\` (a random name under the site's
+   host; clx makes its DNS record through Cloudflare), poll \`GET /v1/link-hosts/{id}\` until
+   \`active\` and \`synced\`; \`POST /v1/links {"link_host_id", "url", "code"?, "rules"?}\` →
+   \`link.short_url\`; QR at \`GET /v1/links/{id}/qr.svg\`.
 4. \`GET /v1/sites/{id}/report?period=7d&breakdowns=1\` (and \`/v1/links/{id}/report\`). Totals arrive hourly.
 
 Over MCP: the same calls are tools of \`${ORIGIN}/mcp\` with the same key (\`whoami\`, \`connect_account\`,

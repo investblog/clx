@@ -93,7 +93,16 @@ export async function cf<T>(token: string, method: string, path: string, body?: 
     throw new CfError(0, method, path.split('?')[0]!, [], e instanceof Error ? e.message : 'network error');
   }
   await answered(res.status);
-  const json = (await res.json().catch(() => ({}))) as { success?: boolean; result?: T; errors?: { code: number; message: string }[] };
+  const text = await res.text();
+  // Some calls answer a success with no body at all: deleting a custom domain is `200` and nothing
+  // (checked live 11.10.2026, docs/cloudflare-facts.md).
+  if (res.ok && !text.trim()) return undefined as T;
+  let json: { success?: boolean; result?: T; errors?: { code: number; message: string }[] } = {};
+  try {
+    json = JSON.parse(text) as typeof json;
+  } catch {
+    // not JSON: an error below
+  }
   if (!res.ok || !json.success) {
     const errors = json.errors ?? [];
     throw new CfError(res.status, method, path.split('?')[0]!, errors.map((e) => e.code), errors.map((e) => e.message).join('; ') || 'error');

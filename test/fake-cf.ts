@@ -50,8 +50,14 @@ export const fakeCf = {
     { id: 'zone2', name: 'shop.example.org', status: 'pending' },
   ],
   routes: new Map<string, { id: string; pattern: string; script: string }[]>(),
+  /** the account's Workers Custom Domains */
+  domains: new Map<string, { id: string; hostname: string; service: string; zone_id: string }>(),
+  /** hosts that already have a DNS record someone made: a custom domain there is refused */
+  dnsRecords: new Set<string>(),
 
   reset() {
+    this.domains.clear();
+    this.dnsRecords.clear();
     this.tokens.clear();
     this.failOnce.clear();
     this.denyWorking.clear();
@@ -314,8 +320,32 @@ async function cloudflare(url: URL, init: RequestInit): Promise<Response> {
     if (fakeCf.stuck.has(del[1]!)) return no(500);
     return fakeCf.tokens.delete(del[1]!) ? ok({ id: del[1] }) : no(404);
   }
-  const answer = (await workers(path, method, init, url)) ?? d1(path, method, init, url) ?? (await zones(path, method, init, url));
+  const answer = domains(path, method, init, url) ?? (await workers(path, method, init, url)) ?? d1(path, method, init, url) ?? (await zones(path, method, init, url));
   return answer ?? no(404);
+}
+
+/** Workers Custom Domains (docs/cloudflare-facts.md, 11.10.2026): a host with a DNS record of its own
+ *  is refused with 100117; deleting answers 200 with an empty body. */
+function domains(path: string, method: string, init: RequestInit, url: URL): Response | null {
+  const m = path.match(/^\/accounts\/[^/]+\/workers\/domains(?:\/([^/]+))?$/u);
+  if (!m) return null;
+  if (!m[1] && method === 'GET') return ok([...fakeCf.domains.values()].filter((d) => !url.searchParams.get('hostname') || d.hostname === url.searchParams.get('hostname')));
+  if (!m[1] && method === 'PUT') {
+    const body = JSON.parse(String(init.body)) as { zone_id: string; hostname: string; service: string };
+    if (!fakeCf.scripts.has(body.service)) return no(400, 100114);
+    if (fakeCf.dnsRecords.has(body.hostname)) return no(409, 100117);
+    const found = [...fakeCf.domains.values()].find((d) => d.hostname === body.hostname);
+    if (found) return found.service === body.service ? ok(found) : no(409, 100117);
+    const d = { id: `d${++fakeCf.seq}`, hostname: body.hostname, service: body.service, zone_id: body.zone_id };
+    fakeCf.domains.set(d.id, d);
+    return ok(d);
+  }
+  if (m[1] && method === 'GET') {
+    const d = fakeCf.domains.get(m[1]);
+    return d ? ok(d) : no(404, 100102);
+  }
+  if (m[1] && method === 'DELETE') return fakeCf.domains.delete(m[1]) ? new Response(null, { status: 200 }) : no(404, 100102);
+  return no(404);
 }
 
 /** Stub fetch for api.cloudflare.com for the suite that calls this. */

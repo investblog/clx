@@ -15,10 +15,11 @@ export interface SiteConfig {
 
 export const siteKey = (host: string) => `site:${host}`;
 
-/** The account's link host (§6): its whole host is routed to the worker, so nothing there passes
- *  through — an unknown path is a plain 404. Its data is `{}`. */
+/** A link host (§6, ADR 0024): a custom domain of the worker, so all of it is the worker's and
+ *  nothing there passes through — an unknown path is a plain 404. Its data is `{}`. An account has
+ *  many. */
 export const linkHostKey = (host: string) => `linkhost:${host}`;
-/** A short link, by code: one link host per account, so the code alone names it. */
+/** A short link, by its host and code: a code is unique on its host. */
 export interface LinkConfig {
   /** the target, `l…`: every click of this link carries it */
   t: string;
@@ -27,7 +28,7 @@ export interface LinkConfig {
   rules: { countries?: string[]; devices?: Device[]; url: string }[];
 }
 export type Device = 'mobile' | 'desktop';
-export const linkKey = (code: string) => `link:${code}`;
+export const linkKey = (host: string, code: string) => `link:${host}/${code}`;
 type Conditions = { countries?: string[]; devices?: Device[] };
 /** FNV-1a, 32 bits, in base 36: a short fingerprint, not a secret. */
 function fnv(s: string): string {

@@ -134,13 +134,13 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     title: 'URL shortener on your own domain, on Cloudflare — clx',
     description: 'Short links on your own domain with QR codes, country and device rules and click tracking, served by a worker in your Cloudflare account. Free, with an API.',
     h1: 'A URL shortener on your own domain',
-    lead: 'Pick a host like go.example.com, and clx serves short links on it from a worker in your Cloudflare account — with a QR code for every link, rules by country and device, and click tracking.',
+    lead: 'Short links on your own domains, a host for each site such as k7q.example.com, served by a worker in your Cloudflare account — with a QR code for every link, rules by country and device, and click tracking.',
     start: 'Start free',
     steps: ['Connect Cloudflare', 'Choose a link host', 'Make a link'],
     sections: [
       {
         h: 'Your domain, not ours',
-        p: 'The link host is a subdomain or a separate domain in your Cloudflare account, one per account. A link answers with a plain 302 redirect and no caching, so every click reaches the worker; anything else on the host is a bare 404.',
+        p: 'Each site can have a link host of its own — a random three-character name under its address, such as k7q.example.com — so the links of one site share nothing with another’s. clx makes the host itself: Cloudflare creates its DNS record and certificate, and never over a record you already have. A link answers with a plain 302 redirect and no caching, so every click reaches the worker; anything else on the host is a bare 404.',
       },
       {
         h: 'A QR code for every link',
@@ -158,7 +158,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     setup: {
       h: 'A link is one API call',
       p: 'Make links in the app, or let your site generator or agent make them:',
-      code: 'curl https://clx.cx/v1/links \\\n  -H "Authorization: Bearer clx_…" \\\n  -H "Idempotency-Key: $(uuidgen)" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"account_id":"…","url":"https://example.com/spring-sale","code":"spring",\n       "rules":[{"countries":["DE","AT"],"url":"https://example.de/fruehling"}]}\'\n\n# → 201 { "link": { "short_url": "https://go.example.com/spring", … } }',
+      code: 'curl https://clx.cx/v1/links \\\n  -H "Authorization: Bearer clx_…" \\\n  -H "Idempotency-Key: $(uuidgen)" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"link_host_id":"…","url":"https://example.com/spring-sale","code":"spring",\n       "rules":[{"countries":["DE","AT"],"url":"https://example.de/fruehling"}]}\'\n\n# → 201 { "link": { "short_url": "https://k7q.example.com/spring", … } }',
     },
     faq: {
       h: 'Questions',
@@ -173,7 +173,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     more: [['The visit counter on the same worker', '/analytics'], ['clx vs Bitly', '/bitly-alternative'], ['How it works', '/how-it-works']],
     final: 'Shorten links on your own domain',
     card: {
-      short: 'go.example.com/spring',
+      short: 'k7q.example.com/spring',
       target: 'example.com/spring-sale',
       qr: 'QR code',
       rulesTitle: 'Rules',
@@ -195,13 +195,13 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     title: 'Сокращатель ссылок на своём домене, на Cloudflare — clx',
     description: 'Короткие ссылки на вашем домене с QR-кодами, правилами по стране и устройству и статистикой кликов — работают воркером в вашем аккаунте Cloudflare. Бесплатно.',
     h1: 'Сокращатель ссылок на вашем домене',
-    lead: 'Выберите хост вроде go.example.com — и clx будет обслуживать на нём короткие ссылки из воркера в вашем аккаунте Cloudflare: с QR-кодом для каждой ссылки, правилами по стране и устройству и статистикой кликов.',
+    lead: 'Короткие ссылки на ваших доменах, свой хост у каждого сайта, например k7q.example.com, — их обслуживает воркер в вашем аккаунте Cloudflare: с QR-кодом для каждой ссылки, правилами по стране и устройству и статистикой кликов.',
     start: 'Начать бесплатно',
     steps: ['Подключите Cloudflare', 'Выберите хост ссылок', 'Создайте ссылку'],
     sections: [
       {
         h: 'Ваш домен, а не наш',
-        p: 'Хост ссылок — поддомен или отдельный домен в вашем аккаунте Cloudflare, один на аккаунт. Ссылка отвечает обычным редиректом 302 без кеширования, так что каждый клик доходит до воркера; всё остальное на хосте — пустой 404.',
+        p: 'У каждого сайта может быть свой хост ссылок — случайное имя из трёх символов под его адресом, например k7q.example.com, — так что ссылки одного сайта ничем не связаны с другим. Хост clx создаёт сам: DNS-запись и сертификат делает Cloudflare, и никогда поверх вашей записи. Ссылка отвечает обычным редиректом 302 без кеширования, так что каждый клик доходит до воркера; всё остальное на хосте — пустой 404.',
       },
       {
         h: 'QR-код для каждой ссылки',
@@ -219,7 +219,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     setup: {
       h: 'Ссылка — один вызов API',
       p: 'Создавайте ссылки в кабинете или поручите это генератору сайтов или агенту:',
-      code: 'curl https://clx.cx/v1/links \\\n  -H "Authorization: Bearer clx_…" \\\n  -H "Idempotency-Key: $(uuidgen)" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"account_id":"…","url":"https://example.com/spring-sale","code":"spring",\n       "rules":[{"countries":["DE","AT"],"url":"https://example.de/fruehling"}]}\'\n\n# → 201 { "link": { "short_url": "https://go.example.com/spring", … } }',
+      code: 'curl https://clx.cx/v1/links \\\n  -H "Authorization: Bearer clx_…" \\\n  -H "Idempotency-Key: $(uuidgen)" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"link_host_id":"…","url":"https://example.com/spring-sale","code":"spring",\n       "rules":[{"countries":["DE","AT"],"url":"https://example.de/fruehling"}]}\'\n\n# → 201 { "link": { "short_url": "https://k7q.example.com/spring", … } }',
     },
     faq: {
       h: 'Вопросы',
@@ -235,7 +235,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
     more: [['Счётчик посещений на том же воркере', '/analytics'], ['Вместо Яндекс Кликера', '/clck-alternative'], ['Как это работает', '/how-it-works']],
     final: 'Сокращайте ссылки на своём домене',
     card: {
-      short: 'go.example.com/spring',
+      short: 'k7q.example.com/spring',
       target: 'example.com/spring-sale',
       qr: 'QR-код',
       rulesTitle: 'Правила',
@@ -521,7 +521,7 @@ const HOW: Record<Locale, ProductText & { flow: [string, string][] }> = {
       },
       {
         h: 'What clx creates, and only that',
-        p: 'One worker and one database, both named clx-edge, and a route for each site and for your link host. clx records what it made. If a clx-edge it did not make is already there, it stops and touches nothing; before replacing or removing the worker, it checks that the code there is one it released.',
+        p: 'One worker and one database, both named clx-edge, and a route for each site and a custom domain for each link host. clx records what it made. If a clx-edge it did not make is already there, it stops and touches nothing; before replacing or removing the worker, it checks that the code there is one it released.',
       },
       {
         h: 'Where your data lives',
@@ -555,7 +555,7 @@ const HOW: Record<Locale, ProductText & { flow: [string, string][] }> = {
       },
       {
         h: 'clx создаёт только своё',
-        p: 'Один воркер и одну базу, обе с именем clx-edge, и маршрут для каждого сайта и для хоста ссылок. clx записывает, что создал. Если clx-edge, созданный не им, уже есть — он останавливается и ничего не трогает; прежде чем заменить или удалить воркер, проверяет, что там код его же выпуска.',
+        p: 'Один воркер и одну базу, обе с именем clx-edge, маршрут для каждого сайта и собственный домен для каждого хоста ссылок. clx записывает, что создал. Если clx-edge, созданный не им, уже есть — он останавливается и ничего не трогает; прежде чем заменить или удалить воркер, проверяет, что там код его же выпуска.',
       },
       {
         h: 'Где лежат ваши данные',

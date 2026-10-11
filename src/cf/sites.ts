@@ -202,7 +202,7 @@ export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: s
   // A link host passes nothing through, a site's host everything outside the counter: one host
   // cannot be both (src/cf/links.ts).
   const taken = () => fail(409, 'invalid_request', `${host} is a link host; a site needs a host of its own.`, { field: 'host' });
-  if (await db.prepare("SELECT 1 FROM link_hosts WHERE host = ? AND state != 'deleted'").bind(host).first()) taken();
+  if (await db.prepare("SELECT 1 FROM link_hosts WHERE host = ? AND (state != 'deleted' OR domain_id IS NOT NULL)").bind(host).first()) taken();
   const id = newId();
   const seed = newId();
   const target = `s${[...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(36).padStart(2, '0')).join('')}`;
@@ -219,7 +219,7 @@ export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: s
         .prepare(
           `INSERT INTO sites (id, account_id, user_id, target, host, zone_id, seed, excluded, state, revision, created_at, updated_at)
            SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'route_pending', (SELECT config_revision FROM edge_accounts WHERE id = ?), ?, ? WHERE changes() = 1
-           AND NOT EXISTS (SELECT 1 FROM link_hosts WHERE host = ? AND state != 'deleted')`,
+           AND NOT EXISTS (SELECT 1 FROM link_hosts WHERE host = ? AND (state != 'deleted' OR domain_id IS NOT NULL))`,
         )
         .bind(id, edge.id, p.userId, target, host, zone!.id, seed, JSON.stringify(excluded), edge.id, now, now, host),
     ]);
@@ -424,18 +424,11 @@ export async function runSites(env: Env, now = Date.now()): Promise<{ synced: nu
   return { synced, routes: pending.length, retired };
 }
 
-/** Every route clx recorded for the account's sites — for disconnect (§4). */
+/** Every route clx recorded for the account's sites — for disconnect (§4). Deleted sites too: their
+ *  routes may still be due for removal. (Link hosts are custom domains: src/cf/links.ts.) */
 export async function recordedRoutes(db: D1Database, accountId: string): Promise<{ zone_id: string; route_id: string; pattern: string }[]> {
-  // Deleted sites too: their routes may still be due for removal; and the link hosts, replaced ones
-  // included, while their route is recorded.
-  const [sites, hosts] = await db.batch([
-    db.prepare('SELECT * FROM sites WHERE account_id = ?').bind(accountId),
-    db.prepare('SELECT zone_id, route_id, host FROM link_hosts WHERE account_id = ? AND route_id IS NOT NULL').bind(accountId),
-  ]);
-  return [
-    ...(sites!.results as unknown as SiteRow[]).flatMap(routesOf),
-    ...(hosts!.results as { zone_id: string; route_id: string; host: string }[]).map((h) => ({ zone_id: h.zone_id, route_id: h.route_id, pattern: `${h.host}/*` })),
-  ];
+  const sites = await db.prepare('SELECT * FROM sites WHERE account_id = ?').bind(accountId).all<SiteRow>();
+  return sites.results.flatMap(routesOf);
 }
 
 export { dropRoute };
