@@ -91,6 +91,57 @@ describe('install', () => {
     expect((await account(body.account.id)).operation).toMatchObject({ kind: 'install', state: 'running', step: 'selfcheck' });
   });
 
+  it('an account whose Workers pages were never opened gets a workers.dev subdomain, and the install goes on', async () => {
+    fakeCf.subdomain = null;
+    fakeCf.subdomainTaken = 2; // the first two names are someone else's: the third attempt makes it
+    const { body } = await connect();
+    expect(fakeCf.subdomain).toMatch(/^[a-z][a-z0-9]{10}$/u);
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
+    expect(await account(body.account.id)).toMatchObject({ state: 'ready', operation: { kind: 'install', state: 'running', step: 'selfcheck' } });
+    const op = (await env.DB.prepare("SELECT data FROM operations WHERE kind = 'install'").first<{ data: string }>())!;
+    expect(JSON.parse(op.data).subdomain_created).toBe(fakeCf.subdomain);
+  });
+
+  it('a subdomain someone made meanwhile (10036) is taken as it is: the install goes on, nothing recorded', async () => {
+    fakeCf.subdomain = null;
+    fakeCf.subdomainRace = true;
+    const { body } = await connect();
+    expect(fakeCf.subdomain).toBe('theirs');
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
+    expect((await account(body.account.id)).state).toBe('ready');
+    const op = (await env.DB.prepare("SELECT data FROM operations WHERE kind = 'install'").first<{ data: string }>())!;
+    expect(JSON.parse(op.data).subdomain_created).toBeUndefined();
+  });
+
+  it('a subdomain that cannot be made stops the install as before, and nothing is left', async () => {
+    fakeCf.subdomain = null;
+    fakeCf.subdomainTaken = 3; // three attempts, all taken
+    const { body } = await connect();
+    expect(fakeCf.subdomain).toBeNull();
+    expect(fakeCf.scripts.has('clx-edge')).toBe(false);
+    expect(await account(body.account.id)).toMatchObject({ operation: { kind: 'install', state: 'failed' } });
+  });
+
+  it('an install a missing subdomain stopped can be tried again without a new token; another permission_error cannot', async () => {
+    const id = await ready();
+    const stopped = (codes: number[]) =>
+      env.DB.prepare("UPDATE edge_accounts SET state = 'permission_error', bundle = NULL, error = ?").bind(JSON.stringify({ code: 'permission_error', path: `/accounts/${ACC}/workers/scripts/clx-edge/schedules`, status: 403, codes })).run();
+    await stopped([9109]);
+    expect((await call('POST', `/v1/accounts/${id}/install`)).body.error.code).toBe('account_not_ready');
+    // As a clx without the subdomain step left the user's account (12.10.2026).
+    await stopped([10063]);
+    const again = await call('POST', `/v1/accounts/${id}/install`);
+    expect(again.body.error).toBeUndefined();
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
+    expect(await account(id)).toMatchObject({ state: 'ready' });
+    // An update still waits for a working token.
+    expect(await setupOk()).toMatchObject({ status: 200 });
+    await env.DB.prepare("UPDATE edge_accounts SET state = 'permission_error'").run();
+    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    expect((await account(id)).state).toBe('permission_error');
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM operations WHERE kind = 'update'").first<number>('n')).toBe(0);
+  });
+
   it("setup_ok with this deployment, bundle and schema makes it ready with the working cron; it is single-use", async () => {
     const { body } = await connect();
     expect(await setupOk({ deployment_id: 'old' })).toMatchObject({ status: 409 });

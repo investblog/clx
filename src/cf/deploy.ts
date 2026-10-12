@@ -52,6 +52,8 @@ interface DeployData {
   deadline?: number;
   error?: Record<string, unknown>;
   warnings?: string[];
+  /** the workers.dev subdomain this operation gave the account (it had none) */
+  subdomain_created?: string;
 }
 interface OpRow {
   id: string;
@@ -75,7 +77,10 @@ interface Database {
  * one operation at a time: the account must have no running one and a free lease.
  */
 export async function startDeploy(env: Env, principal: string, edge: EdgeAccount, kind: Kind): Promise<string> {
-  if (!edge.token_sealed || ['pending', 'bootstrap_lost', 'revoked', 'permission_error'].includes(edge.state))
+  // An install a missing subdomain stopped (10063, before clx made one — ADR 0027) is no missing
+  // right: it may be tried again without a new token. Any other permission_error waits for one.
+  const noSubdomain = edge.state === 'permission_error' && kind === 'install' && (JSON.parse(edge.error ?? '{}') as { codes?: number[] }).codes?.includes(NO_SUBDOMAIN);
+  if (!edge.token_sealed || ['pending', 'bootstrap_lost', 'revoked', ...(noSubdomain ? [] : ['permission_error'])].includes(edge.state))
     fail(409, 'account_not_ready', 'This account has no working token with the rights clx needs; renew its token first.', { state: edge.state });
   if (kind === 'update' && !edge.bundle) fail(409, 'account_not_ready', 'clx-edge is not installed in this account; install it first.');
   const db = env.DB;
@@ -147,6 +152,44 @@ async function cronHolders(r: Run, scripts: Script[]): Promise<{ script: string;
     if (n) holders.push({ script: s.id, crons: n });
   }
   return holders;
+}
+
+/** Cloudflare refuses cron triggers in an account without a workers.dev subdomain — one where the
+ *  Workers pages were never opened (403, 10063; docs/cloudflare-facts.md, 12.10.2026). */
+const NO_SUBDOMAIN = 10063;
+/** The account already has one (409). */
+const HAS_SUBDOMAIN = 10036;
+
+/**
+ * Give the account its workers.dev subdomain, as the Workers pages would on a first visit: a random
+ * name that says nothing of clx, three attempts if names are taken. Scripts uploaded through the API
+ * are not served there (`enabled: false`), so clx-edge does not appear on it. It stays if the
+ * install fails later — it is the account's, as one made by the dashboard would be. The operation
+ * records the name when the answer arrives (a lost answer leaves it unrecorded, the subdomain made).
+ */
+async function claimSubdomain(r: Run): Promise<void> {
+  const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+  const ALNUM = `${ALPHA}0123456789`;
+  // 234 and 252 are the largest multiples of 26 and 36 under 256: bytes above them are dropped, so
+  // every letter and digit is as likely as the next.
+  const pick = (set: string, under: number) => {
+    for (;;) {
+      const b = crypto.getRandomValues(new Uint8Array(1))[0]!;
+      if (b < under) return set[b % set.length]!;
+    }
+  };
+  for (let i = 0; ; i++) {
+    const name = pick(ALPHA, 234) + Array.from({ length: 10 }, () => pick(ALNUM, 252)).join('');
+    try {
+      await cf(r.token, 'PUT', `${acc(r)}/workers/subdomain`, { subdomain: name }, r.log);
+      r.data.subdomain_created = name;
+      return;
+    } catch (e) {
+      if (e instanceof CfError && e.codes.includes(HAS_SUBDOMAIN)) return;
+      // A name someone else holds: another one. A refused right or anything else: stop.
+      if (!(e instanceof CfError && e.status === 409) || i >= 2) throw e;
+    }
+  }
 }
 
 /** One step forward from `at`; returns the step reached. */
@@ -243,7 +286,12 @@ async function advance(r: Run, at: string): Promise<string> {
       const used = holders.reduce((sum, h) => sum + h.crons, 0);
       if (r.kind === 'install' && used >= CRON_LIMIT) fail(409, 'cron_limit', `This account already uses all ${CRON_LIMIT} cron triggers of Workers Free; clx-edge needs one.`, { holders });
       const crons = used + 2 <= CRON_LIMIT ? [{ cron: SELF_CHECK_CRON }, { cron: WORKING_CRON }] : [{ cron: SELF_CHECK_CRON }];
-      await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, crons, r.log);
+      const schedule = () => cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, crons, r.log);
+      await schedule().catch(async (e: unknown) => {
+        if (!(e instanceof CfError && e.codes.includes(NO_SUBDOMAIN))) throw e;
+        await claimSubdomain(r);
+        await schedule();
+      });
       data.deadline = Date.now() + SELF_CHECK_TIMEOUT;
       // An install is in service from here: serving the script and the collector needs no cron,
       // and a new script's first cron can be late by a quarter of an hour or more (measured

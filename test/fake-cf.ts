@@ -50,12 +50,21 @@ export const fakeCf = {
     { id: 'zone2', name: 'shop.example.org', status: 'pending' },
   ],
   routes: new Map<string, { id: string; pattern: string; script: string }[]>(),
+  /** the account's workers.dev subdomain; null — the Workers pages were never opened (no crons) */
+  subdomain: 'acct' as string | null,
+  /** how many more subdomain names answer "taken" (another account holds them) */
+  subdomainTaken: 0,
+  /** a subdomain appears just before clx asks for one */
+  subdomainRace: false,
   /** the account's Workers Custom Domains */
   domains: new Map<string, { id: string; hostname: string; service: string; zone_id: string }>(),
   /** hosts that already have a DNS record someone made: a custom domain there is refused */
   dnsRecords: new Set<string>(),
 
   reset() {
+    this.subdomain = 'acct';
+    this.subdomainTaken = 0;
+    this.subdomainRace = false;
     this.domains.clear();
     this.dnsRecords.clear();
     this.tokens.clear();
@@ -164,6 +173,7 @@ async function workers(path: string, method: string, init: RequestInit, url: URL
   }
   if (sub === '/schedules' && method === 'GET') return ok({ schedules: script.crons.map((cron) => ({ cron })) });
   if (sub === '/schedules' && method === 'PUT') {
+    if (fakeCf.subdomain === null) return no(403, 10063);
     script.crons = (JSON.parse(String(init.body)) as { cron: string }[]).map((s) => s.cron);
     return ok({ schedules: script.crons.map((cron) => ({ cron })) });
   }
@@ -319,6 +329,16 @@ async function cloudflare(url: URL, init: RequestInit): Promise<Response> {
   if (del && method === 'DELETE') {
     if (fakeCf.stuck.has(del[1]!)) return no(500);
     return fakeCf.tokens.delete(del[1]!) ? ok({ id: del[1] }) : no(404);
+  }
+  // The workers.dev subdomain (docs/cloudflare-facts.md, 12.10.2026): one per account, 10036 once set.
+  if (path === `/accounts/${ACC}/workers/subdomain` && method === 'PUT') {
+    const { subdomain } = JSON.parse(String(init.body)) as { subdomain: string };
+    // Someone made one between the refused crons and this call (the dashboard, a parallel run).
+    if (fakeCf.subdomainRace) fakeCf.subdomain = 'theirs';
+    if (fakeCf.subdomain !== null) return no(409, 10036);
+    if (fakeCf.subdomainTaken > 0 && fakeCf.subdomainTaken--) return no(409, 10032);
+    fakeCf.subdomain = subdomain;
+    return ok({ subdomain });
   }
   const answer = domains(path, method, init, url) ?? (await workers(path, method, init, url)) ?? d1(path, method, init, url) ?? (await zones(path, method, init, url));
   return answer ?? no(404);

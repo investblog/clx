@@ -106,7 +106,9 @@ Why:
 6. Token state:
    - `401` or `verify` ≠ active → `revoked`, calls stop, the user gets an e-mail;
    - `403` → `permission_error` with the endpoint and Cloudflare's error code; the token is left
-     alone — this may be a missing right or plan on one resource;
+     alone — this may be a missing right or plan on one resource. An install stopped by a missing
+     workers.dev subdomain (`10063`) may be tried again without a new token; any other
+     `permission_error` waits for one ([ADR 0027](./decisions/0027-workers-subdomain-for-crons.md));
    - an hourly cron runs `verify` on the tokens checked longest ago (200 a run, so each about daily for up to ~4,800 accounts); 30 days before expiry — a "renew the connection"
      e-mail (a new bootstrap).
 7. Limit: one Cloudflare account per clx user on the `free` plan, up to 50 on the `api` plan (§15);
@@ -169,7 +171,11 @@ Why:
      step — then the cron triggers: the **every-minute** self-check and the working `5 * * * *`
      together. Changing a new script's crons takes effect up to ~1.5 hours late (measured
      06.10.2026), so the working cron is not left for after the self-check —
-     [ADR 0007](./decisions/0007-both-crons-at-upload.md);
+     [ADR 0007](./decisions/0007-both-crons-at-upload.md). An account whose Workers pages were
+     never opened has no workers.dev subdomain and refuses crons (`403`, `10063`): clx gives it one
+     (`PUT /accounts/{id}/workers/subdomain`, a random name that says nothing of clx, recorded in
+     the operation) and sets the crons again — the dashboard does the same on a first visit, and
+     API-uploaded scripts are not served there ([ADR 0027](./decisions/0027-workers-subdomain-for-crons.md));
   5. self-check: within the next minute the worker sends `setup_ok {deployment_id, bundle, schema}`
      to `HOOK_URL/setup` with `Bearer EDGE_KEY`; `deployment_id` is single-use and passed as a
      binding of this deployment, so an old or delayed `setup_ok` cannot count for another
@@ -186,7 +192,7 @@ Why:
   undone: clx.cx drops the self-check cron anyway and marks the account `not_confirmed`; whether the
   cron runs is then shown by the heartbeat of the pushes (§7, "no connection" after 26 hours) —
   [ADR 0003](./decisions/0003-install-without-cron.md).
-  A failure in steps 1–4 deletes what this run created. A reinstall (`POST /v1/accounts/{id}/install`) over our
+  A failure in steps 1–4 deletes what this run created (but a workers.dev subdomain it gave the account, ADR 0027). A reinstall (`POST /v1/accounts/{id}/install`) over our
   own script is the same install: it keeps the database, and on failure returns to the script's
   previous version as an update does.
 - **Update** — still undone without its `setup_ok` (the cron of an existing script fired after
