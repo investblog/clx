@@ -2,6 +2,8 @@
 // forms post to /auth. Sign-in leads to the app, which takes the session from the refresh cookie;
 // sign-up and the reset request show what to do next. Bound at once, before any await: a form bound
 // late would submit itself.
+import { nextRoute } from '../ui/next.ts';
+
 type Tab = 'login' | 'register' | 'recover';
 const TABS: Tab[] = ['login', 'register', 'recover'];
 
@@ -34,6 +36,8 @@ if (card) {
   const lang = document.documentElement.lang === 'ru' ? 'ru' : 'en';
   const landing = document.querySelector<HTMLElement>('[data-landing]');
   const forms = Array.from(card.querySelectorAll<HTMLFormElement>('[data-auth-form]'));
+  const langs = Array.from(document.querySelectorAll<HTMLAnchorElement>('#lang-dd a[data-locale]'));
+  for (const a of langs) a.dataset.home = a.getAttribute('href') ?? '/';
 
   const say = (form: HTMLFormElement, type: 'error' | 'success' | 'loading' | 'idle', text: string) => {
     const box = form.querySelector<HTMLElement>('[data-msg]')!;
@@ -117,6 +121,8 @@ if (card) {
       if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     }
+    // The language switch opens the same form, with the way back, in the other language.
+    for (const a of langs) a.href = tab ? `${a.dataset.home}${location.search}#${tab}` : a.dataset.home!;
     if (!tab) return;
     const form = forms.find((f) => f.dataset.authForm === tab)!;
     if (tab !== 'login') void human(form);
@@ -149,8 +155,10 @@ if (card) {
       }
       if (kind === 'login') {
         // The app opens the session from the refresh cookie just set; it marks the browser signed in.
+        // It comes back to the page it sent here from (?next=, ui/main.ts) — an app route only, as
+        // the fragment after the app's own address.
         say(form, 'idle', '');
-        return location.assign(`${card!.dataset.app}#/`);
+        return location.assign(`${card!.dataset.app}#${nextRoute(location.search)}`);
       }
       form.reset();
       say(form, 'success', kind === 'register' ? `${T.signedUp.replace('{email}', email.trim())} ${T.signedUpNext}` : T.linkSent);

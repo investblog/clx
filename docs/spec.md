@@ -1003,7 +1003,8 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   the fragment — `/#login`, `/#register`, `/#recover` (`/ru#…`); beside the hero on a wide screen,
   under it on a narrow one; without a fragment the card is hidden. The header's "Sign in" opens
   `#login`, every call to sign up opens `#register`. Sign-in leads to `/app#/`, which takes the
-  session from the refresh cookie. The app without a session goes to `#login`; its old `#/signup`
+  session from the refresh cookie. The app without a session goes to `#login` with the page asked for as
+  `?next=`, and sign-in comes back to it (an app route only); its old `#/signup`
   and `#/reset` go to `#register` and `#recover`. The e-mails' links (`/app#/confirm?t=`,
   `/app#/reset?t=`) still open the app's pages, which lead back to the card. The forms are printed
   at build time from the app's dictionaries; `/site.js` switches and sends them.

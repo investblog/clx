@@ -27,7 +27,9 @@ asked for that approach here (12.10.2026).
   switches the forms and sends them to the same `/auth` endpoints; each form has `method="post"`,
   so a submit before the script binds it never puts the password in the address.
 - Sign-in leads to `/app#/` (`/ru/app#/`): the app takes the session from the refresh cookie the
-  sign-in set. The app keeps no sign-in form: without a session it goes to `#login`; sign-out goes
+  sign-in set. The app keeps no sign-in form: without a session it goes to `#login`, carrying the page
+  it was asked for as `?next=` (`/?next=%2Fsites#login`), and sign-in comes back to it — an app route
+  only (`/` and word characters, `- / ? = & .`), put after the app's own `#`; sign-out goes
   to the home page; its old `#/signup` and `#/reset` go to `#register` and `#recover`. When an
   account is deleted, the app still shows what is left to remove by hand, with the way home.
 - The e-mails' links are unchanged: `/app#/confirm?t=` and `/app#/reset?t=` open the app's pages,
@@ -38,6 +40,5 @@ asked for that approach here (12.10.2026).
   button leads to the app.
 
 **Consequences.** One place to sign in and sign up, next to what the visitor just read. A deep
-link into the app (`/app#/sites`) opened signed out lands, after sign-in, on the app's first page,
-not the one asked for. The password minimum is printed into the forms; a test holds it equal to the
+link into the app (`/app#/sites`) opened signed out comes back to that page after sign-in. The password minimum is printed into the forms; a test holds it equal to the
 server's.

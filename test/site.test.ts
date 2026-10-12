@@ -8,6 +8,7 @@ import { SITE_PAGES } from '../site/pages.ts';
 import { generateMatrix } from '../src/qr/generate';
 import { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } from '../site/urls.ts';
 import { PASSWORD_MIN } from '../src/auth/signup';
+import { nextRoute, signInPath } from '../ui/next.ts';
 
 describe('addresses', () => {
   it('English at the root, Russian under /ru, no trailing slash on a home page', () => {
@@ -367,7 +368,7 @@ describe('generated pages', () => {
   });
 
   /** site.js on a stand-in of the home page's card (site/auth.ts): what it shows, sends and opens. */
-  async function cardStand(opts: { hash: string; sitekey: string | null; configFailures?: number }) {
+  async function cardStand(opts: { hash: string; sitekey: string | null; configFailures?: number; search?: string }) {
     let failures = opts.configFailures ?? 0;
     const el = (attrs: Record<string, string> = {}) => ({
       hidden: true,
@@ -401,8 +402,9 @@ describe('generated pages', () => {
     const classes = new Set<string>();
     const landing = { classList: { toggle: (c: string, on: boolean) => (on ? classes.add(c) : classes.delete(c)) } };
     const state = { onHash: () => {}, posts: [] as [string, unknown][], assigned: [] as string[], resets: 0, human: (_t: string) => {} };
-    const location = { pathname: '/', hash: opts.hash, assign: (to: string) => state.assigned.push(to) };
-    const document = { documentElement: { lang: 'ru' }, querySelector: (sel: string) => (sel === '[data-auth]' ? card : sel === '[data-landing]' ? landing : null), querySelectorAll: () => [] };
+    const location = { pathname: '/', hash: opts.hash, search: opts.search ?? '', assign: (to: string) => state.assigned.push(to) };
+    const langs = ['/', '/ru'].map((href) => ({ href, dataset: {} as Record<string, string>, getAttribute: () => href }));
+    const document = { documentElement: { lang: 'ru' }, querySelector: (sel: string) => (sel === '[data-auth]' ? card : sel === '[data-landing]' ? landing : null), querySelectorAll: (sel: string) => (sel === '#lang-dd a[data-locale]' ? langs : []) };
     const turnstile = { render: (_el: unknown, o: { callback: (t: string) => void }) => ((state.human = o.callback), 'w1'), reset: () => state.resets++ };
     const window = { turnstile, addEventListener: (type: string, fn: () => void) => type === 'hashchange' && (state.onHash = fn) };
     const fetch = async (url: string, init?: { body: string }) => {
@@ -410,10 +412,10 @@ describe('generated pages', () => {
       state.posts.push([url, JSON.parse(init!.body)]);
       return { ok: true, status: 200, json: async () => ({}) };
     };
-    vm.runInNewContext(read('site.js'), { document, window, location, fetch, Math, JSON, Array, Map, Set, Promise, String, Number, Object });
+    vm.runInNewContext(read('site.js'), { document, window, location, fetch, Math, JSON, Array, Map, Set, Promise, String, Number, Object, URLSearchParams });
     const settle = () => new Promise((r) => setTimeout(r, 0));
     return {
-      card, forms, tabs, classes, location, settle,
+      card, forms, tabs, classes, location, settle, langs,
       onHash: () => state.onHash(),
       get posts() { return state.posts; },
       get assigned() { return state.assigned; },
@@ -462,6 +464,34 @@ describe('generated pages', () => {
     await register!.submit();
     expect(run.posts.shift()).toEqual(['/auth/signup', { email: ' new@b.c ', password: 'a-long-password', turnstile: 'tok', locale: 'ru' }]);
     expect([register!.msg.dataset.type, register!.msg.textContent, run.resets]).toEqual(['success', 'sent new@b.c next', 1]);
+  });
+
+  it('site.js: sign-in comes back to the app page that sent here (?next=), and only to an app page', async () => {
+    const signIn = async (search: string) => {
+      const run = await cardStand({ hash: '#login', sitekey: 'key', search });
+      await run.forms[0]!.submit();
+      return run.assigned[0];
+    };
+    expect(await signIn('?next=%2Fsites%2Fs_1%2Freport%3Fp%3D7d')).toBe('/app#/sites/s_1/report?p=7d');
+    // Not an app route: the app's first page, never another address.
+    for (const bad of ['?next=%2F%2Fevil.example', '?next=https%3A%2F%2Fevil.example', '?next=%2Fa%23b', '?next=sites', '']) expect(await signIn(bad)).toBe('/app#/');
+  });
+
+  it('the app, signed out, sends a deep link to the card with the way back; the root needs none', () => {
+    expect(signInPath('/', '#/sites/s_1/report?p=7d')).toBe('/?next=%2Fsites%2Fs_1%2Freport%3Fp%3D7d#login');
+    expect(signInPath('/ru', '#/links')).toBe('/ru?next=%2Flinks#login');
+    for (const root of ['', '#', '#/']) expect(signInPath('/', root)).toBe('/#login');
+    // What one side writes, the other reads back.
+    const back = new URL(signInPath('/', '#/sites/s_1/report?p=7d'), 'https://clx.cx');
+    expect(nextRoute(back.search)).toBe('/sites/s_1/report?p=7d');
+  });
+
+  it('site.js: the language switch opens the same form, with the way back, in the other language', async () => {
+    const run = await cardStand({ hash: '#login', sitekey: 'key', search: '?next=%2Fsites' });
+    expect(run.langs.map((a) => a.href)).toEqual(['/?next=%2Fsites#login', '/ru?next=%2Fsites#login']);
+    run.location.hash = '';
+    run.onHash();
+    expect(run.langs.map((a) => a.href)).toEqual(['/', '/ru']);
   });
 
   it('site.js: a failed /auth/config is not "closed" — the form stays usable and the next visit asks again', async () => {

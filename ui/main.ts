@@ -4,6 +4,7 @@ import { accountPage, accountsPage, connectPage, failure, keysPage } from './acc
 import { call, get, logout, refresh, SignedOut, type Me } from './api';
 import { h, s } from './dom';
 import { appPath, asLocale, homePath, pageLocale, setLocale, t } from './i18n';
+import { signInPath } from './next';
 import { linkPage, linksPage } from './links';
 import { mePage, unconfirmedBanner } from './me';
 import { reportPage } from './report';
@@ -64,11 +65,12 @@ function drawShell(current?: Section): void {
   if (at && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = at.offsetLeft - nav.offsetLeft;
 }
 
-/** Signed out: to the home page's sign-in card (ADR 0026); with a message (the account is deleted,
- *  and what is left to remove by hand), that first, with the way to the home page. */
+/** Signed out: to the home page's sign-in card (ADR 0026), which comes back to this page after the
+ *  sign-in (`?next=`); with a message (the account is deleted, and what is left to remove by hand),
+ *  that first, with the way to the home page. */
 function signedOut(message = ''): void {
   markSignedIn(false);
-  if (!message) return location.replace(`${homePath(pageLocale)}#login`);
+  if (!message) return location.replace(signInPath(homePath(pageLocale), location.hash));
   setLocale(pageLocale);
   drawShell();
   app.replaceChildren(h('section', { class: 'auth-card login' }, h('p', {}, message), h('p', {}, h('a', { href: homePath(pageLocale) }, t.auth.toHome))));
