@@ -235,6 +235,26 @@ v1.get(
   }),
 );
 
+/** A key's allow lists, changed in place (the key itself stays): a field left out stays as it is,
+ *  `null` lifts the limit — every account of the user, those connected later too; every IP. */
+v1.patch(
+  '/keys/:id',
+  handle({ session: true }, async (c, p, body) => {
+    if (!('allow_accounts' in body) && !('allow_ips' in body)) fail(400, 'invalid_request', 'Give "allow_accounts" or "allow_ips" (null lifts the limit).');
+    const limits = LIMITS[planOf(p.plan)];
+    // Only the fields given, in one statement: two changes at once never write back each other's
+    // old list, and a key revoked meanwhile is not found.
+    const set: [string, string | null][] = [];
+    if ('allow_accounts' in body) set.push(['allow_accounts', stringList(body.allow_accounts, 'allow_accounts', /^[0-9a-f]{32}$/u, limits.cfAccounts)?.join(',') ?? null]);
+    if ('allow_ips' in body) set.push(['allow_ips', stringList(body.allow_ips, 'allow_ips', /^[0-9a-f.:]{2,45}$/u, 20)?.join(',') ?? null]);
+    const row = await c.env.DB.prepare(`UPDATE api_keys SET ${set.map(([col]) => `${col} = ?`).join(', ')} WHERE id = ? AND user_id = ? AND revoked_at IS NULL RETURNING *`)
+      .bind(...set.map(([, v]) => v), c.req.param('id'), p.userId)
+      .first<Parameters<typeof keyView>[0]>();
+    if (!row) fail(404, 'not_found', 'No such key.');
+    return { status: 200, body: keyView(row!) };
+  }),
+);
+
 v1.delete(
   '/keys/:id',
   handle({ session: true }, async (c, p) => {

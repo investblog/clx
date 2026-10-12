@@ -94,6 +94,38 @@ describe('API keys', () => {
     expect((await call('GET', `/v1/accounts/${id}`, { auth: `Bearer ${body.key}` })).status).toBe(404);
     expect((await call('GET', '/v1/accounts', { auth: `Bearer ${body.key}` })).body.accounts).toEqual([]);
   });
+
+  it("a live key's allow lists change in place: null lifts a limit, a field left out stays, a page session only", async () => {
+    await connectAs(await session(2));
+    const id = (await call('GET', '/v1/accounts', { auth: await session(2) })).body.accounts[0].id;
+    const { body } = await call('POST', '/v1/keys', { auth: await session(2), body: { scopes: ['accounts'], allow_accounts: [OTHER], allow_ips: ['203.0.113.7'] }, key: 'p1' });
+    const key = `Bearer ${body.key}`;
+    const patch = async (b: unknown, auth?: string) => call('PATCH', `/v1/keys/${body.id}`, { auth: auth ?? (await session(2)), body: b });
+    // The account list lifted: the key reaches the account, the IP list is as it was.
+    const lifted = await patch({ allow_accounts: null });
+    expect(lifted.status).toBe(200);
+    expect(lifted.body).toMatchObject({ id: body.id, allow_accounts: null, allow_ips: ['203.0.113.7'], scopes: ['accounts'] });
+    expect(lifted.body.key).toBeUndefined();
+    await patch({ allow_ips: null });
+    expect((await call('GET', `/v1/accounts/${id}`, { auth: key })).status).toBe(200);
+    // Limited again: the same key, now without it.
+    expect((await patch({ allow_accounts: [OTHER, OTHER] })).body.allow_accounts).toEqual([OTHER]);
+    expect((await call('GET', `/v1/accounts/${id}`, { auth: key })).status).toBe(404);
+    expect((await patch({})).body.error.code).toBe('invalid_request');
+    expect((await patch({ allow_accounts: [] })).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'allow_accounts' } });
+    expect((await patch({ allow_accounts: null }, key)).body.error.code).toBe('session_required');
+    expect((await patch({ allow_accounts: null }, await session(1))).status).toBe(404);
+    // A repeat of one change replays its answer and does not undo a later one; another body under
+    // the same Idempotency-Key is refused.
+    const once = { auth: await session(2), body: { allow_accounts: null }, key: 'pa' };
+    expect((await call('PATCH', `/v1/keys/${body.id}`, once)).body.allow_accounts).toBeNull();
+    await patch({ allow_accounts: [OTHER] });
+    expect((await call('PATCH', `/v1/keys/${body.id}`, once)).body.allow_accounts).toBeNull();
+    expect((await call('GET', '/v1/keys', { auth: await session(2) })).body.keys.find((x: { id: string }) => x.id === body.id).allow_accounts).toEqual([OTHER]);
+    expect((await call('PATCH', `/v1/keys/${body.id}`, { ...once, body: { allow_ips: null } })).body.error.code).toBe('idempotency_conflict');
+    await call('DELETE', `/v1/keys/${body.id}`, { auth: await session(2) });
+    expect((await patch({ allow_accounts: null })).status).toBe(404);
+  });
 });
 
 describe('connecting a Cloudflare account', () => {

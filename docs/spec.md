@@ -740,7 +740,7 @@ Pages:
   upgrade advice (a banner at `upgrade_soon` and `over`, §8), "reinstall", "renew the token" and
   "disconnect" — the last shows what could not be removed and the link to revoke the working
   token in Cloudflare (§4).
-- **API keys** (1 on `free`, 5 on `api`): issue with scopes and allow lists, the key shown once, revoke — keys
+- **API keys** (1 on `free`, 5 on `api`): issue with scopes and allow lists, the key shown once, change the allow lists, revoke — keys
   are issued only from a page session (§15), so without this page a user cannot get one.
 
 ## 11. Open source
@@ -873,7 +873,10 @@ that adds a site and embeds its counter at build time.
     `links` (links, rules, QR), `reports` (read totals and breakdowns); a build pipeline needs only
     `sites` + `reports`;
   - **allow lists**: optionally the Cloudflare accounts a key may touch (so one customer's key
-    cannot reach another's) and the client IPs;
+    cannot reach another's) and the client IPs. Without an account list a key touches every
+    account of its user, those connected later too. `PATCH /v1/keys/{id}` changes both lists of a
+    live key (a field left out stays, `null` lifts the limit), so a growing customer keeps its key;
+    the scopes stay as issued;
   - **issuing**: `POST /v1/keys` works only with a page session, never with a key; the answer
     carries the key once. Its idempotency record stores the key ID, not the key, so a repeat
     returns `409 key_already_issued` with that ID; a lost key is revoked and issued again.
@@ -922,7 +925,7 @@ that adds a site and embeds its counter at build time.
 | `GET /v1/me` | plan, limits, current use, whether the address is confirmed, the language |
 | `PATCH /v1/me` `{locale}` | the language of the app and the e-mails, set by the header's language switch (page session only, ADRs 0015, 0021) |
 | `DELETE /v1/me` `{password}` | delete the account (page session only, §9) |
-| `POST /v1/keys`, `GET /v1/keys`, `DELETE /v1/keys/{id}` | API keys — page session only |
+| `POST /v1/keys`, `GET /v1/keys`, `PATCH /v1/keys/{id}`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
 | `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `bootstrap_lost`, `connected` — token ready, not yet installed, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), last push, versions, **upgrade advice** (§8) |
 | `GET /v1/accounts/{id}/zones` | the account's zones, read live with the working token (Zone Read), up to 1,000 — the pages suggest a site's or link host's host from them |

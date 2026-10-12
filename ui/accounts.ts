@@ -331,6 +331,59 @@ export async function accountPage(id: string, live: Live, redraw: () => void): P
 
 // ---- API keys ----
 
+/** A key's allow lists as fields: the connected accounts (and any the key names that are gone), the
+ *  IPs; read back as lists, `null` for no limit. */
+function limitFields(accounts: Account[], key?: Key) {
+  const k = t.keys;
+  const named = key?.allow_accounts ?? [];
+  const ids = [...accounts.map((a) => a.cf_account_id), ...named.filter((id) => !accounts.some((a) => a.cf_account_id === id))];
+  const accountBoxes = ids.map((id) => {
+    const box = h('input', { type: 'checkbox', value: id });
+    box.checked = named.includes(id);
+    return { el: h('label', { class: 'check' }, box, ` ${accounts.find((a) => a.cf_account_id === id)?.name ?? id}`), box };
+  });
+  const ips = h('input', { class: 'input', id: 'key-ips', placeholder: k.ipsPlaceholder, autocomplete: 'off' });
+  ips.value = key?.allow_ips?.join(', ') ?? '';
+  return {
+    els: [
+      // With no account yet the legend still says that the key will reach those connected later.
+      h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, k.onlyAccounts), ...(ids.length ? accountBoxes.map((a) => a.el) : [h('p', { class: 'muted text-sm' }, k.noAccounts)])),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'key-ips' }, k.onlyIps), ips),
+    ],
+    accounts: () => {
+      const list = accountBoxes.filter((a) => a.box.checked).map((a) => a.box.value);
+      return list.length ? list : null;
+    },
+    ips: () => {
+      const list = ips.value.split(/[\s,]+/u).filter(Boolean);
+      return list.length ? list : null;
+    },
+  };
+}
+
+/** The drawer of a key's allow lists, changed in place: the key itself stays. */
+function keyLimitsDrawer(key: Key, accounts: Account[], redraw: (message?: string) => void): void {
+  const k = t.keys;
+  openDrawer(k.limits, (close) => {
+    const fields = limitFields(accounts, key);
+    return h(
+      'div',
+      { class: 'stack stack--md' },
+      h('p', { class: 'muted' }, h('code', {}, `${key.prefix}…`), ` ${k.limitsNote}`),
+      ...fields.els,
+      h(
+        'div',
+        { class: 'actions' },
+        action(k.save, 'btn--primary', async (idem) => {
+          await call('PATCH', `/v1/keys/${key.id}`, { allow_accounts: fields.accounts(), allow_ips: fields.ips() }, idem);
+          close();
+          redraw();
+        }),
+      ),
+    );
+  });
+}
+
 /** The drawer of a new key: scopes, accounts, IPs; the key itself is shown once in a dialog. */
 function newKeyDrawer(accounts: Account[], redraw: (message?: string) => void): void {
   const k = t.keys;
@@ -339,26 +392,21 @@ function newKeyDrawer(accounts: Account[], redraw: (message?: string) => void): 
       const box = h('input', { type: 'checkbox', value: s });
       return { s, el: h('label', { class: 'check' }, box, ` ${label.scope(s)}`), box };
     });
-    const accountBoxes = accounts.map((a) => {
-      const box = h('input', { type: 'checkbox', value: a.cf_account_id });
-      return { el: h('label', { class: 'check' }, box, ` ${a.name ?? a.cf_account_id}`), box };
-    });
-    const ips = h('input', { class: 'input', id: 'key-ips', placeholder: k.ipsPlaceholder, autocomplete: 'off' });
+    const fields = limitFields(accounts);
     return h(
       'div',
       { class: 'stack stack--md' },
       h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, k.scopes), ...scopeBoxes.map((s) => s.el)),
-      accounts.length ? h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, k.onlyAccounts), ...accountBoxes.map((a) => a.el)) : null,
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'key-ips' }, k.onlyIps), ips),
+      ...fields.els,
       h(
         'div',
         { class: 'actions' },
         action(k.issue, 'btn--primary', async (key) => {
           const scopes = scopeBoxes.filter((s) => s.box.checked).map((s) => s.s);
           if (!scopes.length) throw new ApiError(400, 'invalid_request', k.needScope);
-          const allow = accountBoxes.filter((a) => a.box.checked).map((a) => a.box.value);
-          const ipList = ips.value.split(/[\s,]+/u).filter(Boolean);
-          const issued = await call<Key & { key: string }>('POST', '/v1/keys', { scopes, ...(allow.length ? { allow_accounts: allow } : {}), ...(ipList.length ? { allow_ips: ipList } : {}) }, key).catch((e: unknown) => {
+          const allow = fields.accounts();
+          const ipList = fields.ips();
+          const issued = await call<Key & { key: string }>('POST', '/v1/keys', { scopes, ...(allow ? { allow_accounts: allow } : {}), ...(ipList ? { allow_ips: ipList } : {}) }, key).catch((e: unknown) => {
             // Issued, but the answer was lost: the key is active and will never be shown — the list
             // shows it, so it can be revoked.
             if (e instanceof ApiError && e.code === 'key_already_issued') {
@@ -383,6 +431,11 @@ export async function keysPage(me: Me, redraw: (message?: string) => void): Prom
   add.addEventListener('click', () => newKeyDrawer(accounts, redraw));
   const [i1, iLink, i2] = k.intro;
   const accountName = (id: string) => accounts.find((a) => a.cf_account_id === id)?.name ?? id;
+  const limitsButton = (key: Key) => {
+    const b = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, k.limits);
+    b.addEventListener('click', () => keyLimitsDrawer(key, accounts, redraw));
+    return b;
+  };
   return h(
     'div',
     { class: 'stack stack--md' },
@@ -402,14 +455,19 @@ export async function keysPage(me: Me, redraw: (message?: string) => void): Prom
               cell(when(key.created_at), 'low'),
               cell(key.last_used ?? '—', 'medium'),
               cell(
-                confirmAction(
-                  k.revoke,
-                  { title: k.revoke, body: k.revokeAsk(key.prefix), confirmLabel: k.revoke },
-                  async (idem) => {
-                    await call('DELETE', `/v1/keys/${key.id}`, undefined, idem);
-                    redraw();
-                  },
-                  'btn--ghost btn--sm',
+                h(
+                  'div',
+                  { class: 'actions' },
+                  limitsButton(key),
+                  confirmAction(
+                    k.revoke,
+                    { title: k.revoke, body: k.revokeAsk(key.prefix), confirmLabel: k.revoke },
+                    async (idem) => {
+                      await call('DELETE', `/v1/keys/${key.id}`, undefined, idem);
+                      redraw();
+                    },
+                    'btn--ghost btn--sm',
+                  ),
                 ),
               ),
             ),

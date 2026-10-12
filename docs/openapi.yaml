@@ -328,6 +328,25 @@ paths:
         '409': { description: 'key_already_issued — a replay of the same Idempotency-Key' }
         default: { $ref: '#/components/responses/Error' }
   /v1/keys/{id}:
+    patch:
+      summary: Change an API key's allow lists in place (page session only); the key itself stays
+      description: |
+        A field left out stays as it is; `null` lifts the limit — every Cloudflare account of the
+        user, those connected later too, or every IP.
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              anyOf: [{ required: [allow_accounts] }, { required: [allow_ips] }]
+              properties:
+                allow_accounts: { type: [array, 'null'], minItems: 1, description: 'At most the plan''s Cloudflare accounts', items: { type: string, pattern: '^[0-9a-f]{32}$' } }
+                allow_ips: { type: [array, 'null'], minItems: 1, maxItems: 20, items: { type: string } }
+      responses:
+        '200': { description: The key as it is now, content: { application/json: { schema: { $ref: '#/components/schemas/Key' } } } }
+        default: { $ref: '#/components/responses/Error' }
     delete:
       summary: Revoke an API key (page session only)
       parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
