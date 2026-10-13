@@ -284,6 +284,52 @@ describe('install', () => {
     expect(await account(body.account.id)).toMatchObject({ state: 'connected', error: { code: 'cloudflare_error', step: 'uploading' } });
   });
 
+  it('a new script that reads as absent right after its upload does not stop the install', async () => {
+    fakeCf.lagReads = 1; // as on a user's account, 13.10.2026: GET …/deployments answered 404 10007
+    const { body } = await connect();
+    expect(await account(body.account.id)).toMatchObject({ state: 'ready', operation: { kind: 'install', state: 'running', step: 'selfcheck' } });
+    expect(await setupOk()).toMatchObject({ status: 200 });
+  });
+
+  it('an undo right after the upload does not believe the script is gone: it stays marked, and a reinstall takes it', async () => {
+    fakeCf.lagReads = 2; // the version read and the undo's read both miss it
+    fakeCf.refuse.add(`PUT /accounts/${ACC}/workers/scripts/clx-edge/schedules`);
+    const { body } = await connect();
+    expect(fakeCf.scripts.has('clx-edge')).toBe(true);
+    expect(await account(body.account.id)).toMatchObject({ state: 'connected', error: { code: 'cloudflare_error', step: 'uploaded', warnings: ['worker_not_undone'] } });
+    expect(await env.DB.prepare('SELECT script_owned FROM edge_accounts').first('script_owned')).toBe(1);
+    fakeCf.refuse.clear();
+    expect((await call('POST', `/v1/accounts/${body.account.id}/install`)).status).toBe(202);
+    expect(await setupOk()).toMatchObject({ status: 200 });
+    expect((await account(body.account.id)).state).toBe('ready');
+  });
+
+  it('an unmarked clx bundle an earlier install of clx made here is taken back; without that record it is name_taken', async () => {
+    const id = await ready();
+    // As the undo before this fix left a user's account (13.10.2026): the script there, the mark gone.
+    await env.DB.prepare('UPDATE edge_accounts SET script_owned = 0, bundle = NULL, state = ?').bind('connected').run();
+    const done = await env.DB.prepare('SELECT data FROM operations WHERE kind = ?').bind('install').first<string>('data');
+    await env.DB.prepare("UPDATE operations SET data = json_remove(data, '$.script_created') WHERE kind = 'install'").run();
+    await call('POST', `/v1/accounts/${id}/install`);
+    expect(await account(id)).toMatchObject({ state: 'connected', error: { code: 'name_taken', resource: 'worker' } });
+    expect(edge()!.code).toBe(EDGE_CODE);
+    await env.DB.prepare("UPDATE operations SET data = ? WHERE kind = 'install'").bind(done).run();
+    expect((await call('POST', `/v1/accounts/${id}/install`)).status).toBe(202);
+    expect(await setupOk()).toMatchObject({ status: 200 });
+    expect(await account(id)).toMatchObject({ state: 'ready' });
+    expect(await env.DB.prepare('SELECT script_owned FROM edge_accounts').first('script_owned')).toBe(1);
+  });
+
+  it('an install whose upload was refused proves nothing: a clx bundle that appears later is name_taken', async () => {
+    fakeCf.refuse.add(`PUT /accounts/${ACC}/workers/scripts/clx-edge`);
+    const { body } = await connect();
+    fakeCf.refuse.clear();
+    fakeCf.foreignScript('clx-edge', EDGE_CODE, ['fetch', 'scheduled']);
+    await call('POST', `/v1/accounts/${body.account.id}/install`);
+    expect(await account(body.account.id)).toMatchObject({ state: 'connected', error: { code: 'name_taken', resource: 'worker' } });
+    expect(edge()!.versions).toEqual(['vx']);
+  });
+
   it('a 403 on an install step is permission_error; what was made is undone', async () => {
     fakeCf.denyWorking.add('/workers/scripts/clx-edge');
     const { body } = await connect();
@@ -388,6 +434,21 @@ describe('disconnect', () => {
     expect([...fakeCf.scripts.keys()]).toEqual(['theirs']);
     expect(fakeCf.dbs.size).toBe(0);
     expect(await env.DB.prepare('SELECT count(*) AS n FROM edge_accounts').first('n')).toBe(0);
+  });
+
+  it('a worker that does not read yet right after its upload is named, not deleted unread', async () => {
+    fakeCf.lagReads = 2; // the install's version read, then the disconnect's read
+    const { body } = await connect();
+    expect(fakeCf.lagging).toBe(1);
+    expect((await call('DELETE', `/v1/accounts/${body.account.id}`)).body).toMatchObject({ ok: true, left: ['worker clx-edge (uploaded moments ago and not readable yet)'] });
+    expect(fakeCf.scripts.has('clx-edge')).toBe(true);
+  });
+
+  it('a worker deleted outside clx long after the install is simply gone', async () => {
+    const id = await ready();
+    fakeCf.scripts.delete('clx-edge');
+    await env.DB.prepare('UPDATE operations SET updated_at = 0').run();
+    expect((await call('DELETE', `/v1/accounts/${id}`)).body).toMatchObject({ ok: true, left: [] });
   });
 
   it('during a self-check: the install is superseded and does not come back', async () => {

@@ -138,7 +138,13 @@ Why:
 - **Resource ownership.** clx.cx records what it creates: the database UUID, route IDs, custom domain IDs (link hosts, §6), and a mark
   that the `clx-edge` script is ours — set just before the upload, cleared only when clx has deleted
   it. If `clx-edge` (worker or database) already exists and is not in our records, the install stops
-  with `name_taken` and touches nothing. Rollback and disconnect delete only what is recorded.
+  with `name_taken` and touches nothing — except a `clx-edge` worker whose code is a clx bundle in an
+  account where the operations log shows an earlier clx install had its upload of a new script
+  accepted (`script_put`): an undo or a disconnect that could not delete it left it there, and the
+  install takes it back (ADR 0028). An undo right after its own accepted upload does not take "no
+  such script" for an answer — a new script may not read yet — and keeps the mark; a disconnect
+  within 15 minutes of an accepted upload names such a script as left rather than deleting it
+  unread. Rollback and disconnect delete only what is recorded.
   Before replacing or deleting the script, clx.cx reads its code (`GET …/workers/scripts/clx-edge`,
   the `worker.js` part of the multipart answer — byte for byte what was uploaded, checked
   05.10.2026): if its sha256 is not in `edge/released.json` — `resource_drift`, and the script is
@@ -161,7 +167,7 @@ Why:
 - **Install** (every step is checked):
   1. what is there: the account's scripts and their cron triggers (only scripts with a `scheduled`
      handler can hold one; 5 in use → `cron_limit`; 4 in use → only the self-check cron at step 4),
-     and `clx-edge` by name → `name_taken`;
+     and `clx-edge` by name → `name_taken` (a clx bundle an earlier clx install made here is taken back);
   2. D1 `clx-edge` (or the recorded one, if it is still there) + migrations; the step is recorded
      before the create call, so a resumed step adopts a database it finds by name;
   3. the worker key: 32 random bytes, we keep only its SHA-256; on reinstall the previous hash is

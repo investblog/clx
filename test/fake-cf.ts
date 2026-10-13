@@ -56,6 +56,9 @@ export const fakeCf = {
   subdomainTaken: 0,
   /** a subdomain appears just before clx asks for one */
   subdomainRace: false,
+  /** how many reads of a script just created (its code, its deployments) answer 404 10007 */
+  lagReads: 0,
+  lagging: 0,
   /** the account's Workers Custom Domains */
   domains: new Map<string, { id: string; hostname: string; service: string; zone_id: string }>(),
   /** hosts that already have a DNS record someone made: a custom domain there is refused */
@@ -65,6 +68,8 @@ export const fakeCf = {
     this.subdomain = 'acct';
     this.subdomainTaken = 0;
     this.subdomainRace = false;
+    this.lagReads = 0;
+    this.lagging = 0;
     this.domains.clear();
     this.dnsRecords.clear();
     this.tokens.clear();
@@ -152,9 +157,14 @@ async function workers(path: string, method: string, init: RequestInit, url: URL
     const version = `v${++fakeCf.seq}`;
     const handlers = /scheduled/u.test(code) ? ['fetch', 'scheduled'] : ['fetch'];
     fakeCf.scripts.set(name, { code, bindings: meta.bindings.filter((b) => b.type !== 'secret_text'), secrets, versions: [...(script?.versions ?? []), version], live: version, crons: script?.crons ?? [], handlers });
+    if (!script) fakeCf.lagging = fakeCf.lagReads;
     return ok({ id: name, deployment_id: version.replace(/-/gu, ''), handlers });
   }
   if (!script) return no(404, 10007);
+  if (method === 'GET' && (!sub || sub === '/deployments') && fakeCf.lagging > 0) {
+    fakeCf.lagging--;
+    return no(404, 10007);
+  }
   if (!sub && method === 'GET') {
     const boundary = `b${Math.random().toString(16).slice(2)}`;
     return new Response(`--${boundary}\r\nContent-Disposition: form-data; name="worker.js"\r\n\r\n${script.code}\r\n--${boundary}--\r\n`, { headers: { 'content-type': `multipart/form-data; boundary=${boundary}` } });

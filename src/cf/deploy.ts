@@ -7,7 +7,8 @@
 // Ownership: clx deletes only what it recorded — the database by its UUID, the script while
 // `script_owned` says clx put it there — and before it replaces or deletes the script it checks that
 // the code there is a clx bundle (edge/released.json); anything else is `resource_drift` and left
-// alone. An install that finds `clx-edge` in place and not recorded stops with `name_taken`.
+// alone. An install that finds `clx-edge` in place and not recorded stops with `name_taken` — unless
+// it is a clx bundle and an earlier install of clx made it in this account, then it is taken back.
 import { EDGE_CODE, EDGE_COMPATIBILITY_DATE, EDGE_SHA256 } from '../../edge/bundle.gen';
 import { SELF_CHECK_CRON, WORKING_CRON } from '../../edge/contract';
 import { MIGRATIONS, SCHEMA } from '../../edge/migrations';
@@ -43,6 +44,8 @@ interface DeployData {
   /** created by this operation: a rollback deletes these, and only these */
   d1_created?: boolean;
   script_created?: boolean;
+  /** this run's upload was accepted: the script is there even if a read says otherwise */
+  script_put?: boolean;
   /** the script was ours before: a rollback returns to this version (and key) instead */
   prev_version_id?: string | null;
   prev_key_hash?: string | null;
@@ -126,6 +129,25 @@ async function liveVersion(r: Run): Promise<string | null> {
   return d.deployments[0]?.versions.find((v) => v.percentage === 100)?.version_id ?? null;
 }
 
+/** An install of clx had its upload of a new clx-edge accepted in this Cloudflare account before
+ *  (the operations log) — not only meant to: `script_created` is set before the upload is tried. */
+async function madeHere(r: Run): Promise<boolean> {
+  const row = await r.db
+    .prepare("SELECT 1 FROM operations WHERE cf_account_id = ? AND kind = 'install' AND json_extract(data, '$.script_created') = 1 AND json_extract(data, '$.script_put') = 1 LIMIT 1")
+    .bind(r.edge.cf_account_id)
+    .first();
+  return row !== null;
+}
+
+/** An install had an upload accepted in this account within the self-check's time. */
+async function uploadedLately(db: D1Database, cfAccountId: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 FROM operations WHERE cf_account_id = ? AND kind IN ('install', 'update') AND json_extract(data, '$.script_put') = 1 AND updated_at > ? LIMIT 1")
+    .bind(cfAccountId, Date.now() - SELF_CHECK_TIMEOUT)
+    .first();
+  return row !== null;
+}
+
 async function databaseNamed(r: Run): Promise<Database | null> {
   const list = await cf<Database[]>(r.token, 'GET', `${acc(r)}/d1/database?name=${DATABASE}&per_page=100`);
   return list.find((d) => d.name === DATABASE) ?? null;
@@ -201,8 +223,11 @@ async function advance(r: Run, at: string): Promise<string> {
       const scripts = await cf<Script[]>(r.token, 'GET', `${acc(r)}/workers/scripts`);
       const there = scripts.find((s) => s.id === SCRIPT);
       if (there) {
-        if (!r.edge.script_owned) fail(409, 'name_taken', 'A worker named clx-edge is already in this account and clx did not put it there; it is left alone.', { resource: 'worker' });
         const digest = await scriptDigest(r.token, r.edge.cf_account_id, SCRIPT);
+        // Not marked ours, yet a clx bundle where an earlier install of clx made the script: an
+        // undo or a disconnect that could not delete it left it there, and it is taken back.
+        if (!r.edge.script_owned && !(isClxBundle(digest) && (await madeHere(r))))
+          fail(409, 'name_taken', 'A worker named clx-edge is already in this account and clx did not put it there; it is left alone.', { resource: 'worker' });
         if (!isClxBundle(digest)) fail(409, 'resource_drift', 'The clx-edge worker was changed outside clx; it is left alone.', { resource: 'worker' });
         data.prev_version_id = await liveVersion(r);
         data.prev_key_hash = r.edge.edge_key_hash;
@@ -262,7 +287,14 @@ async function advance(r: Run, at: string): Promise<string> {
       const metadata = { main_module: 'worker.js', compatibility_date: EDGE_COMPATIBILITY_DATE, bindings, ...(key ? {} : { keep_bindings: ['secret_text'] }) };
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
       await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}`, form, r.log);
-      data.version_id = (await liveVersion(r)) ?? undefined;
+      data.script_put = true;
+      // A new script's reads may answer 404 10007 for a moment after its upload (13.10.2026):
+      // the version is only recorded, so the install goes on without it.
+      data.version_id =
+        (await liveVersion(r).catch((e: unknown) => {
+          if (e instanceof CfError && e.status === 404) return null;
+          throw e;
+        })) ?? undefined;
       data.deployment_id = deployment;
       if (key) {
         const hash = await sha256(key);
@@ -337,6 +369,9 @@ async function undo(r: Run, at: string, e: unknown): Promise<void> {
       // of that name may have appeared since (§4 ownership).
       const there = await scriptDigest(r.token, r.edge.cf_account_id, SCRIPT).catch(() => 'unreadable');
       if (there === 'unreadable') warnings.add('worker_not_undone');
+      // Absent right after this operation's own upload is not believed: it may not show yet. The
+      // mark stays, so a reinstall takes it over and a disconnect deletes it.
+      else if (there === null && data.script_put && at !== 'selfcheck') warnings.add('worker_not_undone');
       else if (there === null) scriptGone = true;
       else if (!isClxBundle(there)) {
         warnings.add('worker_not_ours');
@@ -555,7 +590,11 @@ export async function disconnect(env: Env, principal: string, edge: EdgeAccount)
         if (script) {
           const digest = await scriptDigest(token, current.cf_account_id, SCRIPT);
           if (digest !== null && !isClxBundle(digest)) left.push('worker clx-edge (changed outside clx)');
-          else if (digest !== null) await cf(token, 'DELETE', `${path}/workers/scripts/${SCRIPT}?force=true`, undefined, log).catch((e: unknown) => (e instanceof CfError && e.status === 404 ? null : Promise.reject(e)));
+          // Absent soon after an accepted upload is not believed: the script may not read yet. It
+          // is not deleted unread either (the name may hold someone else's by now) — it is named.
+          else if (digest === null) {
+            if (await uploadedLately(db, current.cf_account_id)) left.push('worker clx-edge (uploaded moments ago and not readable yet)');
+          } else await cf(token, 'DELETE', `${path}/workers/scripts/${SCRIPT}?force=true`, undefined, log).catch((e: unknown) => (e instanceof CfError && e.status === 404 ? null : Promise.reject(e)));
           script = false;
           await db.prepare('UPDATE edge_accounts SET script_owned = 0 WHERE id = ? AND lease_owner = ?').bind(current.id, owner).run();
         }
