@@ -874,7 +874,10 @@ that adds a site and embeds its counter at build time.
 - **Plans** ([ADR 0014](./decisions/0014-a-key-on-free.md)). `free` — what sign-up gives (limits
   in §8), the page and one API key, so an agent can set clx up within those limits. `api` — the
   higher limits of §8 and up to 5 keys; switched on by an admin on request, free of charge for now
-  (billing is out of scope; a paid plan comes later). Neither
+  (billing is out of scope; a paid plan comes later). A **partner** — at least one of whose clients
+  has been on a paid plan of the site generator since the beginning of the month — pays half, for
+  the generator or for clx, for whichever they pay ([ADR 0029](./decisions/0029-partner-price.md));
+  in clx it waits for the paid plan. Neither
   plan requires Workers Paid in the user's Cloudflare accounts — the upgrade advice (§8) says when
   one should move.
 - **Keys.** `Authorization: Bearer <key>`; 32 random bytes with a readable prefix (`clx_`) so that
