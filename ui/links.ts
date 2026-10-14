@@ -5,7 +5,7 @@ import { ApiError, call, text, type Account, type LinkHost, type Me } from './ap
 import type { Site } from './sites';
 import { action, badge, cell, confirmAction, notice, pageHead, table, type Live, type Tone } from './accounts';
 import { openDrawer } from './dialog';
-import { codeBlock, h } from './dom';
+import { codeBlock, h, hostName } from './dom';
 import { errorText, num, t, when } from './i18n';
 import { paged } from './pager';
 import { dropdown, zoneHost } from './pick';
@@ -89,7 +89,7 @@ function hostsCard(hosts: LinkHost[], accounts: Account[], sites: Site[], redraw
             h(
               'tr',
               {},
-              cell(h('span', {}, lh.host, lh.error?.code ? h('span', { class: 'action-status' }, ` ${errorText(lh.error.code, lh.error.code)}`) : null)),
+              cell(h('span', {}, hostName(lh.host), lh.error?.code ? h('span', { class: 'action-status' }, ` ${errorText(lh.error.code, lh.error.code)}`) : null)),
               cell(name(lh.account_id), 'medium'),
               cell(badge((c.hostState as Record<string, string>)[lh.state] ?? lh.state, HOST_TONE[lh.state])),
               cell(

@@ -46,6 +46,8 @@ fieldset.field{min-width:0;margin:0;padding:0;border:0}
 /* A framed group with its name on the border (301-ui .fieldset-group): for a choice whose empty
    answer means something, said in a hint under the name. */
 fieldset.fieldset-group{padding:var(--space-3);border:1px solid var(--input-border);border-radius:var(--radius)}
+/* A host's subdomain, quieter than its domain (ui/dom.ts hostName). */
+.host-sub{color:var(--text-muted)}
 .fieldset-group>legend{padding:0 var(--space-2);margin-left:calc(-1 * var(--space-2))}
 @keyframes drawer-in{from{transform:translateX(100%)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.drawer{animation:none}}

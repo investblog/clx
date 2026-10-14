@@ -1,5 +1,6 @@
 // A small element builder. Text goes in as text nodes, never as HTML.
 // The page's CSP has no 'unsafe-inline', so a style="" attribute would be dropped — set geometry through the CSSOM.
+import { splitHost } from './host';
 import { t } from './i18n';
 
 type Child = Node | string | number | null | undefined | false;
@@ -36,6 +37,15 @@ export function copyButton(text: string, label = t.common.copy): HTMLButtonEleme
 
 /** A block of code to copy whole: the copy button sits in its corner. */
 export const codeBlock = (text: string, label?: string) => h('div', { class: 'code-copy' }, h('code', { class: 'secret' }, text), copyButton(text, label));
+
+/** A host with its subdomain set quieter, so the domain is what is read (ui/host.ts). */
+export function hostName(host: string): DocumentFragment {
+  const [sub, domain] = splitHost(host);
+  const out = document.createDocumentFragment();
+  if (sub) out.append(h('span', { class: 'host-sub' }, sub));
+  out.append(domain);
+  return out;
+}
 
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);

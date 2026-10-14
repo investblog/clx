@@ -4,7 +4,7 @@
 import { ApiError, call, type Account, type Me } from './api';
 import { action, badge, cell, confirmAction, notice, pageHead, table, type Live, type Tone } from './accounts';
 import { openDrawer } from './dialog';
-import { codeBlock, h } from './dom';
+import { codeBlock, h, hostName } from './dom';
 import { errorText, t, when } from './i18n';
 import { paged } from './pager';
 import { dropdown, zoneHost } from './pick';
@@ -78,7 +78,7 @@ export async function sitesPage(me: Me, go: (hash: string) => void): Promise<HTM
             h(
               'tr',
               {},
-              cell(h('a', { href: `#/sites/${s.id}` }, s.host)),
+              cell(h('a', { href: `#/sites/${s.id}` }, hostName(s.host))),
               cell(h('span', {}, siteBadge(s), s.config === 'pending' ? ' ' : '', s.config === 'pending' ? badge(c.configPending) : null)),
               cell(name(s.account_id), 'low'),
             ),
