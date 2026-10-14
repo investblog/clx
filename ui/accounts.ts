@@ -346,8 +346,14 @@ function limitFields(accounts: Account[], key?: Key) {
   ips.value = key?.allow_ips?.join(', ') ?? '';
   return {
     els: [
-      // With no account yet the legend still says that the key will reach those connected later.
-      h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, k.onlyAccounts), ...(ids.length ? accountBoxes.map((a) => a.el) : [h('p', { class: 'muted text-sm' }, k.noAccounts)])),
+      // None ticked means all, those connected later too — said under the name, with no account yet as well.
+      h(
+        'fieldset',
+        { class: 'field fieldset-group', 'aria-describedby': 'key-accounts-hint' },
+        h('legend', { class: 'field-label' }, k.onlyAccounts),
+        h('p', { class: 'field-hint', id: 'key-accounts-hint' }, k.accountsHint),
+        ...(ids.length ? accountBoxes.map((a) => a.el) : [h('p', { class: 'muted text-sm' }, k.noAccounts)]),
+      ),
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'key-ips' }, k.onlyIps), ips),
     ],
     accounts: () => {

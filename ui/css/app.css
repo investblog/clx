@@ -43,6 +43,10 @@ svg.icon{fill:currentColor;vertical-align:-0.125em}
 .drawer__head{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:var(--space-3);margin:0 calc(-1 * var(--space-5)) var(--space-4);padding:var(--space-3) var(--space-5);border-bottom:1px solid var(--border-subtle);background:var(--bg-elevated)}
 .drawer__head h2{margin:0 auto 0 0;font-size:var(--fs-lg)}
 fieldset.field{min-width:0;margin:0;padding:0;border:0}
+/* A framed group with its name on the border (301-ui .fieldset-group): for a choice whose empty
+   answer means something, said in a hint under the name. */
+fieldset.fieldset-group{padding:var(--space-3);border:1px solid var(--input-border);border-radius:var(--radius)}
+.fieldset-group>legend{padding:0 var(--space-2);margin-left:calc(-1 * var(--space-2))}
 @keyframes drawer-in{from{transform:translateX(100%)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.drawer{animation:none}}
 body:has(dialog[open]){overflow:hidden}
