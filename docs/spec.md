@@ -665,6 +665,13 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   only once a new complete day exists), a slice of accounts per hourly run; `403` leaves that
   metric unavailable; `401` stores nothing and hands the account to the token check (§3), which
   owns `revoked`; anything passing (`429`, `5xx`, network) is retried the next hour;
+- **an account already on Workers Paid** — read each time from its entitlements
+  (`GET /accounts/{id}/entitlements`, readable with the working token's rights: a D1 database may
+  hold 10 GB there, 500 MB on Free) — has no daily limit to reach: requests, writes and reads are
+  not judged, only the size is — against the backpressure point, 400 MB, which stops detail on any
+  plan — the advice says `paid`, and no e-mail or banner tells it to move to Paid. Entitlements
+  refused (`403`) leave the account judged as Free; a passing failure delays the whole advice to the
+  next hour, so a Paid account is not told to move on a hiccup. See [ADR 0029](./decisions/0029-workers-paid-from-entitlements.md);
 - the advice is in the UI (account status) and in the API (`GET /v1/accounts/{id}`, §15), so an
   integrator can pass it on to its customer — only while the account is in service (`ready`,
   `no_connection`): an account no longer measured shows none. See

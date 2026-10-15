@@ -18,7 +18,7 @@ const ADVICE_TONE: Record<string, Tone> = { ok: 'success', upgrade_soon: 'warnin
 
 export const badge = (text: string, tone: Tone = 'neutral') => h('span', { class: `badge badge--${tone}` }, text);
 const stateBadge = (s: string) => badge(label.accountState(s), STATE_TONE[s]);
-const adviceBadge = (level: string) => badge(label.adviceLevel(level), ADVICE_TONE[level]);
+const adviceBadge = (level: string, paid = false) => badge(label.adviceLevel(level, paid), ADVICE_TONE[level]);
 export const notice = (text: string, tone: 'error' | 'success' | 'loading' | 'idle' = 'error') => h('div', { class: 'auth-status', 'data-type': tone, role: 'status' }, text);
 export function failure(e: unknown): string {
   if (e instanceof ApiError) return errorText(e.code, e.message);
@@ -118,7 +118,7 @@ export async function accountsPage(me: Me): Promise<HTMLElement> {
           {},
           cell(h('a', { href: `#/accounts/${a.id}` }, a.name ?? a.cf_account_id)),
           cell(stateBadge(a.state)),
-          cell(a.advice ? adviceBadge(a.advice.level) : '—', 'medium'),
+          cell(a.advice ? adviceBadge(a.advice.level, a.advice.paid) : '—', 'medium'),
           cell(a.push ? when(a.push.at) : t.accounts.noPush, 'low'),
         ),
       ),
@@ -195,9 +195,10 @@ function adviceCard(a: Account): HTMLElement {
   return h(
     'section',
     { class: 'card stack stack--sm' },
-    title(adviceBadge(adv.level)),
+    title(adviceBadge(adv.level, adv.paid)),
+    adv.paid ? h('p', {}, t.account.onPaid) : null,
     table(
-      [[t.account.colMetric], [t.account.colPeak], [t.account.colLimit, 'low'], [t.account.colForecast, 'medium'], ['']],
+      [[t.account.colMetric], [adv.paid ? t.account.colNow : t.account.colPeak], [adv.paid ? t.account.colLimitPaid : t.account.colLimit, 'low'], [t.account.colForecast, 'medium'], ['']],
       Object.entries(adv.metrics).map(([k, m]) =>
         h(
           'tr',
@@ -206,19 +207,20 @@ function adviceCard(a: Account): HTMLElement {
           cell(k === 'size' ? mb(m.busiest.value) : `${num(m.busiest.value)}${m.busiest.day ? ` (${m.busiest.day})` : ''}`),
           cell(k === 'size' ? mb(m.limit) : num(m.limit), 'low'),
           cell(m.forecast ? t.account.forecastAt(m.forecast) : '—', 'medium'),
-          cell(adviceBadge(m.level)),
+          cell(adviceBadge(m.level, adv.paid)),
         ),
       ),
     ),
     adv.unavailable?.length ? h('p', { class: 'muted' }, adv.unavailable.includes('analytics') ? t.account.noAnalytics : t.account.noSize) : null,
-    adv.suggest === 'shorter_hourly_retention' ? h('p', {}, t.account.shorterRetention) : null,
-    h('p', { class: 'muted text-sm' }, t.account.counted(when(adv.at))),
+    adv.suggest === 'shorter_hourly_retention' ? h('p', {}, adv.paid ? t.account.shorterRetentionPaid : t.account.shorterRetention) : null,
+    h('p', { class: 'muted text-sm' }, adv.paid ? t.account.countedPaid(when(adv.at)) : t.account.counted(when(adv.at))),
   );
 }
 
 function banner(a: Account): HTMLElement | null {
   const adv = a.advice;
-  if (!adv || (adv.level !== 'upgrade_soon' && adv.level !== 'over') || !adv.metric) return null;
+  // The banner speaks of Free's limits; on Workers Paid the card says what there is about the size.
+  if (!adv || adv.paid || (adv.level !== 'upgrade_soon' && adv.level !== 'over') || !adv.metric) return null;
   const m = adv.metrics[adv.metric]!;
   const what = label.metric(adv.metric);
   const text = adv.level === 'over' ? t.account.over(what) : t.account.soon(what, num(m.busiest.value), num(m.limit), m.forecast);

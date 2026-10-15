@@ -44,7 +44,7 @@ export const label = {
   accountState: (s: string) => pick(t.accountState, s),
   step: (s: string) => pick(t.step, s),
   operation: (s: string) => pick(t.operation, s),
-  adviceLevel: (s: string) => pick(t.adviceLevel, s),
+  adviceLevel: (s: string, paid = false) => (paid && (t.adviceLevelPaid as Record<string, string>)[s]) || pick(t.adviceLevel, s),
   metric: (s: string) => pick(t.metric, s),
   drop: (s: string) => pick(t.drop, s),
   scope: (s: string) => pick(t.scope, s),

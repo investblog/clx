@@ -39,6 +39,8 @@ export const fakeCf = {
   analytics: {} as Record<string, { requests: number; writes: number; reads: number }>,
   /** what a database's `file_size` says */
   dbSize: 1_000_000,
+  /** the account is on Workers Paid: its entitlements list D1's 10 GB a database */
+  paid: false,
   /** called when a route is made, before the answer: a concurrent change lands here */
   onRoutePost: null as null | (() => Promise<void>),
   /** called when zones are listed, before the answer: a concurrent change lands here */
@@ -65,6 +67,7 @@ export const fakeCf = {
   dnsRecords: new Set<string>(),
 
   reset() {
+    this.paid = false;
     this.subdomain = 'acct';
     this.subdomainTaken = 0;
     this.subdomainRace = false;
@@ -323,6 +326,11 @@ async function cloudflare(url: URL, init: RequestInit): Promise<Response> {
   if (!path.startsWith(`/accounts/${ACC}`) && !path.startsWith('/zones')) return no(403);
   if (path.endsWith('/tokens/verify')) return ok({ id: caller.id, status: 'active', expires_on: new Date(Date.now() + 86_400_000).toISOString() });
   if (path === `/accounts/${ACC}`) return ok({ id: ACC, name: 'Test account' });
+  // As the probe of 15.10.2026 saw them: a Free account lists no D1 entitlement, a Paid one 10 GB.
+  if (path === `/accounts/${ACC}/entitlements`) {
+    const row = (key: string, value: unknown) => ({ id: key, feature: { key }, allocation: { value } });
+    return ok([row('pages.concurrent_builds', 1), ...(fakeCf.paid ? [row('d1.max_storage_per_db_mb', 10000), row('workers.enabled', true)] : [])]);
+  }
   if (path.endsWith('/tokens/permission_groups')) return ok(CATALOG);
   if (path.endsWith('/tokens') && method === 'GET') {
     const page = Number(url.searchParams.get('page') ?? 1);

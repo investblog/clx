@@ -1,7 +1,7 @@
 // The upgrade advice (docs/spec.md §8): levels and the trend on their own, then the hourly job
 // reading the fake account's analytics and the size of its database.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advise, assessCounter, assessSize } from '../src/advice';
+import { advise, assessCounter, assessSize, onPaid } from '../src/advice';
 import { signAccess } from '../src/auth/jwt';
 import worker, { app } from '../src/index';
 import type { Env } from '../src/types';
@@ -43,6 +43,27 @@ describe('levels', () => {
     expect(advise({ ...quiet, writes: [0, 0, 0, 0, 0, 0, 90_000] }, 320 * MB, first, today, 0)).toMatchObject({ level: 'upgrade_soon', metric: 'writes' });
     expect(advise({ ...quiet, writes: [0, 0, 0, 0, 0, 0, 90_000] }, 320 * MB, first, today, 0).suggest).toBeUndefined();
     expect(advise(null, 10 * MB, first, today, 0)).toMatchObject({ level: 'ok', unavailable: ['analytics'], metrics: { size: { level: 'ok' } } });
+  });
+
+  it('on Workers Paid only the size is judged — the daily counts stop nothing there', () => {
+    const busy = { requests: Array(7).fill(200_000), writes: Array(7).fill(200_000), reads: Array(7).fill(13_000_000) };
+    const paid = advise(busy, 10 * MB, first, today, 0, true);
+    expect(paid).toMatchObject({ level: 'ok', metric: null, paid: true });
+    expect(Object.keys(paid.metrics)).toEqual(['size']);
+    expect(paid.unavailable).toBeUndefined();
+    expect(advise(null, 410 * MB, first, today, 0, true)).toMatchObject({ level: 'over', metric: 'size', paid: true, suggest: 'shorter_hourly_retention' });
+    // The size's limit there is the backpressure point, not Free's 500 MB.
+    expect(assessSize(300 * MB, true)).toMatchObject({ level: 'watch', limit: 400 * MB });
+    expect(assessSize(330 * MB, true).level).toBe('upgrade_soon');
+    expect(advise(busy, 10 * MB, first, today, 0).paid).toBeUndefined();
+  });
+
+  it('Workers Paid is read from the entitlements: D1 holding more than Free gives a database', () => {
+    const row = (key: string, value: unknown) => ({ feature: { key }, allocation: { value } });
+    expect(onPaid([row('workers.enabled', true), row('d1.max_storage_per_db_mb', 10000)])).toBe(true);
+    expect(onPaid([row('d1.max_storage_per_db_mb', 500)])).toBe(false);
+    expect(onPaid([row('pages.concurrent_builds', 1)])).toBe(false);
+    expect(onPaid([])).toBe(false);
   });
 });
 
@@ -154,6 +175,57 @@ describe('the hourly job', () => {
       await env.DB.prepare('UPDATE edge_accounts SET token_expires_at = ?').bind(D0 + 13 * H + 20 * D + 365 * D).run();
       await job(D0 + 13 * H + 20 * 60_000);
       expect(renew()).toHaveLength(1);
+    } finally {
+      env = real;
+    }
+  });
+
+  it('an account on Workers Paid: no Free limits, no e-mail; entitlements unread — judged as Free', async () => {
+    const mail: { subject: string }[] = [];
+    const real = env;
+    env = { ...env, EMAIL: { send: async (m) => (mail.push(m), {}) } };
+    // Only the advice's letters: a day without pushes also brings "no word from the worker".
+    const limits = () => mail.filter((m) => m.subject.includes('Cloudflare limit'));
+    try {
+      fakeCf.paid = true;
+      fakeCf.analytics = { [day(3)]: { requests: 1, writes: 1, reads: 13_000_000 } };
+      await job(D0 + 10 * H + 20 * 60_000);
+      const a = (await account()).advice;
+      expect(a).toMatchObject({ level: 'ok', metric: null, paid: true, metrics: { size: { level: 'ok' } } });
+      expect(a.metrics.reads).toBeUndefined();
+      expect(limits()).toHaveLength(0);
+      // The next day the entitlements cannot be read: as before, Free's limits — and the e-mail.
+      fakeCf.denyWorking.add('/entitlements');
+      await job(D0 + 34 * H + 20 * 60_000);
+      expect((await account()).advice).toMatchObject({ level: 'over', metric: 'reads' });
+      expect((await account()).advice.paid).toBeUndefined();
+      expect(limits()).toHaveLength(1);
+      // Moved to Paid: the letter's level is cleared and nothing more is sent.
+      fakeCf.denyWorking.clear();
+      await job(D0 + 58 * H + 20 * 60_000);
+      expect((await account()).advice).toMatchObject({ level: 'ok', paid: true });
+      expect(await env.DB.prepare('SELECT advice_mailed_level FROM edge_accounts').first('advice_mailed_level')).toBeNull();
+      expect(limits()).toHaveLength(1);
+    } finally {
+      env = real;
+    }
+  });
+
+  it('the plan failing in passing holds the advice to the next hour; on Paid the counts failing do not', async () => {
+    const mail: { subject: string }[] = [];
+    const real = env;
+    env = { ...env, EMAIL: { send: async (m) => (mail.push(m), {}) } };
+    try {
+      fakeCf.paid = true;
+      fakeCf.analytics = { [day(3)]: { requests: 1, writes: 1, reads: 13_000_000 } };
+      fakeCf.failOnce.add('/entitlements');
+      await job(D0 + 10 * H + 20 * 60_000);
+      expect((await account()).advice).toBeNull();
+      expect(mail).toHaveLength(0);
+      fakeCf.failOnce.add('/graphql');
+      await job(D0 + 11 * H + 20 * 60_000);
+      expect((await account()).advice).toMatchObject({ level: 'ok', paid: true });
+      expect(mail).toHaveLength(0);
     } finally {
       env = real;
     }

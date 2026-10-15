@@ -1,6 +1,6 @@
 ---
 title: clx — Cloudflare behaviour checked live
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Cloudflare behaviour checked live
@@ -92,6 +92,7 @@ to the token clx actually holds.
 | On Free the three datasets keep **90 days** (`settings { … notOlderThan }` = 7,776,000 s) and one query spans at most **32 days** (`maxDuration` = 2,764,800 s; a wider range is refused: "cannot request a time range wider than 4w4d"); `maxPageSize` 10,000. | 06.10.2026, the dataset `settings` node | §8: 7 days of history are always there |
 | D1 rows appear ~15 minutes after the writes; a script made minutes earlier is counted under `__unknown__`. | 05.10.2026 | §8: account-wide sums only |
 | `workersInvocationsAdaptive` by `datetimeMinute` and `scriptName` shows when a script ran and how many subrequests it made — the way to see whether a user-side worker ran at all when there are no logs. | 05.10.2026 | diagnosing the self-check |
+| **Telling Workers Paid from Free with the working token's rights:** `GET /accounts/{id}/entitlements` answers `200`. The Paid account (clx.cx) lists 70 entries, among them `d1.max_storage_per_db_mb` = 10000 and `workers.enabled` = true; the Free test account lists 9, none about Workers or D1. `…/subscriptions` and `…/billing/profile` answer `403` (they need a billing right); `GET /accounts/{id}`, `…/workers/account-settings` (`default_usage_model: standard` on both), the scripts' `usage_model` and the GraphQL dataset `settings` look the same on both. | 15.10.2026, `scripts/probe-plan.mjs`, a Paid and a Free account, two runs | upgrade advice: `onPaid()` (ADR 0029) |
 | Workers Observability (`…/workers/observability/telemetry/query`) is refused (`403`) to the clx.cx deploy token — it holds no Observability right. | 05.10.2026 | — |
 | Browser Integrity Check (zone setting `browser_check`, on by default) answers `403` `error code: 1010` to User-Agent `Python-urllib/…` on every path of clx.cx — the site, `/robots.txt` and `/v1/*` — before the worker; curl, an empty UA, python-requests, Go and node pass. Turned off with `PATCH /zones/{id}/settings/browser_check {value: "off"}`, effective within 20 s. Bot Fight Mode and AI-bot blocking were already off; security level medium. | 10.10.2026, the clx.cx zone (Global key) | clx.cx: an agent on the Python standard library reaches the docs and the API. On a user's zone BIC is theirs: it may refuse a script's clicks on short links, not browsers |
 | Web Analytics (RUM) with automatic setup injects `static.cloudflareinsights.com/beacon.min.js` into proxied HTML; a strict CSP blocks it (a console error on every page). It is turned off per site with `PUT /accounts/{id}/rum/site_info/{site_tag}` `{auto_install: true, enabled: false, zone_tag}` (sites: `GET …/rum/site_info/list`; right: Account Settings Write) — the beacon was gone from clx.cx pages within a minute. | 10.10.2026, the clx.cx zone (Global key) | clx.cx has no Web Analytics. On users' zones clx does not touch it: `clx-edge` answers with no HTML (script, 204, 302, empty 404/503), so the injection never lands on clx's answers, and the working token holds only Account Settings Read |

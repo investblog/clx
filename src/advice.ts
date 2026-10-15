@@ -37,8 +37,18 @@ export interface Advice {
   unavailable?: ('analytics' | 'size')[];
   /** Size alone is the problem: shorter hourly retention helps without an upgrade. */
   suggest?: 'shorter_hourly_retention';
+  /** The account is on Workers Paid: no daily limit stops it, only the size is judged. */
+  paid?: true;
   at: string;
 }
+
+/**
+ * Whether the account is on Workers Paid, from its entitlements (docs/cloudflare-facts.md,
+ * 15.10.2026): on Paid a D1 database may hold 10 GB, on Free 500 MB — a Free account may not list
+ * the entitlement at all. Not read, or not there: Free, as before.
+ */
+export const onPaid = (list: { feature?: { key?: string }; allocation?: { value?: unknown } }[]) =>
+  list.some((e) => e.feature?.key === 'd1.max_storage_per_db_mb' && Number(e.allocation?.value) * 1024 * 1024 > CF_FREE.size);
 
 const date = (day: number) => new Date(day * D).toISOString().slice(0, 10);
 const worse = (a: Level, b: Level) => (LEVELS.indexOf(b) > LEVELS.indexOf(a) ? b : a);
@@ -74,15 +84,19 @@ export function assessCounter(values: number[], first: number, limit: number, to
 }
 
 /** The size of clx-edge now: over the limit — or at backpressure, when the collector already drops detail. */
-export function assessSize(bytes: number): MetricAdvice {
-  const level = bytes >= FULL_BYTES ? 'over' : byShare(bytes / CF_FREE.size);
-  return { level, limit: CF_FREE.size, busiest: { day: null, value: bytes }, forecast: null };
+export function assessSize(bytes: number, paid = false): MetricAdvice {
+  // On Paid a database may hold 10 GB: what is left is clx's own backpressure, so that is the limit.
+  const limit = paid ? FULL_BYTES : CF_FREE.size;
+  const level = bytes >= FULL_BYTES ? 'over' : byShare(bytes / limit);
+  return { level, limit, busiest: { day: null, value: bytes }, forecast: null };
 }
 
-export function advise(counters: Record<Counter, number[]> | null, size: number | null, first: number, today: number, now: number): Advice {
+export function advise(counters: Record<Counter, number[]> | null, size: number | null, first: number, today: number, now: number, paid = false): Advice {
   const metrics: Partial<Record<Metric, MetricAdvice>> = {};
+  // On Workers Paid the daily counts are included in the plan and billed beyond it — nothing stops.
+  if (paid) counters = null;
   if (counters) for (const k of ['requests', 'writes', 'reads'] as const) metrics[k] = assessCounter(counters[k], first, CF_FREE[k], today);
-  if (size !== null) metrics.size = assessSize(size);
+  if (size !== null) metrics.size = assessSize(size, paid);
   let level: Level = 'ok';
   let metric: Metric | null = null;
   for (const [k, m] of Object.entries(metrics) as [Metric, MetricAdvice][])
@@ -90,7 +104,7 @@ export function advise(counters: Record<Counter, number[]> | null, size: number 
       level = m.level;
       metric = k;
     }
-  const unavailable = [...(counters ? [] : ['analytics' as const]), ...(size === null ? ['size' as const] : [])];
+  const unavailable = [...(counters || paid ? [] : ['analytics' as const]), ...(size === null ? ['size' as const] : [])];
   const others = (['requests', 'writes', 'reads'] as const).every((k) => (metrics[k]?.level ?? 'ok') === 'ok');
   return {
     level,
@@ -98,6 +112,7 @@ export function advise(counters: Record<Counter, number[]> | null, size: number 
     metrics,
     ...(unavailable.length ? { unavailable } : {}),
     ...(metrics.size && metrics.size.level !== 'ok' && others ? { suggest: 'shorter_hourly_retention' as const } : {}),
+    ...(paid ? { paid: true as const } : {}),
     at: new Date(now).toISOString(),
   };
 }
@@ -150,14 +165,19 @@ export async function runAdvice(env: Env, now = Date.now()): Promise<{ advised: 
       // token — the token check's to say, so it is asked to look at once. Anything passing — 5xx,
       // 429, the network — leaves the account to the next hour.
       const status = (e: unknown) => (e instanceof CfError ? e.status : 0);
-      const [counters, size] = await Promise.allSettled([
+      const [counters, size, paid] = await Promise.allSettled([
         measure(token, edge.cf_account_id, first),
         cf<{ file_size?: number }>(token, 'GET', `/accounts/${edge.cf_account_id}/d1/database/${edge.d1_id}`).then((d) => d.file_size ?? null),
+        cf<Parameters<typeof onPaid>[0]>(token, 'GET', `/accounts/${edge.cf_account_id}/entitlements`).then(onPaid),
       ]);
-      const failed = [counters, size].flatMap((r) => (r.status === 'rejected' ? [status(r.reason)] : []));
+      // The plan is one of the readings: refused (403), the account is judged as Free; passing, the
+      // whole advice waits — a Paid account must not be told to move on a hiccup. Once it is known
+      // to be on Paid the counts are not needed, so their failure holds nothing up.
+      const onPaidPlan = paid.status === 'fulfilled' && paid.value;
+      const failed = [onPaidPlan ? null : counters, size, paid].flatMap((r) => (r?.status === 'rejected' ? [status(r.reason)] : []));
       revoked = failed.includes(401);
       if (revoked || failed.some((s) => s !== 403)) next = now + RETRY;
-      else advice = advise(counters.status === 'fulfilled' ? counters.value : null, size.status === 'fulfilled' ? size.value : null, first, today, now);
+      else advice = advise(counters.status === 'fulfilled' ? counters.value : null, size.status === 'fulfilled' ? size.value : null, first, today, now, onPaidPlan);
     }
     await env.DB.prepare('UPDATE edge_accounts SET advice = coalesce(?1, advice), advice_at = ?2, token_checked_at = CASE WHEN ?4 THEN 0 ELSE token_checked_at END WHERE id = ?3')
       .bind(advice ? JSON.stringify(advice) : null, next, edge.id, revoked ? 1 : 0)
@@ -179,7 +199,9 @@ const WEEK = 7 * D;
  */
 async function mailAdvice(env: Env, edge: EdgeAccount, advice: Advice, now: number): Promise<void> {
   const rank = (l: string | null) => (l ? LEVELS.indexOf(l as Level) : -1);
-  if (rank(advice.level) < rank('upgrade_soon')) {
+  // The letters speak of Free's limits and the move to Paid: an account on Paid gets none — its
+  // page still shows the size.
+  if (advice.paid || rank(advice.level) < rank('upgrade_soon')) {
     if (edge.advice_mailed_level) await env.DB.prepare('UPDATE edge_accounts SET advice_mailed_level = NULL WHERE id = ?').bind(edge.id).run();
     return;
   }
