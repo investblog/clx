@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-10-15
+updated: 2026-10-07
 ---
 
 # Backlog
@@ -21,9 +21,6 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       sign-in with the new password, the account deleted with nothing of it left in D1. Mail passed
       DKIM, SPF and DMARC.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
-- [ ] With clx's paid plans: the partner plan (ADR 0029) — half the price, switched on with a code.
-      Decide first where the code comes from and how clx learns each month that a partner's clients
-      are still active.
 - [ ] A way to ask for the `api` plan: /agents, /api and auth.md say clx switches it on "by
       request" but name no address or form (10.10). The channel will be a Telegram support bot, as
       on the owner's other projects; then link it from those pages and the keys page.
