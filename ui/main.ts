@@ -2,6 +2,7 @@
 // pages, the language (ADRs 0015, 0021).
 import { accountPage, accountsPage, connectPage, failure, keysPage } from './accounts';
 import { call, get, logout, refresh, SignedOut, type Me } from './api';
+import { pageBusy } from './busy';
 import { h, s } from './dom';
 import { appPath, asLocale, homePath, pageLocale, setLocale, t } from './i18n';
 import { signInPath } from './next';
@@ -126,6 +127,8 @@ async function route(): Promise<void> {
   // it, so it cannot act for a page no longer there. Before any await: a page that redraws itself
   // and then opens a dialog (the new key) keeps it.
   for (const d of document.querySelectorAll<HTMLDialogElement>('dialog[open]')) d.close();
+  // So is its work on the loading bar: the page drawn next says again whether it has any.
+  pageBusy(false);
   const path = location.hash.replace(/^#/u, '') || '/';
   // A public page speaks the address's language, so that is the language while it is drawn; a
   // signed-in page switches to the account's below, once /v1/me has answered.

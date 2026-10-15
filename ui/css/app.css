@@ -21,6 +21,12 @@ svg.icon{fill:currentColor;vertical-align:-0.125em}
 .brand__mark{width:24px;height:24px;color:var(--logo)}
 /* The site's header links to the app with "Sign in", or "Dashboard" in a browser with a session
    (site/layout.ts; public/theme.js marks the page .signed-in before the first paint). */
+/* The loading bar (ui/busy.ts; 301-ui's, on the header's lower edge): a shimmer while work runs. */
+.loading-bar{position:absolute;left:0;right:0;bottom:-1px;height:var(--indicator-thickness);background:var(--brand);opacity:0;pointer-events:none;transition:opacity 200ms ease;z-index:var(--z-indicator);overflow:hidden}
+.loading-bar[data-loading]{opacity:.4}
+.loading-bar[data-loading]::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,var(--brand) 50%,transparent 100%);animation:shimmer 1.5s ease-in-out infinite}
+/* A locked button's shimmer is white, for a filled button; on a ghost one it is the brand's. */
+.btn--ghost[data-turnstile-pending]:disabled::before{background:linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--brand) 22%,transparent) 50%,transparent 100%)}
 .signed-in .when-signed-out,:root:not(.signed-in) .when-signed-in{display:none}
 /* The app's sections (ui/main.ts): a row under the site's header, the sign-out button at its end; on a
    phone the sections scroll. Empty while signed out. */
@@ -50,7 +56,8 @@ fieldset.fieldset-group{padding:var(--space-3);border:1px solid var(--input-bord
 .host-sub{color:var(--text-muted)}
 .fieldset-group>legend{padding:0 var(--space-2);margin-left:calc(-1 * var(--space-2))}
 @keyframes drawer-in{from{transform:translateX(100%)}to{transform:none}}
-@media (prefers-reduced-motion:reduce){.drawer{animation:none}}
+/* Without motion the shimmers stand still: the bar stays a line, a locked button keeps its glow. */
+@media (prefers-reduced-motion:reduce){.drawer,.loading-bar[data-loading]::before,.btn[data-turnstile-pending]:disabled::before{animation:none}}
 body:has(dialog[open]){overflow:hidden}
 /* Table columns that give way on a narrow table (after 301-ui and catchall.in): data-priority on <th>
    and <td>; a column without it never hides. The widths are the table's (.table-scroll is the

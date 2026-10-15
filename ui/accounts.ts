@@ -1,6 +1,7 @@
 // Pages of stage 4e-1 (docs/spec.md §10): connected Cloudflare accounts, connecting one, an
 // account's status with its actions, and API keys. Every action is a /v1 call (§15).
 import { ApiError, call, SignedOut, type Account, type Key, type Me } from './api';
+import { busy, pageBusy } from './busy';
 import { askConfirm, openDrawer, showSecret } from './dialog';
 import { copyButton, h } from './dom';
 import { errorText, label, num, t, warningText, when } from './i18n';
@@ -58,13 +59,26 @@ function once(): { key: () => string; answered: (e?: unknown) => void } {
   };
 }
 
-/** A button that runs `work`, shows its error next to it and stays disabled while it runs. */
-export function action(text: string, cls: string, work: (key: string) => Promise<void>): HTMLElement {
+/** A button locked with the design system's shimmer (its Turnstile pattern): the work it started runs. */
+export function locked(button: HTMLButtonElement, on: boolean, shimmer = on): void {
+  button.disabled = on;
+  button.toggleAttribute('data-turnstile-pending', shimmer);
+}
+
+/**
+ * A button that runs `work`, shows its error next to it and stays locked, shimmering, with the
+ * loading bar on, while it runs. `ask` comes first (a confirmation: false does nothing); `held`
+ * locks it from the start — an operation on the account is running (`working`), or only waits.
+ */
+export function action(text: string, cls: string, work: (key: string) => Promise<void>, opts: { ask?: () => Promise<boolean>; held?: 'working' | 'waiting' } = {}): HTMLElement {
   const out = h('span', { class: 'action-status', role: 'status' });
   const button = h('button', { type: 'button', class: `btn ${cls}` }, text);
+  if (opts.held) locked(button, true, opts.held === 'working');
   const idem = once();
   button.addEventListener('click', async () => {
-    button.disabled = true;
+    if (opts.ask && !(await opts.ask())) return;
+    locked(button, true);
+    const done = busy();
     out.textContent = '';
     try {
       await work(idem.key());
@@ -73,7 +87,8 @@ export function action(text: string, cls: string, work: (key: string) => Promise
       idem.answered(e);
       out.textContent = failure(e);
     } finally {
-      button.disabled = false;
+      done();
+      locked(button, false);
     }
   });
   return h('span', { class: 'action' }, button, out);
@@ -81,9 +96,7 @@ export function action(text: string, cls: string, work: (key: string) => Promise
 
 /** A destructive action: asks in a dialog first; Cancel does nothing. */
 export function confirmAction(text: string, ask: { title: string; body: string; confirmLabel: string }, work: (key: string) => Promise<void>, cls = 'btn--danger'): HTMLElement {
-  return action(text, cls, async (key) => {
-    if (await askConfirm({ ...ask, danger: true })) await work(key);
-  });
+  return action(text, cls, work, { ask: () => askConfirm({ ...ask, danger: true }) });
 }
 
 // ---- the list ----
@@ -132,7 +145,8 @@ export function connectPage(go: (hash: string) => void): HTMLElement {
   const idem = once();
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    submit.disabled = true;
+    locked(submit, true);
+    const done = busy();
     status.dataset.type = 'loading';
     status.textContent = c.checking;
     try {
@@ -144,7 +158,9 @@ export function connectPage(go: (hash: string) => void): HTMLElement {
       idem.answered(err);
       status.dataset.type = 'error';
       status.textContent = failure(err);
-      submit.disabled = false;
+      locked(submit, false);
+    } finally {
+      done();
     }
   });
   const [open1, openLink, open2] = c.open;
@@ -209,6 +225,10 @@ function banner(a: Account): HTMLElement | null {
   return h('div', { class: `banner banner--${adv.level === 'over' ? 'danger' : 'warning'}`, role: 'alert' }, text);
 }
 
+/** An install whose worker is up and only waits for its self-check, which just confirms it
+ *  (docs/spec.md §4): the reader is told not to wait. Not an update: a missing self-check rolls it back. */
+const onlyConfirming = (a: Account) => a.operation?.state === 'running' && a.operation.kind === 'install' && a.operation.step === 'selfcheck' && a.state === 'ready';
+
 function operationCard(a: Account): HTMLElement | null {
   const op = a.operation;
   if (!op) return null;
@@ -216,9 +236,7 @@ function operationCard(a: Account): HTMLElement | null {
   const step = op.step.startsWith('failed') ? t.account.stopped : label.step(op.step);
   const head = h('strong', {}, `${label.operation(op.kind)}: `);
   const updated = h('p', { class: 'muted text-sm' }, t.account.updated(when(op.updated_at)));
-  // The worker is up once uploaded; its self-check only confirms that (docs/spec.md §4), so the
-  // reader is told not to wait for it. Not for an update: a missing self-check rolls it back.
-  if (running && op.kind === 'install' && op.step === 'selfcheck' && a.state === 'ready') {
+  if (onlyConfirming(a)) {
     const [w1, wLink, w2] = t.account.waitSelfcheck;
     return h('section', { class: 'card card--compact' }, head, t.account.uploaded, h('p', {}, w1, h('a', { href: '#/sites' }, wLink ?? ''), w2), updated);
   }
@@ -237,16 +255,29 @@ export async function accountPage(id: string, live: Live, redraw: () => void): P
   // While an operation runs the page asks again — every few seconds, every 30 s while it only waits
   // for the worker's self-check (up to 15 minutes) — and redraws only when the account changed, so
   // what the reader is typing (a new bootstrap token) is not wiped.
+  // While a disconnect runs it waits (a redraw then would lose its answer, the token to revoke); once
+  // disconnected the page stays for what that left to do, and stops asking.
   const seen = JSON.stringify(a);
-  const poll = (ms: number) =>
+  let paused = false;
+  let gone = false;
+  const poll = (ms: number): unknown =>
     setTimeout(async () => {
-      if (!live()) return;
+      if (!live() || gone) return;
+      if (paused) return poll(ms);
       const next = await call<{ account: Account }>('GET', `/v1/accounts/${id}`).catch(() => null);
-      if (!live()) return;
+      if (!live() || gone) return;
+      if (paused) return poll(ms);
       if (next && JSON.stringify(next.account) !== seen) redraw();
       else poll(ms);
     }, ms);
   if (a.operation?.state === 'running' || a.state === 'installing' || a.state === 'pending') poll(a.operation?.step === 'selfcheck' ? 30_000 : 3000);
+  // While an operation runs the server refuses a reinstall, and a renewal while an install or update
+  // runs: their buttons are locked, shimmering with the loading bar unless the install only waits to
+  // be confirmed. Disconnecting stays open — the way out of any of them.
+  const op = a.operation?.state === 'running' ? a.operation : null;
+  const held = !op ? undefined : onlyConfirming(a) ? 'waiting' : 'working';
+  const renewHeld = op && (op.kind === 'install' || op.kind === 'update') ? held : undefined;
+  if (live()) pageBusy(held === 'working');
 
   const c = t.account;
   const warnings = a.error?.warnings ?? [];
@@ -299,7 +330,7 @@ export async function accountPage(id: string, live: Live, redraw: () => void): P
         action(c.reinstall, 'btn--ghost', async (key) => {
           await call('POST', `/v1/accounts/${a.id}/install`, undefined, key);
           redraw();
-        }),
+        }, { held }),
       ),
       h(
         'div',
@@ -310,13 +341,16 @@ export async function accountPage(id: string, live: Live, redraw: () => void): P
           await call('POST', `/v1/accounts/${a.id}/token`, { bootstrap_token: renew.value.trim() }, key);
           renew.value = '';
           redraw();
-        }),
+        }, { held: renewHeld }),
       ),
       h(
         'div',
         { class: 'actions' },
         confirmAction(c.disconnect, { title: c.disconnect, body: c.disconnectAsk, confirmLabel: c.disconnectConfirm }, async (key) => {
-          const r = await call<{ revoke_token: string | null; left: string[] }>('DELETE', `/v1/accounts/${a.id}`, undefined, key);
+          paused = true;
+          const r = await call<{ revoke_token: string | null; left: string[] }>('DELETE', `/v1/accounts/${a.id}`, undefined, key).finally(() => (paused = false));
+          gone = true;
+          if (live()) pageBusy(false);
           disconnectOut.replaceChildren(
             notice(r.left.length ? c.disconnectedLeft(r.left) : c.disconnected, r.left.length ? 'error' : 'success'),
             ...(r.revoke_token ? [h('p', {}, r1, h('code', {}, r.revoke_token), r2, h('a', { href: accountTokens(a.cf_account_id), target: '_blank', rel: 'noopener' }, rLink ?? ''), r3)] : []),
