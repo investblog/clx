@@ -34,4 +34,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0026](./0026-sign-in-on-the-home-page.md) | Sign-in, sign-up and the reset request are a card on the home page | 12.10.2026 | §16 |
 | [0027](./0027-workers-subdomain-for-crons.md) | clx gives an account without one its workers.dev subdomain | 12.10.2026 | §4 |
 | [0028](./0028-taking-back-a-clx-edge-left-behind.md) | A clx-edge that clx made and lost track of is taken back | 13.10.2026 | §4 |
-| [0029](./0029-partner-price.md) | A partner pays half (generator or clx) while a client of theirs pays the generator since the month began | 15.10.2026 | §15 |
+| [0029](./0029-partner-price.md) | A partner plan — half the price (generator or clx) for a partner with a client on the generator's paid plan | 15.10.2026 | §15 |
