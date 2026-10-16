@@ -905,7 +905,8 @@ that adds a site and embeds its counter at build time.
     revokes. Rotation — a new key, the old one revoked when the client has switched.
 - **Idempotency.** Every `POST`, `PUT`, `PATCH` and `DELETE` takes an `Idempotency-Key` header
   (required with an API key, sent by the page too). The record is keyed by `(principal, method,
-  canonical path, Idempotency-Key)` — the principal is the key ID, or the user for a page session —
+  canonical path, Idempotency-Key)` — the principal is the key ID, the user for a page session, or
+  `t:<user>` for the Telegram bot (§17) —
   and stores a hash of the canonical body. A repeat with the same body returns the first answer and does nothing again; the same key
   with another body is `409 idempotency_conflict`; records live 24 hours.
   - **operations with Cloudflare side effects** (connect, install, route creation, rotation,
@@ -944,7 +945,7 @@ that adds a site and embeds its counter at build time.
 | Method and path | What it does |
 |---|---|
 | `GET /v1/me` | plan, limits, current use, whether the address is confirmed, the language |
-| `PATCH /v1/me` `{locale}` | the language of the app and the e-mails, set by the header's language switch (page session only, ADRs 0015, 0021) |
+| `PATCH /v1/me` `{locale}` | the language of the app and the e-mails, set by the header's language switch (page session only, ADRs 0015, 0021; the Telegram bot's `/lang` is the one other caller, §17) |
 | `DELETE /v1/me` `{password}` | delete the account (page session only, §9) |
 | `POST /v1/keys`, `GET /v1/keys`, `PATCH /v1/keys/{id}`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
@@ -1008,7 +1009,8 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   `/how-it-works`, `/open-source`, `/vs-301`,
   `/faq`, `/privacy`, `/terms`, `/abuse` in English (`/short-links` shows its example link's flows
   as the app draws them, ADR 0019), the same
-  under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash). The app at `/app` (and
+  under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash) — to move to `ru.clx.cx`, see
+  "The Russian host" below. The app at `/app` (and
   `/ru/app`, ADRs 0015, 0017) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
@@ -1032,7 +1034,8 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   and `#/reset` go to `#register` and `#recover`. The e-mails' links (`/app#/confirm?t=`,
   `/app#/reset?t=`) still open the app's pages, which lead back to the card. The forms are printed
   at build time from the app's dictionaries; `/site.js` switches and sends them.
-- **Sitemap.** `/sitemap.xml` (indexed pages × languages, hreflang alternates) names its view in a
+- **Sitemap.** `/sitemap.xml` (indexed pages × languages, hreflang alternates; once Russian moves
+  to its own host, each host lists only its own pages — see "The Russian host") names its view in a
   processing instruction, `<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>`: in a browser
   with XSLT it becomes a page in the site's style, one row per page with its languages; elsewhere it
   is plain XML. A `<url>` holds only `loc`, `xhtml:link`, `changefreq` and `priority`
@@ -1083,3 +1086,48 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   mark, the heading, the free plan in a line, the button as its only link). Pages link each other in their text (`seeAlso` in `site/layout.ts`): the tools to
   each other, to their comparison and to their group on `/faq`; a test requires every indexed page
   but the home page and the legal ones to be linked from another page's text.
+- **The Russian host** ([ADR 0030](./decisions/0030-telegram-bot-and-russian-host.md); planned).
+  From Russia sites behind Cloudflare often do not open without a VPN, so the Russian pages move to
+  `ru.clx.cx` on GitHub Pages: a public repository holding only the built pages (an orphan commit),
+  a `CNAME` record that is DNS only. Russian has no `/ru` prefix there; `clx.cx/ru/<page>` answers
+  301 to the same page on `ru.clx.cx`. The app (`clx.cx/ru/app`, it needs the API) and the Russian
+  home page `clx.cx/ru` stay: the home page carries the sign-in card that `/ru#login`, `#register`
+  and `#recover` open, and a fragment never reaches the server; it stays `noindex`, canonical on
+  `ru.clx.cx`. One URL function knows the host; canonical, hreflang and the switch derive from it;
+  each host has its own sitemap and robots.txt. On `ru.clx.cx` the first way in is the Telegram bot
+  (§17), then sign-up and sign-in on clx.cx; the CSP is a `<meta>`.
+
+## 17. The Telegram bot
+
+A full client of the API for those who cannot open clx.cx ([ADR 0030](./decisions/0030-telegram-bot-and-russian-host.md); planned).
+- **Route.** `POST /hook/telegram` in the main Worker — not a `/v1` method, so not in
+  `docs/openapi.yaml` or the MCP tools: the secret header compared in constant time (401
+  otherwise), 30 messages a minute per Telegram user; an `update_id` is recorded as handled once
+  its outcome is stored — before that a passing failure answers 500 and Telegram redelivers; every
+  final outcome answers 200. Private chats only; group updates are ignored. Without
+  `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_CODE_KEY` — 503 `telegram_not_configured`.
+- **Identity.** `/start` → an e-mail address → a six-digit code mailed to it (an HMAC with
+  `TELEGRAM_CODE_KEY`, 15 minutes, three tries counted atomically) → the account found or made (the
+  address confirmed) and linked. The same answer whether the account existed. One Telegram user ↔
+  one account, unique on both sides. An account made in the bot has no password; the reset request
+  sets one for the site. Sign-up keeps the site's switches and limits; Turnstile has no place in a
+  chat, so codes are limited per Telegram user (checked first), per address and by the site's daily
+  mail budget.
+- **The link.** `/unlink` in the bot; in the app the account shows the linked Telegram user and
+  unlinks it; a password reset ends the link along with the sessions. A link and an unlink are
+  mailed (best effort) with a single-use unlink token valid 7 days; it opens a page that asks to
+  confirm, and the unlink is a `POST`.
+- **Actions.** Through the `/v1` handlers in process, as a principal of kind `telegram` — not a page
+  session: a server-side list of the routes it may call, its own idempotency space (`t:<user>`),
+  `Idempotency-Key: tg-<update_id>`. Commands: `/sites`, `/links` (today and 7 days, a text
+  sparkline), `/site <host>` (adds a site, answers with the snippet), `/link <url>` (a short link),
+  `/connect` (a Cloudflare account: a code mailed to the account first — fresh, single-use, its own
+  three tries, bound to `connect`, the user, the link and the dialog — then a warning, the
+  bootstrap token, the message deleted; unless the connection finished and clx confirmed the
+  token deleted, the bot says it may still be valid and how to revoke it by hand), `/lang ru|en`,
+  `/unlink`, `/cancel`, `/help`. Not in the bot: the password, API keys, disconnecting an account,
+  deleting a site — page-only routes refuse the `telegram` principal as they refuse an API key.
+- **Notices.** What clx mails a user — the upgrade advice (§8), the token about to expire, the
+  worker gone silent — also goes to the linked Telegram user, in the account's language.
+- **Dialogs.** A step lives two hours, a code 15 minutes; a command ends the dialog it interrupts
+  (`/help` excepted).

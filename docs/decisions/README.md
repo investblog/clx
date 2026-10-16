@@ -35,3 +35,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0027](./0027-workers-subdomain-for-crons.md) | clx gives an account without one its workers.dev subdomain | 12.10.2026 | §4 |
 | [0028](./0028-taking-back-a-clx-edge-left-behind.md) | A clx-edge that clx made and lost track of is taken back | 13.10.2026 | §4 |
 | [0029](./0029-workers-paid-from-entitlements.md) | The upgrade advice reads Workers Paid from the account's entitlements | 15.10.2026 | §8 |
+| [0030](./0030-telegram-bot-and-russian-host.md) | A Telegram bot as a full client; the Russian pages on ru.clx.cx (GitHub Pages) | 16.10.2026 | §16, §17 |
