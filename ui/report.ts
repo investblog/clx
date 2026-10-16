@@ -73,9 +73,16 @@ const release = (c: Chart) => (c.resize?.disconnect(), charts.delete(c));
 const releaseCharts = () => charts.forEach(release);
 /** Bumped by every report as it starts; a report that is no longer the latest builds nothing. */
 let reports = 0;
-new MutationObserver(() => charts.forEach((c) => (c.el.isConnected ? c.paint() : release(c)))).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+/** The sparklines of the sites list: its pager keeps rows off the page until their page is shown, so
+ *  they are painted again whether on the page or not, and let go when the next list is built. */
+const sparks = new Set<Chart>();
+export const releaseSparklines = () => sparks.clear();
+new MutationObserver(() => {
+  charts.forEach((c) => (c.el.isConnected ? c.paint() : release(c)));
+  sparks.forEach((c) => c.paint());
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-function drawn(cls: string, draw: Draw, sized = false): HTMLElement {
+function drawn(cls: string, draw: Draw, sized = false, into = charts): HTMLElement {
   const el = h('div', { class: cls });
   let width = 0;
   const paint = () => Series.init(el, draw({ brand: BRAND, theme: theme(), classPrefix: 'cx', format: num }, width));
@@ -87,9 +94,12 @@ function drawn(cls: string, draw: Draw, sized = false): HTMLElement {
       })
     : null;
   resize?.observe(el);
-  charts.add({ el, paint, resize });
+  into.add({ el, paint, resize });
   return el;
 }
+
+/** A sparkline for a table cell: one value a point, its width the container's. */
+export const sparkline = (values: number[], title: string): HTMLElement => drawn('chart-svg', (o) => Spark.spark(values, { ...o, title }), false, sparks);
 
 /** The left margin, in % of the width, that keeps the value axis' labels off the first columns: the
  *  longest label is at most a character longer than the largest value, ~7.5 px a character at 13 px,
@@ -171,6 +181,7 @@ function flows(link: Link, rows: Flow[] | undefined, total: number): HTMLElement
 export async function reportPage(kind: 'sites' | 'links', id: string, period: string): Promise<HTMLElement> {
   const mine = ++reports;
   releaseCharts();
+  releaseSparklines();
   const R = t.report;
   const p = (PERIODS as string[]).includes(period) ? period : 'today';
   const [owner, { report: r }] = await Promise.all([

@@ -745,7 +745,9 @@ Pages:
 - **Sites:** add a site by its host, suggested from the account's zones as the reader types
   (`GET /v1/accounts/{id}/zones`; a host in none of them is flagged before sending) — clx.cx still
   finds the zone itself, as the API does ([ADR 0011](./decisions/0011-zone-picker.md)) — the
-  snippet, excluded paths, rotate, delete, route status.
+  snippet, excluded paths, rotate, delete, route status. The list shows each site's views of the
+  last 7 closed days as a sparkline that opens its report; a site whose counter has counted a view
+  opens at its report, one still to install at its snippet (`views_7d`, `counted` of `GET /v1/sites`).
 - **Links:** the link hosts (one per site at a click), a list of links with 7-day clicks, create and edit, rules, QR (SVG).
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
   "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques". Tiles, the series and

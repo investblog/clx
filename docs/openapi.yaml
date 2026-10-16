@@ -197,6 +197,8 @@ components:
         retiring: { type: array, items: { type: object, properties: { path: { type: string }, until: { type: string, format: date-time } } }, description: 'old paths still counted after a rotation' }
         error: { type: [object, 'null'] }
         created_at: { type: string, format: date-time }
+        views_7d: { type: array, items: { type: integer }, minItems: 7, maxItems: 7, description: 'views of each of the last 7 closed UTC days, oldest first (GET /v1/sites only, and only with the reports scope)' }
+        counted: { type: boolean, description: 'whether the counter has counted a view of this site yet (GET /v1/sites only, and only with the reports scope)' }
     Top:
       type: array
       maxItems: 10

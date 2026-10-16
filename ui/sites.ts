@@ -5,9 +5,10 @@ import { ApiError, call, type Account, type Me } from './api';
 import { action, badge, cell, confirmAction, notice, pageHead, table, type Live, type Tone } from './accounts';
 import { openDrawer } from './dialog';
 import { codeBlock, h, hostName } from './dom';
-import { errorText, t, when } from './i18n';
+import { errorText, num, t, when } from './i18n';
 import { paged } from './pager';
 import { dropdown, zoneHost } from './pick';
+import { releaseSparklines, sparkline } from './report';
 
 export interface Site {
   id: string;
@@ -21,6 +22,9 @@ export interface Site {
   retiring: { path: string; until: string }[];
   error: { code?: string; [k: string]: unknown } | null;
   created_at: string;
+  /** the list's, with the reports scope: views of the last 7 closed days and whether any was counted */
+  views_7d?: number[];
+  counted?: boolean;
 }
 
 const SITE_TONE: Record<string, Tone> = { active: 'success', route_conflict: 'danger' };
@@ -60,9 +64,16 @@ function newSiteDrawer(me: Me, accounts: Account[], go: (hash: string) => void):
   });
 }
 
+/** Bumped by every sites list as it starts; one that is no longer the latest builds nothing. */
+let lists = 0;
+
 export async function sitesPage(me: Me, go: (hash: string) => void): Promise<HTMLElement> {
   const c = t.sites;
+  const mine = ++lists;
+  releaseSparklines();
   const [{ sites }, { accounts }] = await Promise.all([call<{ sites: Site[] }>('GET', '/v1/sites'), call<{ accounts: Account[] }>('GET', '/v1/accounts')]);
+  // A newer list started while this one loaded: the router drops this one, so it draws no sparklines.
+  if (mine !== lists) return h('div');
   const name = (id: string) => accounts.find((a) => a.id === id)?.name ?? '';
   const ready = accounts.filter(usable);
   const add = h('button', { type: 'button', class: 'btn btn--primary' }, c.add);
@@ -74,16 +85,21 @@ export async function sitesPage(me: Me, go: (hash: string) => void): Promise<HTM
     pageHead(t.titles.sites, ready.length ? add : null),
     sites.length
       ? paged(
-          sites.map((s) =>
-            h(
+          sites.map((s) => {
+            // A site whose counter has counted opens at its report; one still to install, at its snippet.
+            const report = `#/sites/${s.id}/report?p=7d`;
+            const views = s.views_7d ?? [];
+            const total = views.reduce((n, v) => n + v, 0);
+            return h(
               'tr',
               {},
-              cell(h('a', { href: `#/sites/${s.id}` }, hostName(s.host))),
+              cell(h('a', { href: s.counted ? report : `#/sites/${s.id}` }, hostName(s.host))),
               cell(h('span', {}, siteBadge(s), s.config === 'pending' ? ' ' : '', s.config === 'pending' ? badge(c.configPending) : null)),
+              cell(s.counted ? h('a', { class: 'site-trend', href: report }, sparkline(views, c.trendTitle(num(total))), h('span', {}, num(total))) : h('span', { class: 'muted text-sm' }, c.notCounted)),
               cell(name(s.account_id), 'low'),
-            ),
-          ),
-          (rows) => table([[c.colHost], [c.colState], [c.colAccount, 'low']], rows),
+            );
+          }),
+          (rows) => table([[c.colHost], [c.colState], [c.colViews], [c.colAccount, 'low']], rows),
         )
       : h('div', { class: 'card empty-state' }, h('p', {}, empty)),
   );

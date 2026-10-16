@@ -177,6 +177,44 @@ describe('adding a site', () => {
   });
 });
 
+describe('the list of sites', () => {
+  it("carries each day's views of the last 7 closed days and whether the counter counted; not without the reports scope", async () => {
+    await env.DB.prepare('DELETE FROM daily').run();
+    const a = (await addSite('example.com')).body.site;
+    const b = (await addSite('blog.example.com')).body.site;
+    const target = (id: string) => env.DB.prepare('SELECT target FROM sites WHERE id = ?').bind(id).first<string>('target');
+    const ta = (await target(a.id))!;
+    const tb = (await target(b.id))!;
+    const day = Math.floor(Date.now() / 86_400_000);
+    const put = env.DB.prepare('INSERT INTO daily (account_id, target, day, as_of_hour, final, views, bots, visitors) VALUES (?1, ?2, ?3, ?3 * 24 + 23, 1, ?4, 0, 1)');
+    // Two days in the week, one before it, and today's running day, which the list leaves out.
+    await env.DB.batch([put.bind(accountId, ta, day - 7, 5), put.bind(accountId, ta, day - 1, 3), put.bind(accountId, ta, day - 30, 9), put.bind(accountId, ta, day, 4), put.bind(accountId, tb, day - 2, 0)]);
+    const sites = (await call('GET', '/v1/sites')).body.sites as { id: string; views_7d: number[]; counted: boolean }[];
+    const of = (id: string) => sites.find((s) => s.id === id)!;
+    expect(of(a.id)).toMatchObject({ views_7d: [5, 0, 0, 0, 0, 0, 3], counted: true });
+    // A day with no views is not "counted": the site still opens at its snippet.
+    expect(of(b.id)).toMatchObject({ views_7d: [0, 0, 0, 0, 0, 0, 0], counted: false });
+    // A second account of the user with a site under the same target: each keeps its own days.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO edge_accounts (id, user_id, cf_account_id, cf_account_name, state, created_at, updated_at, synced_revision) SELECT 'ea_other', user_id, 'other-cf-account', 'Other', state, created_at, updated_at, synced_revision FROM edge_accounts WHERE id = ?").bind(accountId),
+      env.DB.prepare("INSERT INTO sites (id, account_id, user_id, target, host, zone_id, seed, excluded, state, retiring, revision, created_at, updated_at) SELECT 'site_other', 'ea_other', user_id, target, 'other.example.org', zone_id, seed, excluded, state, retiring, revision, created_at, updated_at FROM sites WHERE id = ?").bind(b.id),
+      put.bind('ea_other', tb, day - 1, 8),
+    ]);
+    const both = (await call('GET', '/v1/sites')).body.sites as { id: string; views_7d: number[]; counted: boolean }[];
+    expect(both.find((s) => s.id === b.id)).toMatchObject({ views_7d: [0, 0, 0, 0, 0, 0, 0], counted: false });
+    expect(both.find((s) => s.id === 'site_other')).toMatchObject({ views_7d: [0, 0, 0, 0, 0, 0, 8], counted: true });
+    // Narrowed to one account: only its sites, with their own days.
+    const one = (await call('GET', '/v1/sites?account_id=ea_other')).body.sites as { id: string; views_7d: number[] }[];
+    expect(one.map((s) => [s.id, s.views_7d])).toEqual([['site_other', [0, 0, 0, 0, 0, 0, 8]]]);
+
+    await env.DB.prepare("UPDATE users SET plan = 'api' WHERE id = 1").run();
+    const issued = await call('POST', '/v1/keys', { body: { scopes: ['sites'] } });
+    const bare = (await call('GET', '/v1/sites', { auth: `Bearer ${issued.body.key}` })).body.sites;
+    expect(bare[0]).not.toHaveProperty('views_7d');
+    expect(bare[0]).not.toHaveProperty('counted');
+  });
+});
+
 describe('changing a site', () => {
   it('excluded paths reach the worker with the next revision', async () => {
     const { site } = (await addSite('example.com')).body;

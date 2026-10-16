@@ -395,7 +395,29 @@ v1.get(
         .bind(p.userId, accountId)
         .all<SiteRow & { cf_account_id: string; synced_revision: number }>()
     ).results;
-    return { status: 200, body: { sites: rows.filter((r) => mayTouch(p, r.cf_account_id)).map((r) => siteView(r, r.synced_revision)) } };
+    const mine = rows.filter((r) => mayTouch(p, r.cf_account_id));
+    // Totals are the `reports` scope's (§15), as on the links.
+    if (!p.scopes.has('reports')) return { status: 200, body: { sites: mine.map((r) => siteView(r, r.synced_revision)) } };
+    // Views of the last 7 closed days, from clx.cx's own totals (§10), and whether the counter has
+    // ever counted a view: the page then opens the site at its report rather than at its snippet.
+    // Only the accounts listed (the query's and the key's narrowing); a target is unique per account.
+    const day = Math.floor(Date.now() / 86_400_000);
+    const accounts = JSON.stringify([...new Set(mine.map((r) => r.account_id))]);
+    const key = (r: { account_id: string; target: string }) => `${r.account_id} ${r.target}`;
+    const [week, counted] = mine.length
+      ? await c.env.DB.batch([
+          c.env.DB.prepare("SELECT d.account_id, d.target, d.day, d.views FROM daily d JOIN sites s ON s.account_id = d.account_id AND s.target = d.target WHERE s.user_id = ?1 AND s.state != 'deleted' AND s.account_id IN (SELECT value FROM json_each(?2)) AND d.day >= ?3 AND d.day < ?4").bind(p.userId, accounts, day - 7, day),
+          c.env.DB.prepare("SELECT s.account_id, s.target FROM sites s WHERE s.user_id = ?1 AND s.state != 'deleted' AND s.account_id IN (SELECT value FROM json_each(?2)) AND EXISTS (SELECT 1 FROM daily d WHERE d.account_id = s.account_id AND d.target = s.target AND d.views > 0)").bind(p.userId, accounts),
+        ])
+      : [{ results: [] }, { results: [] }];
+    const views = new Map<string, number[]>();
+    for (const r of week!.results as { account_id: string; target: string; day: number; views: number }[]) {
+      const days = views.get(key(r)) ?? Array<number>(7).fill(0);
+      days[r.day - (day - 7)] = r.views;
+      views.set(key(r), days);
+    }
+    const seen = new Set((counted!.results as { account_id: string; target: string }[]).map(key));
+    return { status: 200, body: { sites: mine.map((r) => ({ ...siteView(r, r.synced_revision), views_7d: views.get(key(r)) ?? Array<number>(7).fill(0), counted: seen.has(key(r)) })) } };
   }),
 );
 
