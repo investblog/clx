@@ -28,11 +28,22 @@ const token = fs
   ?.trim();
 if (!token) throw new Error(`no TELEGRAM_BOT_TOKEN in ${SECRETS}/telegram.env`);
 
+/** One Bot API call; a connection that fails is tried again (api.telegram.org does not always
+ *  answer from here on the first try). Telegram's own refusal is not. */
 async function bot(method, payload = {}) {
-  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-  const body = await res.json();
-  if (!body.ok) throw new Error(`${method}: ${body.description ?? res.status}`);
-  return body.result;
+  for (let attempt = 1; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(20_000) });
+    } catch (e) {
+      if (attempt >= 6) throw new Error(`${method}: no connection to api.telegram.org (${e.cause?.code ?? e.message})`);
+      await new Promise((r) => setTimeout(r, attempt * 3000));
+      continue;
+    }
+    const body = await res.json();
+    if (!body.ok) throw new Error(`${method}: ${body.description ?? res.status}`);
+    return body.result;
+  }
 }
 
 function putSecret(name, value) {
