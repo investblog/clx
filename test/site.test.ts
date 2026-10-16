@@ -757,7 +757,7 @@ describe('the Russian host (ADR 0030)', () => {
     expect(fs.existsSync(`${main}/ru.html`)).toBe(false);
     expect(fs.existsSync(`${main}/ru/pricing.html`)).toBe(false);
     expect(fs.existsSync(`${main}/ru/app.html`)).toBe(true);
-    expect(read(main, '_redirects')).toMatch(/^\/ru https:\/\/ru\.clx\.cx\/ 301\n/u);
+    expect(read(main, '_redirects')).toMatch(/^\/ru https:\/\/ru\.clx\.cx\/ 301\n\/ru\/ https:\/\/ru\.clx\.cx\/ 301\n/u);
     expect(read(main, '_redirects')).toContain('/ru/pricing https://ru.clx.cx/pricing 301\n');
     expect(read(main, '_redirects')).not.toMatch(/^\/ru\/(app|signin) /mu);
     // Its header signs in on the card itself.

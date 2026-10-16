@@ -207,7 +207,8 @@ if (RU_ORIGIN) {
   write('CNAME', `${new URL(RU_ORIGIN).hostname}\n`, 'ru');
   // GitHub Pages runs Jekyll otherwise, which drops files and folders that start with "_" or ".".
   write('.nojekyll', '', 'ru');
-  write('_redirects', `/ru ${RU_ORIGIN}/ 301\n${ruPages.map((p) => `/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`).join('\n')}\n`);
+  // `/ru/` too: with no ru.html the assets no longer send it to /ru, and it would be a 404.
+  write('_redirects', `/ru ${RU_ORIGIN}/ 301\n/ru/ ${RU_ORIGIN}/ 301\n${ruPages.map((p) => `/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`).join('\n')}\n`);
 } else fs.rmSync(path.join(OUT, '_redirects'), { force: true });
 
 console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, the app in each, robots.txt, sitemap.xml${RU_ORIGIN ? `; Russian on ${RU_ORIGIN} (${RU_OUT}/)` : ''}`);

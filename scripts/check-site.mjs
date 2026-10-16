@@ -129,7 +129,7 @@ if (RU_ORIGIN) {
       if (!/^\/(ru\/app|app|ru#|#)/u.test(href) && !served(href)) problems.push(`${RU_OUT}/${f}: ${ORIGIN}${href} leads nowhere`);
   }
   const redirects = exists('_redirects') ? fs.readFileSync(path.join(OUT, '_redirects'), 'utf8') : '';
-  if (!redirects.split('\n').includes(`/ru ${RU_ORIGIN}/ 301`)) problems.push(`public/_redirects: /ru does not go to ${RU_ORIGIN}/`);
+  for (const from of ['/ru', '/ru/']) if (!redirects.split('\n').includes(`${from} ${RU_ORIGIN}/ 301`)) problems.push(`public/_redirects: ${from} does not go to ${RU_ORIGIN}/`);
   if (exists('ru.html')) problems.push('public/ru.html would be served at /ru in place of its 301');
   for (const p of SITE_PAGES.filter((x) => x.locales.includes('ru') && x.slug !== '/' && x.slug !== '/404'))
     if (!redirects.includes(`/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`)) problems.push(`public/_redirects: /ru${p.slug} does not go to ${RU_ORIGIN}${p.slug}`);
