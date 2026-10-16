@@ -51,10 +51,10 @@ async function install(c: C, p: Principal, edge: EdgeAccount): Promise<EdgeAccou
  * One endpoint: who calls, may they, and — for a mutation — the idempotency record around the
  * handler (§15). `replay` turns a stored answer back into a response.
  */
-function handle(opts: { scope?: string; session?: boolean; replay?: (stored: { status: number; answer: unknown }) => Answer }, run: (c: C, p: Principal, body: Record<string, unknown>, idemRef: string | null) => Promise<Answer>) {
+function handle(opts: { scope?: string; session?: boolean | 'or-bot'; replay?: (stored: { status: number; answer: unknown }) => Answer }, run: (c: C, p: Principal, body: Record<string, unknown>, idemRef: string | null) => Promise<Answer>) {
   return async (c: C) => {
     const p = await principalOf(c);
-    if (opts.session) requireSession(p);
+    if (opts.session) requireSession(p, opts.session === 'or-bot');
     if (opts.scope) requireScope(p, opts.scope);
     if (c.req.method === 'GET') return send(c, await run(c, p, {}, null));
     const body = await bodyOf(c);
@@ -95,14 +95,17 @@ v1.get(
     // snake_case, as `use` and the rest of /v1 (the table in src/limits.ts is camelCase).
     const l = LIMITS[planOf(p.plan)];
     const limits = { cf_accounts: l.cfAccounts, sites: l.sites, links: l.links, rules_per_link: l.rulesPerLink, api_keys: l.apiKeys };
-    return { status: 200, body: { user, plan: planOf(p.plan), limits, use, via: p.via } };
+    // The Telegram linked to the account (§17): the app shows it and unlinks it.
+    const tg = await c.env.DB.prepare('SELECT tg_user_id, username, linked_at FROM tg_identities WHERE user_id = ?').bind(p.userId).first<{ tg_user_id: number; username: string | null; linked_at: number }>();
+    const telegram = tg ? { id: tg.tg_user_id, username: tg.username, linked_at: new Date(tg.linked_at).toISOString() } : null;
+    return { status: 200, body: { user, plan: planOf(p.plan), limits, use, via: p.via, telegram } };
   }),
 );
 
-/** The user's language (ADR 0015): the app after sign-in and the e-mails speak it. Page session only. */
+/** The user's language (ADR 0015): the app after sign-in and the e-mails speak it. A page session, or the Telegram bot's /lang (§17). */
 v1.patch(
   '/me',
-  handle({ session: true }, async (c, p, body) => {
+  handle({ session: 'or-bot' }, async (c, p, body) => {
     if (!LOCALES.includes(body.locale as Locale)) fail(400, 'invalid_request', `locale must be one of ${LOCALES.join(', ')}.`, { field: 'locale' });
     await c.env.DB.prepare('UPDATE users SET locale = ? WHERE id = ?').bind(body.locale, p.userId).run();
     return { status: 200, body: { locale: body.locale } };
@@ -169,6 +172,21 @@ v1.delete(
       db.prepare('DELETE FROM users WHERE id = ?').bind(p.userId),
     ]);
     return { status: 200, body: { ok: true, left, revoke_tokens: revoke } };
+  }),
+);
+
+/** Unlink the Telegram of the account (§17) — from a page session: this is how a stolen Telegram is
+ *  taken back. */
+v1.delete(
+  '/me/telegram',
+  handle({ session: true }, async (c, p) => {
+    // Its dialog goes with it: a question asked before the unlink is not answered after.
+    const [, done] = await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM tg_states WHERE tg_user_id IN (SELECT tg_user_id FROM tg_identities WHERE user_id = ?)').bind(p.userId),
+      c.env.DB.prepare('DELETE FROM tg_identities WHERE user_id = ?').bind(p.userId),
+    ]);
+    if (!done!.meta.changes) fail(404, 'not_found', 'No Telegram is linked to this account.');
+    return { status: 200, body: { ok: true } };
   }),
 );
 
@@ -398,26 +416,35 @@ v1.get(
     const mine = rows.filter((r) => mayTouch(p, r.cf_account_id));
     // Totals are the `reports` scope's (§15), as on the links.
     if (!p.scopes.has('reports')) return { status: 200, body: { sites: mine.map((r) => siteView(r, r.synced_revision)) } };
-    // Views of the last 7 closed days, from clx.cx's own totals (§10), and whether the counter has
-    // ever counted a view: the page then opens the site at its report rather than at its snippet.
-    // Only the accounts listed (the query's and the key's narrowing); a target is unique per account.
+    // Views of the last 7 closed days and of today so far (its running snapshot), from clx.cx's own
+    // totals (§10), and whether the counter has ever counted a view: the page then opens the site at
+    // its report rather than at its snippet. Only the accounts listed (the query's and the key's
+    // narrowing); a target is unique per account.
     const day = Math.floor(Date.now() / 86_400_000);
     const accounts = JSON.stringify([...new Set(mine.map((r) => r.account_id))]);
     const key = (r: { account_id: string; target: string }) => `${r.account_id} ${r.target}`;
     const [week, counted] = mine.length
       ? await c.env.DB.batch([
-          c.env.DB.prepare("SELECT d.account_id, d.target, d.day, d.views FROM daily d JOIN sites s ON s.account_id = d.account_id AND s.target = d.target WHERE s.user_id = ?1 AND s.state != 'deleted' AND s.account_id IN (SELECT value FROM json_each(?2)) AND d.day >= ?3 AND d.day < ?4").bind(p.userId, accounts, day - 7, day),
+          c.env.DB.prepare("SELECT d.account_id, d.target, d.day, d.views FROM daily d JOIN sites s ON s.account_id = d.account_id AND s.target = d.target WHERE s.user_id = ?1 AND s.state != 'deleted' AND s.account_id IN (SELECT value FROM json_each(?2)) AND d.day >= ?3 AND d.day <= ?4").bind(p.userId, accounts, day - 7, day),
           c.env.DB.prepare("SELECT s.account_id, s.target FROM sites s WHERE s.user_id = ?1 AND s.state != 'deleted' AND s.account_id IN (SELECT value FROM json_each(?2)) AND EXISTS (SELECT 1 FROM daily d WHERE d.account_id = s.account_id AND d.target = s.target AND d.views > 0)").bind(p.userId, accounts),
         ])
       : [{ results: [] }, { results: [] }];
     const views = new Map<string, number[]>();
+    const today = new Map<string, number>();
     for (const r of week!.results as { account_id: string; target: string; day: number; views: number }[]) {
+      if (r.day === day) {
+        today.set(key(r), r.views);
+        continue;
+      }
       const days = views.get(key(r)) ?? Array<number>(7).fill(0);
       days[r.day - (day - 7)] = r.views;
       views.set(key(r), days);
     }
     const seen = new Set((counted!.results as { account_id: string; target: string }[]).map(key));
-    return { status: 200, body: { sites: mine.map((r) => ({ ...siteView(r, r.synced_revision), views_7d: views.get(key(r)) ?? Array<number>(7).fill(0), counted: seen.has(key(r)) })) } };
+    return {
+      status: 200,
+      body: { sites: mine.map((r) => ({ ...siteView(r, r.synced_revision), views_7d: views.get(key(r)) ?? Array<number>(7).fill(0), views_today: today.get(key(r)) ?? 0, counted: seen.has(key(r)) })) },
+    };
   }),
 );
 

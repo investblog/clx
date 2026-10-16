@@ -747,7 +747,7 @@ Pages:
   finds the zone itself, as the API does ([ADR 0011](./decisions/0011-zone-picker.md)) — the
   snippet, excluded paths, rotate, delete, route status. The list shows each site's views of the
   last 7 closed days as a sparkline that opens its report; a site whose counter has counted a view
-  opens at its report, one still to install at its snippet (`views_7d`, `counted` of `GET /v1/sites`).
+  opens at its report, one still to install at its snippet (`views_7d`, `views_today`, `counted` of `GET /v1/sites`).
 - **Links:** the link hosts (one per site at a click), a list of links with 7-day clicks, create and edit, rules, QR (SVG).
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
   "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques". Tiles, the series and
@@ -1099,12 +1099,21 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
 
 ## 17. The Telegram bot
 
-A full client of the API for those who cannot open clx.cx ([ADR 0030](./decisions/0030-telegram-bot-and-russian-host.md); planned).
+A full client of the API for those who cannot open clx.cx ([ADR 0030](./decisions/0030-telegram-bot-and-russian-host.md)):
+@clxcxbot, `src/tg/`; set up by `scripts/tg-setup.mjs` (the Worker's secrets, the webhook, the
+command menus in English and Russian).
 - **Route.** `POST /hook/telegram` in the main Worker — not a `/v1` method, so not in
   `docs/openapi.yaml` or the MCP tools: the secret header compared in constant time (401
-  otherwise), 30 messages a minute per Telegram user; an `update_id` is recorded as handled once
-  its outcome is stored — before that a passing failure answers 500 and Telegram redelivers; every
-  final outcome answers 200. Private chats only; group updates are ignored. Without
+  otherwise), 30 messages a minute per Telegram user (the rate limiting binding `TG_LIMIT`, no
+  write per message; past it, silence), checked before anything is written. An `update_id` is
+  claimed (`tg_updates`) before it is handled and marked done after: another delivery of a done
+  update is answered 200, of one still running 500, and a claim a minute old is taken over; a
+  passing failure (the database, a `5xx` of `/v1`) gives the claim back and answers 500, and
+  Telegram redelivers; every final outcome answers 200. A mailed code is spent in the same
+  transaction as what it allows. The webhook takes one connection (`max_connections: 1`), so a
+  user's updates come one at a time, in order.
+  A reply Telegram does not take is logged, not retried: a repeat would mail a second code.
+  Private chats only; anything else is answered 200 unrecorded. Without
   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_CODE_KEY` — 503 `telegram_not_configured`.
 - **Identity.** `/start` → an e-mail address → a six-digit code mailed to it (an HMAC with
   `TELEGRAM_CODE_KEY`, 15 minutes, three tries counted atomically) → the account found or made (the
@@ -1114,20 +1123,29 @@ A full client of the API for those who cannot open clx.cx ([ADR 0030](./decision
   chat, so codes are limited per Telegram user (checked first), per address and by the site's daily
   mail budget.
 - **The link.** `/unlink` in the bot; in the app the account shows the linked Telegram user and
-  unlinks it; a password reset ends the link along with the sessions. A link and an unlink are
-  mailed (best effort) with a single-use unlink token valid 7 days; it opens a page that asks to
-  confirm, and the unlink is a `POST`.
+  unlinks it (`DELETE /v1/me/telegram`, page session only); a password reset ends the link along
+  with the sessions. A link is mailed (best effort) with a single-use unlink token valid 7 days
+  (`#/telegram-unlink?t=`): it opens a page that asks to confirm, and the unlink is a `POST
+  /auth/telegram/unlink`. An unlink from the bot is mailed too.
 - **Actions.** Through the `/v1` handlers in process, as a principal of kind `telegram` — not a page
   session: a server-side list of the routes it may call, its own idempotency space (`t:<user>`),
-  `Idempotency-Key: tg-<update_id>`. Commands: `/sites`, `/links` (today and 7 days, a text
-  sparkline), `/site <host>` (adds a site, answers with the snippet), `/link <url>` (a short link),
+  `Idempotency-Key: tg-<update_id>`. Commands: `/sites` (each site's 7 closed days as a text
+  sparkline, their sum and today's views; 20 at most), `/links` (each link's clicks of 7 days),
+  `/accounts` (their states), `/site <host>` (adds a site — the account asked by number when more
+  than one has the worker — and answers with the snippet), `/link <url>` (a short link on the link
+  host, asked by number when several; with none, one is made on a site the user picks),
   `/connect` (a Cloudflare account: a code mailed to the account first — fresh, single-use, its own
   three tries, bound to `connect`, the user, the link and the dialog — then a warning, the
   bootstrap token, the message deleted; unless the connection finished and clx confirmed the
-  token deleted, the bot says it may still be valid and how to revoke it by hand), `/lang ru|en`,
+  token deleted, the bot says it may still be valid and how to revoke it by hand — any failure
+  there is final, since the bot keeps no token to try again with), `/lang ru|en`,
   `/unlink`, `/cancel`, `/help`. Not in the bot: the password, API keys, disconnecting an account,
   deleting a site — page-only routes refuse the `telegram` principal as they refuse an API key.
-- **Notices.** What clx mails a user — the upgrade advice (§8), the token about to expire, the
-  worker gone silent — also goes to the linked Telegram user, in the account's language.
+- **Notices.** What clx mails a user about an account — the upgrade advice (§8), the token about to
+  expire or no longer working, the worker gone silent — also goes to the linked Telegram user, in
+  the account's language (`sendNotice`). A notice tried again while its e-mail fails (the advice,
+  the renewal) sends the message with the e-mail, so it does not go every hour; one sent once (a
+  silent worker, a revoked token) sends it anyway. A failed message changes nothing. A message
+  that is not text (a photo, a sticker) is ignored: it answers no question and spends no try.
 - **Dialogs.** A step lives two hours, a code 15 minutes; a command ends the dialog it interrupts
   (`/help` excepted).

@@ -9,7 +9,7 @@ import { signInPath } from './next';
 import { linkPage, linksPage } from './links';
 import { mePage, unconfirmedBanner } from './me';
 import { reportPage } from './report';
-import { confirmPage, resetPage } from './signup';
+import { confirmPage, resetPage, tgUnlinkPage } from './signup';
 import { sitePage, sitesPage } from './sites';
 
 const shell = document.getElementById('shell')!;
@@ -95,7 +95,7 @@ async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, s
   if (path === '/connect') return [connectPage(go), t.titles.connect];
   if (account) return [await accountPage(account[1]!, live, redraw), t.titles.account];
   if (path === '/keys') return [await keysPage(me, redraw), t.titles.keys];
-  if (path === '/me') return [mePage(me, signedOut), t.titles.me];
+  if (path === '/me') return [mePage(me, signedOut, () => redraw()), t.titles.me];
   // #/sites/new and #/links/new were pages before the drawers: a bookmark of one opens the list.
   if (path === '/sites' || path === '/sites/new') return [await sitesPage(me, go), t.titles.sites];
   const report = path.match(/^\/(sites|links)\/([\w-]+)\/report(?:\?p=([\w]+))?$/u);
@@ -108,7 +108,7 @@ async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, s
   return [await accountsPage(me), t.titles.accounts];
 }
 
-/** The pages an e-mail's link opens signed out (§9): the confirmation and a new password. Sign-up and
+/** The pages an e-mail's link opens signed out (§9, §17): the confirmation, a new password, unlinking a Telegram. Sign-up and
  *  the reset request live on the home page (ADR 0026); old links to them here go there. */
 async function publicPage(path: string): Promise<[HTMLElement, string] | 'moved' | null> {
   const token = path.match(/[?&]t=([A-Za-z0-9_-]{43})/u)?.[1] ?? null;
@@ -118,6 +118,7 @@ async function publicPage(path: string): Promise<[HTMLElement, string] | 'moved'
   }
   if (path.startsWith('/confirm')) return [await confirmPage(token ?? ''), t.titles.confirm];
   if (path.startsWith('/reset?')) return [resetPage(token!), t.titles.newPassword];
+  if (path.startsWith('/telegram-unlink?') && token) return [tgUnlinkPage(token), t.titles.tgUnlink];
   return null;
 }
 

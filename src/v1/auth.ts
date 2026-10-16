@@ -2,7 +2,7 @@
 // or `Bearer clx_…` — an API key, looked up by its SHA-256. Checking a key writes at most once a
 // day per key (last_used_day), never per call.
 import type { Context } from 'hono';
-import { accessOf } from '../auth/jwt';
+import { accessOf, botOf } from '../auth/jwt';
 import { sha256 } from '../lib/crypto';
 import { SCOPES } from '../limits';
 import type { Env, Principal } from '../types';
@@ -27,7 +27,11 @@ export async function principalOf(c: Context<{ Bindings: Env }>): Promise<Princi
   if (!token) return fail(401, 'unauthorized', 'An access token or an API key is required.');
   if (!token.startsWith(KEY_PREFIX)) {
     const access = await accessOf(c.env.JWT_SECRET, token, Date.now());
-    if (!access) return fail(401, 'unauthorized', 'The access token is invalid or expired.');
+    if (!access) {
+      const bot = await botOf(c.env.JWT_SECRET, token, Date.now());
+      if (bot) return botPrincipal(c, bot);
+      return fail(401, 'unauthorized', 'The access token is invalid or expired.');
+    }
     const userId = access.sub;
     const user = await c.env.DB.prepare('SELECT plan, session_version FROM users WHERE id = ?').bind(userId).first<{ plan: string; session_version: number }>();
     // A token of an older session version — a password reset ended it — is no longer good.
@@ -53,12 +57,38 @@ export async function principalOf(c: Context<{ Bindings: Env }>): Promise<Princi
   return { id: `k:${key.id}`, userId: key.user_id, plan: key.plan, via: 'key', scopes: new Set(key.scopes.split(',')), allowAccounts: list(key.allow_accounts) };
 }
 
+/**
+ * The routes the Telegram bot may call (§17, ADR 0030): reading, adding sites and links, connecting
+ * an account, the language. Nothing that deletes, disconnects, issues keys or touches the password —
+ * whoever holds the person's Telegram must not take the account or its data with it.
+ */
+const BOT_ROUTES: [string, RegExp][] = [
+  ['GET', /^\/v1\/(me|accounts|sites|links|link-hosts)$/u],
+  ['GET', /^\/v1\/(accounts|sites|links|link-hosts)\/[\w-]+$/u],
+  ['GET', /^\/v1\/(sites|links)\/[\w-]+\/report$/u],
+  ['PATCH', /^\/v1\/me$/u],
+  ['POST', /^\/v1\/(accounts|sites|links|link-hosts)$/u],
+];
+
+/** The bot's call: the user's session version and the Telegram link it rests on must both still
+ *  hold — a password reset or an unlink ends it at once. */
+async function botPrincipal(c: Context<{ Bindings: Env }>, bot: { sub: number; tg: number; lk: number; ver: number }): Promise<Principal> {
+  const route = BOT_ROUTES.some(([m, re]) => m === c.req.method && re.test(c.req.path));
+  if (!route) return fail(403, 'session_required', 'This call works from a signed-in page only.');
+  const user = await c.env.DB.prepare('SELECT u.plan, u.session_version FROM users u JOIN tg_identities t ON t.user_id = u.id WHERE u.id = ?1 AND t.tg_user_id = ?2 AND t.linked_at = ?3')
+    .bind(bot.sub, bot.tg, bot.lk)
+    .first<{ plan: string; session_version: number }>();
+  if (!user || user.session_version !== bot.ver) return fail(401, 'unauthorized', 'The access token is invalid or expired.');
+  return { id: `t:${bot.sub}`, userId: bot.sub, plan: user.plan, via: 'telegram', scopes: new Set(SCOPES), allowAccounts: null };
+}
+
 export function requireScope(p: Principal, scope: string): void {
   if (!p.scopes.has(scope)) fail(403, 'scope_required', `This call needs the "${scope}" scope.`, { scope });
 }
 
-export function requireSession(p: Principal): void {
-  if (p.via !== 'session') fail(403, 'session_required', 'This call works from a signed-in page only, not with an API key.');
+/** A page session; `bot` also lets the Telegram bot through (only the language, §15). */
+export function requireSession(p: Principal, bot = false): void {
+  if (p.via !== 'session' && !(bot && p.via === 'telegram')) fail(403, 'session_required', 'This call works from a signed-in page only, not with an API key.');
 }
 
 /** A key outside its allow list sees the account as missing (§15: 404, never 403). */

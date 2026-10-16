@@ -2,6 +2,7 @@
 // no-reply@<this host>. At most one e-mail per address per 10 minutes (sign-up, reset) and 5 per UTC day, counted in
 // D1 — global, unlike the rate limiting binding; over it nothing is sent and the caller answers the
 // same, so the limit tells nothing about the address either.
+import { notifyTelegram } from './tg/notify';
 import type { Env } from './types';
 
 /** The binding's shape (Email Sending, beta 2026): `env.EMAIL.send({to, from, subject, text, html})`. */
@@ -51,5 +52,12 @@ export async function deliverMail(env: Env, to: string, subject: string, text: s
 export const sendMail = async (env: Env, to: string, subject: string, text: string, now = Date.now()) => (await reserveMail(env, to, now)) && deliverMail(env, to, subject, text);
 
 /** A notice about the user's own account (the advice, a silent worker): clx sends it, nobody can
- *  make it send one, so only the daily cap applies — two notices of one hourly run both go. */
-export const sendNotice = async (env: Env, to: string, subject: string, text: string, now = Date.now()) => (await reserveMail(env, to, now, 0)) && deliverMail(env, to, subject, text);
+ *  make it send one, so only the daily cap applies — two notices of one hourly run both go. The
+ *  Telegram linked to the account gets it too (§17). A notice the caller tries again while its
+ *  e-mail fails (the advice, the renewal) sends the message with the e-mail, so it does not go
+ *  every hour meanwhile; a notice sent `once` (a silent worker, a revoked token) sends it anyway. */
+export async function sendNotice(env: Env, user: { id: number; email: string }, subject: string, text: string, now = Date.now(), once = false): Promise<boolean> {
+  const sent = (await reserveMail(env, user.email, now, 0)) && (await deliverMail(env, user.email, subject, text));
+  if (sent || once) await notifyTelegram(env, user.id, subject, text).catch((e: unknown) => console.error('telegram notice', e instanceof Error ? e.message : e));
+  return sent;
+}

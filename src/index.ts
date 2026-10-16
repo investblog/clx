@@ -13,6 +13,7 @@ import { appUrl, MAIL, recipient } from './mail-text';
 import { MARKDOWN_PAGES, servePage } from './markdown';
 import { mcp } from './mcp/index';
 import type { Env } from './types';
+import { telegram, UPDATES_TTL } from './tg/webhook';
 import { IDEM_TTL } from './v1/idempotency';
 import { v1 } from './v1/index';
 
@@ -32,7 +33,7 @@ async function mailRenew(env: Env, a: { id: string; user_id: number; cf_account_
   const user = await recipient(env, a.user_id);
   if (!user) return;
   const mail = MAIL[user.locale].renew(a.cf_account_name ?? a.cf_account_id, a.token_expires_at, appUrl(env, user.locale, `#/accounts/${a.id}`));
-  const sent = await sendNotice(env, user.email, mail.subject, mail.text, now);
+  const sent = await sendNotice(env, user, mail.subject, mail.text, now);
   // Marked only once it went: a send that failed is tried again the next hour.
   if (sent) await env.DB.prepare('UPDATE edge_accounts SET renew_mailed_at = ? WHERE id = ?').bind(now, a.id).run();
 }
@@ -42,7 +43,7 @@ async function mailSilence(env: Env, a: { id: string; user_id: number; cf_accoun
   const user = await recipient(env, a.user_id);
   if (!user) return;
   const mail = MAIL[user.locale].silence(a.cf_account_name ?? a.cf_account_id, appUrl(env, user.locale, `#/accounts/${a.id}`));
-  await sendNotice(env, user.email, mail.subject, mail.text, now);
+  await sendNotice(env, user, mail.subject, mail.text, now, true);
 }
 
 export const app = new Hono<{ Bindings: Env }>();
@@ -65,6 +66,8 @@ app.route('/auth', signup);
 app.route('/v1', v1);
 app.route('/admin', admin);
 app.route('/hook', hook);
+// The Telegram bot (§17): its actions call this same app, so /v1 runs as for any request.
+app.route('/hook/telegram', telegram((request, env, ctx) => app.fetch(request, env, ctx)));
 // The MCP server (§15, ADR 0023): its tools call this same app, so /v1 runs as for any request.
 app.route('/mcp', mcp((request, env, ctx) => app.fetch(request, env, ctx)));
 // The pages with a markdown copy: markdown to `Accept: text/markdown`, else the HTML file (§16).
@@ -89,8 +92,11 @@ export default {
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         const hour = Math.floor(now / 3_600_000);
         const day = Math.floor(now / 86_400_000);
-        const [, , , , , , , silent] = await env.DB.batch([
+        const [, , , , , , , , , silent] = await env.DB.batch([
           env.DB.prepare('DELETE FROM idempotency WHERE created_at < ?').bind(now - IDEM_TTL),
+          // The bot's handled updates and dialogs that ran out (§17).
+          env.DB.prepare('DELETE FROM tg_updates WHERE at < ?').bind(now - UPDATES_TTL),
+          env.DB.prepare('DELETE FROM tg_states WHERE expires_at < ?').bind(now),
           env.DB.prepare('DELETE FROM cf_calls WHERE at < ?').bind(now - CF_CALLS_TTL),
           // Totals (§7): hours for the "today" chart, 2 days; days, 400; a disconnected account's, 30 days.
           env.DB.prepare('DELETE FROM hourly WHERE hour < ?').bind(hour - HOURLY_HOURS),

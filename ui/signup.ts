@@ -1,4 +1,4 @@
-// The pages an e-mail's link opens (docs/spec.md §9): the address's confirmation and a new password.
+// The pages an e-mail's link opens (docs/spec.md §9, §17): the address's confirmation, a new password, unlinking a Telegram.
 // Sign-in, sign-up and the reset request are the home page's card (site/auth.ts, ADR 0026). They call
 // /auth, not /v1, and speak the address's language (ADR 0015).
 import { h } from './dom';
@@ -25,6 +25,26 @@ const home = (tab: 'login' | 'recover', text: string) => h('p', { class: 'muted 
 export async function confirmPage(token: string): Promise<HTMLElement> {
   const r = await post('/auth/confirm', { token });
   return card(t.titles.confirm, h('p', {}, r.ok ? t.auth.confirmed : errorOf(r.error)), h('p', {}, h('a', { class: 'btn btn--primary', href: r.ok ? '#/' : `${homePath(pageLocale)}#login` }, r.ok ? t.auth.toApp : t.auth.toHome)));
+}
+
+/** Unlinking a Telegram from the "a Telegram is linked" e-mail (§17): the link only opens this page,
+ *  the unlink is the button's POST — a mail scanner opening the link changes nothing. */
+export function tgUnlinkPage(token: string): HTMLElement {
+  const status = h('div', { class: 'auth-status', 'data-type': 'idle', role: 'status', 'aria-live': 'polite' });
+  const button = h('button', { type: 'button', class: 'btn btn--danger' }, t.auth.tgUnlinkDo);
+  const body = h('div', { class: 'stack stack--sm' }, h('p', {}, t.auth.tgUnlinkBody), status, h('div', { class: 'auth-actions' }, button));
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    const r = await post('/auth/telegram/unlink', { token });
+    button.disabled = false;
+    if (!r.ok) {
+      status.dataset.type = 'error';
+      status.textContent = errorOf(r.error);
+      return;
+    }
+    body.replaceWith(h('p', {}, t.auth.tgUnlinked));
+  });
+  return card(t.titles.tgUnlink, body, home('recover', t.auth.forgot));
 }
 
 /** A new password, from the reset e-mail's link. */

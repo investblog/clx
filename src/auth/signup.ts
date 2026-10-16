@@ -11,8 +11,9 @@ import type { Env } from '../types';
 import { hashPassword } from './password';
 import { userOf } from './routes';
 
-const CONFIRM_TTL = 24 * 3_600_000;
-const RESET_TTL = 3_600_000;
+/** E-mail tokens: confirm the address, reset the password, unlink a Telegram (§17). */
+type TokenKind = 'confirm' | 'reset' | 'tg_unlink';
+const TOKEN_TTL: Record<TokenKind, number> = { confirm: 24 * 3_600_000, reset: 3_600_000, tg_unlink: 7 * 86_400_000 };
 const MAX_BODY = 4096;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/u;
 export const PASSWORD_MIN = 10;
@@ -61,13 +62,13 @@ async function gate(c: C): Promise<Response | Record<string, unknown>> {
 
 /** A new token next to any earlier one (expired tokens of anyone go on the way); `settle` keeps
  *  only it once its e-mail went, or drops it when the e-mail did not. */
-async function issueToken(db: D1Database, userId: number, kind: 'confirm' | 'reset', now: number): Promise<{ token: string; settle: (sent: boolean) => Promise<unknown> }> {
+export async function issueToken(db: D1Database, userId: number, kind: TokenKind, now: number): Promise<{ token: string; settle: (sent: boolean) => Promise<unknown> }> {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const token = btoa(String.fromCharCode(...bytes)).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
   const hash = await sha256(token);
   await db.batch([
     db.prepare('DELETE FROM email_tokens WHERE expires_at < ?').bind(now),
-    db.prepare('INSERT INTO email_tokens (token_hash, user_id, kind, expires_at) VALUES (?, ?, ?, ?)').bind(hash, userId, kind, now + (kind === 'confirm' ? CONFIRM_TTL : RESET_TTL)),
+    db.prepare('INSERT INTO email_tokens (token_hash, user_id, kind, expires_at) VALUES (?, ?, ?, ?)').bind(hash, userId, kind, now + TOKEN_TTL[kind]),
   ]);
   return {
     token,
@@ -79,7 +80,7 @@ async function issueToken(db: D1Database, userId: number, kind: 'confirm' | 'res
 }
 
 /** Consume a token of `kind`: its user, or null when it is unknown, used or expired. */
-async function consume(db: D1Database, token: unknown, kind: 'confirm' | 'reset', now: number): Promise<number | null> {
+export async function consume(db: D1Database, token: unknown, kind: TokenKind, now: number): Promise<number | null> {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/u.test(token)) return null;
   const row = await db.prepare('DELETE FROM email_tokens WHERE token_hash = ?1 AND kind = ?2 AND expires_at >= ?3 RETURNING user_id').bind(await sha256(token), kind, now).first<{ user_id: number }>();
   return row?.user_id ?? null;
@@ -180,15 +181,45 @@ signup.post('/reset/confirm', async (c) => {
   const body = await bodyOf(c);
   const password = passwordOf(body?.password);
   if (!password) return c.json({ error: 'weak_password', min: PASSWORD_MIN }, 400);
+  const token = body?.token;
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/u.test(token)) return c.json({ error: 'invalid_token' }, 400);
   const now = Date.now();
-  const userId = await consume(c.env.DB, body?.token, 'reset', now);
-  if (!userId) return c.json({ error: 'invalid_token' }, 400);
-  // A new session version ends every session and access token issued before; the address is proven too.
+  const db = c.env.DB;
   const hash = await hashPassword(password);
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE users SET password_hash = ?1, session_version = session_version + 1, email_confirmed_at = coalesce(email_confirmed_at, ?2) WHERE id = ?3').bind(hash, now, userId),
-    // Every other reset link — an older one, or one whose e-mail is still on its way — dies with this reset.
-    c.env.DB.prepare("DELETE FROM email_tokens WHERE user_id = ? AND kind = 'reset'").bind(userId),
+  // One transaction, the link's own token spent last: a failure leaves the password, the sessions,
+  // the Telegram link and the link itself as they were, so the link still works.
+  const owner = "(SELECT user_id FROM email_tokens WHERE token_hash = ?1 AND kind = 'reset' AND expires_at >= ?2)";
+  const tokenHash = await sha256(token);
+  const [reset] = await db.batch([
+    // A new session version ends every session and access token issued before; the address is proven too.
+    db.prepare(`UPDATE users SET password_hash = ?3, session_version = session_version + 1, email_confirmed_at = coalesce(email_confirmed_at, ?2) WHERE id = ${owner}`).bind(tokenHash, now, hash),
+    // A Telegram linked to the account goes too (§17): a reset is how a person takes the account back.
+    db.prepare(`DELETE FROM tg_states WHERE tg_user_id IN (SELECT tg_user_id FROM tg_identities WHERE user_id = ${owner})`).bind(tokenHash, now),
+    db.prepare(`DELETE FROM tg_identities WHERE user_id = ${owner}`).bind(tokenHash, now),
+    // Every reset link of the user — this one, an older one, or one whose e-mail is still on its way — dies with this reset.
+    db.prepare(`DELETE FROM email_tokens WHERE kind = 'reset' AND user_id = ${owner}`).bind(tokenHash, now),
   ]);
+  if (!reset!.meta.changes) return c.json({ error: 'invalid_token' }, 400);
+  return c.json({ ok: true });
+});
+
+/** The link of the "a Telegram is linked" e-mail (§17): opened, the page asks to confirm and posts
+ *  here, so a mail scanner opening the link changes nothing. Used once. */
+signup.post('/telegram/unlink', async (c) => {
+  const body = await bodyOf(c);
+  const token = body?.token;
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/u.test(token)) return c.json({ error: 'invalid_token' }, 400);
+  const db = c.env.DB;
+  const hash = await sha256(token);
+  // One transaction: the unlink, its dialog (a question asked before is not answered after), and
+  // the token spent last — a failure leaves the link and the token both, so the link still works.
+  const owner = "(SELECT user_id FROM email_tokens WHERE token_hash = ?1 AND kind = 'tg_unlink' AND expires_at >= ?2)";
+  const now = Date.now();
+  const [, , spent] = await db.batch([
+    db.prepare(`DELETE FROM tg_states WHERE tg_user_id IN (SELECT tg_user_id FROM tg_identities WHERE user_id = ${owner})`).bind(hash, now),
+    db.prepare(`DELETE FROM tg_identities WHERE user_id = ${owner}`).bind(hash, now),
+    db.prepare("DELETE FROM email_tokens WHERE token_hash = ?1 AND kind = 'tg_unlink' AND expires_at >= ?2").bind(hash, now),
+  ]);
+  if (!spent!.meta.changes) return c.json({ error: 'invalid_token' }, 400);
   return c.json({ ok: true });
 });

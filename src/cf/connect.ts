@@ -544,5 +544,5 @@ async function mailRevoked(env: Env, edge: EdgeAccount, now: number): Promise<vo
   const user = await recipient(env, edge.user_id);
   if (!user) return;
   const mail = MAIL[user.locale].revoked(edge.cf_account_name ?? edge.cf_account_id, appUrl(env, user.locale, `#/accounts/${edge.id}`));
-  await sendNotice(env, user.email, mail.subject, mail.text, now);
+  await sendNotice(env, user, mail.subject, mail.text, now, true);
 }

@@ -198,6 +198,7 @@ components:
         error: { type: [object, 'null'] }
         created_at: { type: string, format: date-time }
         views_7d: { type: array, items: { type: integer }, minItems: 7, maxItems: 7, description: 'views of each of the last 7 closed UTC days, oldest first (GET /v1/sites only, and only with the reports scope)' }
+        views_today: { type: integer, description: "today's views so far, as of the last hour the worker sent (GET /v1/sites only, and only with the reports scope)" }
         counted: { type: boolean, description: 'whether the counter has counted a view of this site yet (GET /v1/sites only, and only with the reports scope)' }
     Top:
       type: array
@@ -268,10 +269,11 @@ paths:
                   plan: { type: string, enum: [free, api] }
                   limits: { type: object, description: "the plan's limits", properties: { cf_accounts: { type: integer }, sites: { type: integer }, links: { type: integer }, rules_per_link: { type: integer }, api_keys: { type: integer } } }
                   use: { type: object, description: "what is in use now", properties: { cf_accounts: { type: integer }, api_keys: { type: integer } } }
-                  via: { type: string, enum: [session, key] }
+                  via: { type: string, enum: [session, key, telegram] }
+                  telegram: { type: [object, 'null'], description: 'the Telegram user linked to the account (docs/spec.md §17)', properties: { id: { type: integer, description: 'the Telegram user id' }, username: { type: [string, 'null'] }, linked_at: { type: string, format: date-time } } }
         default: { $ref: '#/components/responses/Error' }
     patch:
-      summary: Set the user's language (page session only)
+      summary: Set the user's language (page session only; also the Telegram bot's /lang)
       description: |
         The app after sign-in and every e-mail of clx speak it; sign-up sets it to the language of
         the page signed up from.
@@ -306,6 +308,16 @@ paths:
                   ok: { type: boolean }
                   left: { type: array, items: { type: string } }
                   revoke_tokens: { type: array, items: { type: string } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/me/telegram:
+    delete:
+      summary: Unlink the Telegram linked to the account (page session only)
+      description: |
+        The Telegram bot (docs/spec.md §17) acts for the account it is linked to; this ends the link.
+        A password reset ends it too.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Unlinked, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean } } } } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/keys:
     get:

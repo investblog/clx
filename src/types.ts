@@ -19,17 +19,25 @@ export interface Env {
   TURNSTILE_SECRET?: string;
   /** Sign-up and reset requests per IP (§9): a first line against floods, per location. */
   SIGNUP_LIMIT: RateLimit;
+  /** Messages per Telegram user (§17): 30 a minute, per location — no write per message. */
+  TG_LIMIT: RateLimit;
+  /** The Telegram bot (§17): its token, the webhook's secret header and the key of the mailed
+   *  codes' HMAC — Worker secrets set by scripts/tg-setup.mjs; without them the bot is off. */
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
+  TELEGRAM_CODE_KEY?: string;
   /** Workers Static Assets (public/): the pages with a markdown copy are served through the Worker (§16). */
   ASSETS: Fetcher;
 }
 
-/** Who makes a /v1 call: a page session (all scopes) or an API key. */
+/** Who makes a /v1 call: a page session (all scopes), an API key, or the Telegram bot for a linked
+ *  user (§17: the routes of `BOT_ROUTES` only). */
 export interface Principal {
-  /** `u:<user id>` or `k:<key id>` — the idempotency and log identity. */
+  /** `u:<user id>`, `k:<key id>` or `t:<user id>` — the idempotency and log identity. */
   id: string;
   userId: number;
   plan: string;
-  via: 'session' | 'key';
+  via: 'session' | 'key' | 'telegram';
   scopes: Set<string>;
   /** Cloudflare account ids the key may touch, or null for any. */
   allowAccounts: Set<string> | null;

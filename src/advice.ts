@@ -219,6 +219,6 @@ async function mailAdvice(env: Env, edge: EdgeAccount, advice: Advice, now: numb
     suggest: Boolean(advice.suggest),
     link: appUrl(env, user.locale, `#/accounts/${edge.id}`),
   });
-  if (await sendNotice(env, user.email, mail.subject, mail.text, now))
+  if (await sendNotice(env, user, mail.subject, mail.text, now))
     await env.DB.prepare('UPDATE edge_accounts SET advice_mailed_level = ?, advice_mailed_at = ? WHERE id = ?').bind(advice.level, now, edge.id).run();
 }

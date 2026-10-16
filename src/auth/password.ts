@@ -17,6 +17,12 @@ export async function hashPassword(password: string): Promise<string> {
   return `${b64(salt)}:${b64(await derive(password, salt))}`;
 }
 
+/** A hash no password matches — random salt and random "hash" — for an account made without a
+ *  password (the Telegram bot, §17). Well-formed, so a sign-in against it takes as long as any. */
+export function unusableHash(): string {
+  return `${b64(crypto.getRandomValues(new Uint8Array(16)))}:${b64(crypto.getRandomValues(new Uint8Array(KEY_BYTES)))}`;
+}
+
 /** Same bytes, compared without an early exit. */
 export function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;

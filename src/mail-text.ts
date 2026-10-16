@@ -37,6 +37,11 @@ export interface MailText {
   silence(name: string, link: string): Mail;
   revoked(name: string, link: string): Mail;
   advice(f: AdviceFacts): Mail;
+  /** The Telegram bot's code (§17): to link this Telegram, or to connect a Cloudflare account. */
+  tgCode(code: string, purpose: 'link' | 'connect'): Mail;
+  /** A Telegram user linked to the account, with the link that unlinks it. */
+  tgLinked(who: string, unlink: string): Mail;
+  tgUnlinked(who: string): Mail;
 }
 
 const date = (locale: Locale, at: number) => new Date(at).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-GB', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' });
@@ -83,6 +88,21 @@ const en: MailText = {
           text: `Hello,\n\nThe Cloudflare account "${f.name}" will soon hit a limit of the free Workers plan — ${what}.\n${help}\nDetails: ${f.link}\n`,
         };
   },
+  tgCode: (code, purpose) => ({
+    subject: `clx: code ${code}`,
+    text:
+      purpose === 'link'
+        ? `Hello,\n\nThe code to sign in to clx in Telegram: ${code}\nIt works for 15 minutes. Send it to the bot.\n\nIf you did not ask for it, just delete this e-mail: without the code nothing happens.\n`
+        : `Hello,\n\nThe code to connect a Cloudflare account to clx from Telegram: ${code}\nIt works for 15 minutes. Send it to the bot.\n\nIf you did not ask for it, someone has your Telegram: unlink it in the app (Account) and change the password.\n`,
+  }),
+  tgLinked: (who, unlink) => ({
+    subject: 'clx: a Telegram is linked to your account',
+    text: `Hello,\n\nThe Telegram user ${who} is now linked to your clx account and can see its totals and add sites and links.\n\nIf it was not you, unlink it: ${unlink}\n(the link works 7 days; the app's Account page unlinks at any time).\n`,
+  }),
+  tgUnlinked: (who) => ({
+    subject: 'clx: a Telegram is unlinked from your account',
+    text: `Hello,\n\nThe Telegram user ${who} is no longer linked to your clx account.\n`,
+  }),
 };
 
 const ru: MailText = {
@@ -123,9 +143,24 @@ const ru: MailText = {
           text: `Здравствуйте!\n\nАккаунт Cloudflare «${f.name}» скоро упрётся в лимит бесплатного тарифа Workers — ${what}.\n${help}\nПодробности: ${f.link}\n`,
         };
   },
+  tgCode: (code, purpose) => ({
+    subject: `clx: код ${code}`,
+    text:
+      purpose === 'link'
+        ? `Здравствуйте!\n\nКод для входа в clx через Telegram: ${code}\nДействует 15 минут. Пришлите его боту.\n\nЕсли вы его не просили, просто удалите письмо: без кода ничего не произойдёт.\n`
+        : `Здравствуйте!\n\nКод для подключения аккаунта Cloudflare к clx из Telegram: ${code}\nДействует 15 минут. Пришлите его боту.\n\nЕсли вы его не просили, вашим Telegram пользуется кто-то другой: отвяжите его в кабинете (Учётка) и смените пароль.\n`,
+  }),
+  tgLinked: (who, unlink) => ({
+    subject: 'clx: к аккаунту привязан Telegram',
+    text: `Здравствуйте!\n\nПользователь Telegram ${who} теперь привязан к вашему аккаунту clx: он видит итоги и может добавлять сайты и ссылки.\n\nЕсли это были не вы, отвяжите его: ${unlink}\n(ссылка действует 7 дней; на странице «Учётка» в кабинете отвязать можно в любой момент).\n`,
+  }),
+  tgUnlinked: (who) => ({
+    subject: 'clx: Telegram отвязан от аккаунта',
+    text: `Здравствуйте!\n\nПользователь Telegram ${who} больше не привязан к вашему аккаунту clx.\n`,
+  }),
 };
 
 export const MAIL: Record<Locale, MailText> = { en, ru };
 
 /** The user's address and language, for a notice about their own account. */
-export const recipient = (env: Env, userId: number) => env.DB.prepare('SELECT email, locale FROM users WHERE id = ?').bind(userId).first<{ email: string; locale: Locale }>();
+export const recipient = (env: Env, userId: number) => env.DB.prepare('SELECT id, email, locale FROM users WHERE id = ?').bind(userId).first<{ id: number; email: string; locale: Locale }>();

@@ -48,9 +48,9 @@ client of its API. clx takes that scheme (owner, 16.10.2026), adapted to what cl
   site.
 - **Taking a Telegram back.** A stolen Telegram reaches the account it is linked to, so the link is
   the account's to end from elsewhere: the app shows the linked Telegram user and unlinks it, and a
-  password reset ends the link as it ends the sessions. A link and an unlink are mailed to the
-  account's address (best effort — the mail budget and a failed send can lose it, so the app is the
-  record), with a link to unlink: a single-use token valid 7 days that opens a page asking to
+  password reset ends the link as it ends the sessions. A link, and an unlink from the bot, are
+  mailed to the account's address (best effort — a failed send can lose it, so the app is the
+  record); the link's mail carries a way to unlink: a single-use token valid 7 days that opens a page asking to
   confirm, the unlink itself a `POST` — a mail scanner opening the link changes nothing. That page
   and the app are on clx.cx, so a person who cannot open it has only the reset request, also on
   clx.cx; for them a stolen Telegram stays linked until they reach clx.cx somehow.
@@ -66,10 +66,16 @@ client of its API. clx takes that scheme (owner, 16.10.2026), adapted to what cl
   to revoke it by hand, as the app does. catchall.in keeps Cloudflare tokens out of its bot; clx
   accepts them because a Russian user who cannot open clx.cx otherwise cannot connect at all.
 - **The webhook.** The `X-Telegram-Bot-Api-Secret-Token` header is compared in constant time (401
-  otherwise); 30 messages a minute per Telegram user. An update is recorded as handled
-  (`update_id`) only once its outcome is stored; until then a passing failure (D1, the Telegram
-  API) answers 500 and Telegram delivers it again — the actions' idempotency keys make the repeat
-  safe. Everything final, the user's mistakes included, answers 200. A dialog step lives two
+  otherwise); 30 messages a minute per Telegram user, by a rate limiting binding (no write per
+  message), checked before anything is written. An update is claimed (`update_id`) before it is
+  handled and marked done after: another delivery of a done update is answered 200, of one still
+  running 500 (never 200 for work that may yet fail), and a claim a minute old is taken over; a
+  passing failure (the database, a `5xx` of `/v1`) gives the claim back and answers 500, and
+  Telegram delivers it again — the actions' idempotency keys make the repeat safe, and a mailed
+  code is spent in the same transaction as what it allows. The webhook takes one connection, so
+  Telegram sends a user's updates one at a time and in order. `/connect` is the exception: after the token is sent, any failure is final, since
+  the bot keeps no token to try again with. Everything final, the user's mistakes included, answers 200. A reply Telegram
+  does not take is logged, not retried: repeating the update would mail a second code. A dialog step lives two
   hours, a mailed code 15 minutes; a command ends the dialog it interrupts (`/help` excepted).
 - **Secrets.** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_CODE_KEY` (the HMAC
   key of the mailed codes); `scripts/tg-setup.mjs` generates the last two, puts them into the

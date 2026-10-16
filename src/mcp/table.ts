@@ -46,4 +46,4 @@ export const TABLE: readonly ToolRow[] = [
 ];
 
 /** /v1 calls for a page session only (spec §15): not tools. */
-export const SESSION_ONLY: readonly string[] = ['PATCH /v1/me', 'DELETE /v1/me', 'GET /v1/keys', 'POST /v1/keys', 'PATCH /v1/keys/{id}', 'DELETE /v1/keys/{id}'];
+export const SESSION_ONLY: readonly string[] = ['PATCH /v1/me', 'DELETE /v1/me', 'DELETE /v1/me/telegram', 'GET /v1/keys', 'POST /v1/keys', 'PATCH /v1/keys/{id}', 'DELETE /v1/keys/{id}'];

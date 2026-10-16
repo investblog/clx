@@ -1,14 +1,36 @@
-// The profile page (#/me): the address and its confirmation, the plan, deleting the account (§9).
+// The profile page (#/me): the address and its confirmation, the plan, the linked Telegram (§17), deleting the account (§9).
 import { action } from './accounts';
 import { call, logout, type Me } from './api';
 import { askConfirm } from './dialog';
 import { h } from './dom';
-import { dictOf, pageLocale, t } from './i18n';
+import { dictOf, pageLocale, t, when } from './i18n';
 
 const rows = (pairs: [string, Node | string][]) => h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
 
+/** The Telegram linked to the account (§17): who, since when, and the way to unlink it. */
+function telegramCard(me: Me, redraw: () => void): HTMLElement {
+  const tg = me.telegram;
+  return h(
+    'section',
+    { class: 'card stack stack--sm' },
+    rows([[t.me.telegram, tg ? t.me.telegramSince(tg.username ? `@${tg.username}` : `id ${tg.id}`, when(tg.linked_at)) : t.me.telegramNone]]),
+    h('p', { class: 'muted text-sm' }, t.me.telegramHint),
+    tg
+      ? h(
+          'div',
+          { class: 'actions' },
+          action(t.me.unlink, 'btn--ghost btn--sm', async (key) => {
+            if (!(await askConfirm({ title: t.me.unlink, body: t.me.unlinkAsk, confirmLabel: t.me.unlinkConfirm }))) return;
+            await call('DELETE', '/v1/me/telegram', undefined, key);
+            redraw();
+          }),
+        )
+      : null,
+  );
+}
+
 /** `signedOut(message)` shows the message, signed out, once the account is gone. */
-export function mePage(me: Me, signedOut: (message: string) => void): HTMLElement {
+export function mePage(me: Me, signedOut: (message: string) => void, redraw: () => void): HTMLElement {
   const resent = h('span', { class: 'muted text-sm', role: 'status' });
   // Not type=password: the browser would fill the saved clx.cx password into it on every load,
   // one confirmation away from a delete (the trick of the token fields, ui/accounts.ts).
@@ -36,6 +58,7 @@ export function mePage(me: Me, signedOut: (message: string) => void): HTMLElemen
             resent,
           ),
     ),
+    telegramCard(me, redraw),
     h(
       'section',
       { class: 'card stack stack--sm' },

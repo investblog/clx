@@ -386,12 +386,40 @@ function domains(path: string, method: string, init: RequestInit, url: URL): Res
   return no(404);
 }
 
-/** Stub fetch for api.cloudflare.com for the suite that calls this. */
+/** The Telegram Bot API, as far as the bot uses it: what it sent and deleted. */
+export const fakeTg = {
+  sent: [] as { chat_id: number; text: string }[],
+  deleted: [] as { chat_id: number; message_id: number }[],
+  /** while true, every call fails (Telegram unreachable) */
+  down: false,
+  reset() {
+    this.sent = [];
+    this.deleted = [];
+    this.down = false;
+  },
+  /** The texts sent to a chat, joined. */
+  said(chat: number) {
+    return this.sent.filter((m) => m.chat_id === chat).map((m) => m.text).join('\n---\n');
+  },
+};
+
+function telegram(url: URL, init: RequestInit): Response {
+  if (fakeTg.down) return Response.json({ ok: false, description: 'down' }, { status: 502 });
+  const method = url.pathname.split('/').pop();
+  const body = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+  if (method === 'sendMessage') fakeTg.sent.push({ chat_id: Number(body.chat_id), text: String(body.text) });
+  else if (method === 'deleteMessage') fakeTg.deleted.push({ chat_id: Number(body.chat_id), message_id: Number(body.message_id) });
+  else return Response.json({ ok: false, description: 'unknown method' }, { status: 404 });
+  return Response.json({ ok: true, result: true });
+}
+
+/** Stub fetch for api.cloudflare.com (and api.telegram.org) for the suite that calls this. */
 export function useFakeCloudflare(): void {
   const realFetch = globalThis.fetch;
   beforeAll(() => {
     vi.stubGlobal('fetch', (input: RequestInfo | URL, init: RequestInit = {}) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.hostname === 'api.telegram.org') return telegram(url, init);
       return url.hostname === 'api.cloudflare.com' ? cloudflare(url, init) : realFetch(input, init);
     });
   });

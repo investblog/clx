@@ -89,6 +89,7 @@ export interface Me {
   plan: 'free' | 'api';
   limits: { cf_accounts: number; sites: number; links: number; rules_per_link: number; api_keys: number };
   use: { cf_accounts: number; api_keys: number };
+  telegram: { id: number; username: string | null; linked_at: string } | null;
 }
 
 export interface MetricAdvice {
