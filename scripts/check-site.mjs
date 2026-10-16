@@ -9,20 +9,26 @@
 //   - every link to a path of clx.cx in a page, or in a file for agents, leads to a file;
 //   - the files for agents are there, each page with a markdown copy runs the Worker first (both
 //     wrangler configs, else `Accept: text/markdown` never reaches src/markdown.ts), and the
-//     skills index carries the digest of the SKILL.md beside it.
+//     skills index carries the digest of the SKILL.md beside it;
+//   - with the Russian host on (ADR 0030), its directory the same way, and the 301s from clx.cx/ru.
 // Exits 1 with the list of problems.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ALL_LOCALES, ORIGIN, SITE_PAGES, STATIC_FILES, markdownFile } from '../site/pages.ts';
-import { fileFor } from '../site/urls.ts';
+import { ruHostFiles } from '../site/ru-files.ts';
+import { appFileFor, fileFor, hostOf, RU_ORIGIN } from '../site/urls.ts';
 
-const OUT = 'public';
+const OUT = process.env.CLX_SITE_OUT || 'public';
+const RU_OUT = process.env.CLX_RU_OUT || 'dist-ru';
 const problems = [];
 const exists = (f) => fs.existsSync(path.join(OUT, f));
 
-const expected = new Set(ALL_LOCALES.map((l) => fileFor('/app', l)));
-for (const p of SITE_PAGES) for (const l of p.locales) expected.add(fileFor(p.slug, l));
+// clx.cx's pages: those of the languages it serves, the app's, and — once Russian has its own host
+// (ADR 0030) — the Russian home page kept for its sign-in card.
+const expected = new Set(ALL_LOCALES.map((l) => appFileFor(l)));
+for (const p of SITE_PAGES) for (const l of p.locales) if (hostOf(l) === 'main') expected.add(fileFor(p.slug, l));
+if (RU_ORIGIN) expected.add('ru.html');
 const markdown = SITE_PAGES.filter((p) => p.markdown).map((p) => markdownFile(p.slug));
 const agentFiles = ['llms.txt', 'auth.md', '.well-known/auth.md', '.well-known/api-catalog', '.well-known/agent-skills/index.json', '.well-known/mcp/server-card.json', '.well-known/mcp/server-cards.json', 'openapi.yaml', 'openapi.json', ...markdown];
 for (const f of [...expected, 'app.js', 'site.js', 'app.css', 'robots.txt', 'sitemap.xml', 'keywords.json', ...STATIC_FILES, ...agentFiles]) if (!exists(f)) problems.push(`missing public/${f}`);
@@ -47,7 +53,7 @@ if (exists('.well-known/agent-skills/index.json')) {
 if (exists('sitemap.xml') && !fs.readFileSync(path.join(OUT, 'sitemap.xml'), 'utf8').startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>\n<urlset '))
   problems.push('public/sitemap.xml: its view (<?xml-stylesheet … /sitemap.xsl?>) is not right after the XML declaration');
 
-const indexedFiles =new Set(SITE_PAGES.filter((p) => p.indexed).flatMap((p) => p.locales.map((l) => fileFor(p.slug, l))));
+const indexedFiles = new Set(SITE_PAGES.filter((p) => p.indexed).flatMap((p) => p.locales.filter((l) => hostOf(l) === 'main').map((l) => fileFor(p.slug, l))));
 const pages = fs.readdirSync(OUT, { recursive: true }).map((f) => String(f).replaceAll('\\', '/')).filter((f) => f.endsWith('.html'));
 for (const f of pages) if (!expected.has(f)) problems.push(`public/${f} is not in site/pages.ts`);
 
@@ -94,6 +100,38 @@ const own = new RegExp(`${ORIGIN.replaceAll('.', '\\.')}(/[^\\s)"'<>\`]*)`, 'gu'
 for (const f of agentFiles.filter((x) => exists(x) && !x.startsWith('openapi')))
   for (const [, href] of fs.readFileSync(path.join(OUT, f), 'utf8').matchAll(own))
     if (!/^\/(v1|mcp|app|ru\/app)\b/u.test(href) && !served(href.replace(/[.,;:]+$/u, ''))) problems.push(`public/${f}: ${ORIGIN}${href} leads nowhere`);
+
+// The Russian host (ADR 0030): its pages and nothing else, the files GitHub Pages needs and its pages
+// load, no inline script or style, local links that lead to its files, and every link to clx.cx a
+// page there (the app and the sign-in card aside). The old /ru addresses of clx.cx redirect to it.
+if (RU_ORIGIN) {
+  const ruExists = (f) => fs.existsSync(path.join(RU_OUT, f));
+  const ruExpected = new Set(SITE_PAGES.flatMap((p) => p.locales.filter((l) => hostOf(l) === 'ru').map((l) => fileFor(p.slug, l))));
+  // Its files exactly: what is missing, and anything else, which would be published.
+  const allowed = new Set(ruHostFiles());
+  for (const f of allowed) if (!ruExists(f)) problems.push(`missing ${RU_OUT}/${f}`);
+  if (fs.existsSync(RU_OUT))
+    for (const f of fs.readdirSync(RU_OUT, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => path.relative(RU_OUT, path.join(e.parentPath, e.name)).replaceAll('\\', '/')))
+      if (!allowed.has(f)) problems.push(`${RU_OUT}/${f} is not a file of the Russian host (site/ru-files.ts)`);
+  if (ruExists('CNAME') && fs.readFileSync(path.join(RU_OUT, 'CNAME'), 'utf8').trim() !== new URL(RU_ORIGIN).hostname) problems.push(`${RU_OUT}/CNAME is not ${new URL(RU_ORIGIN).hostname}`);
+  const ruPages = fs.existsSync(RU_OUT) ? fs.readdirSync(RU_OUT, { recursive: true }).map((f) => String(f).replaceAll('\\', '/')).filter((f) => f.endsWith('.html')) : [];
+  for (const f of ruPages) {
+    if (!ruExpected.has(f)) problems.push(`${RU_OUT}/${f} is not in site/pages.ts`);
+    const html = fs.readFileSync(path.join(RU_OUT, f), 'utf8');
+    if (/<script(?![^>]*\ssrc=)(?![^>]*type="application\/ld\+json")[^>]*>/iu.test(html)) problems.push(`${RU_OUT}/${f}: inline <script>`);
+    if (/<style[\s>]/iu.test(html) || /\sstyle=/iu.test(html)) problems.push(`${RU_OUT}/${f}: inline style`);
+    if (!html.includes('<meta http-equiv="Content-Security-Policy"')) problems.push(`${RU_OUT}/${f}: no CSP <meta>`);
+    for (const [, href] of html.matchAll(/\s(?:href|src)="(\/[^"/][^"]*|\/)"/gu)) {
+      const clean = href.replace(/[?#].*$/u, '');
+      if (!(clean === '/' ? ruExists('index.html') : ruExists(clean.slice(1)) || ruExists(`${clean.slice(1)}.html`))) problems.push(`${RU_OUT}/${f}: ${href} leads nowhere`);
+    }
+    for (const [, href] of html.matchAll(new RegExp(`\\s(?:href|src)="${ORIGIN.replaceAll('.', '\\.')}(/[^"]*)"`, 'gu')))
+      if (!/^\/(ru\/app|app|ru#|#)/u.test(href) && !served(href)) problems.push(`${RU_OUT}/${f}: ${ORIGIN}${href} leads nowhere`);
+  }
+  const redirects = exists('_redirects') ? fs.readFileSync(path.join(OUT, '_redirects'), 'utf8') : '';
+  for (const p of SITE_PAGES.filter((x) => x.locales.includes('ru') && x.slug !== '/' && x.slug !== '/404'))
+    if (!redirects.includes(`/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`)) problems.push(`public/_redirects: /ru${p.slug} does not go to ${RU_ORIGIN}${p.slug}`);
+}
 
 if (problems.length) {
   console.error(`check-site: ${problems.length} problem(s)\n  ${problems.join('\n  ')}`);

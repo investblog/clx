@@ -21,3 +21,12 @@ console.log('public/app.js, public/site.js, public/app.css built');
 execFileSync(process.execPath, ['site/build.ts'], { stdio: 'inherit' });
 // The Open Graph cards of the pages just written (scripts/build-og.mjs reads them).
 execFileSync(process.execPath, ['scripts/build-og.mjs'], { stdio: 'inherit' });
+// The Russian host's own copy of what its pages load (ADR 0030): the stylesheet, the scripts, the
+// fonts and icons. Its pages' Open Graph cards stay on clx.cx, which crawlers reach.
+const { RU_ORIGIN } = await import('../site/urls.ts');
+const { STATIC_FILES } = await import('../site/pages.ts');
+if (RU_ORIGIN) {
+  const out = process.env.CLX_RU_OUT || 'dist-ru';
+  for (const f of ['app.css', 'site.js', ...STATIC_FILES.filter((x) => x !== '_headers')]) fs.cpSync(`public/${f}`, `${out}/${f}`);
+  console.log(`${out}/: the Russian host's files copied`);
+}

@@ -19,6 +19,9 @@ export interface Strings {
     lead: string;
     start: string;
     source: string;
+    /** On the Russian host (ADR 0030): the bot first, then the sign-in on clx.cx. */
+    bot: string;
+    signIn: string;
     note: string;
     how: { h2: string; steps: [string, string][]; more: string };
     tools: { h2: string; items: { h: string; p: string; points: string[]; link: [string, string] }[] };
@@ -63,6 +66,8 @@ const en: Strings = {
     lead: 'clx installs a small worker and a D1 database in your Cloudflare account. Your sites count their visits there, your short links redirect from there, and clx.cx keeps only the totals.',
     start: 'Start free',
     source: 'Source code',
+    bot: 'Open the Telegram bot',
+    signIn: 'Sign in on clx.cx',
     note: 'Free plan, no card. Open source under AGPL-3.0.',
     how: {
       h2: 'How it works',
@@ -161,6 +166,8 @@ const ru: Strings = {
     lead: 'clx ставит в ваш аккаунт Cloudflare небольшой воркер и базу D1. Сайты считают посещения там же, короткие ссылки переадресуют оттуда же, а на clx.cx хранятся только итоги.',
     start: 'Начать бесплатно',
     source: 'Исходный код',
+    bot: 'Открыть бота в Telegram',
+    signIn: 'Войти на clx.cx',
     note: 'Бесплатный тариф, без карты. Открытый код под AGPL-3.0.',
     how: {
       h2: 'Как это работает',

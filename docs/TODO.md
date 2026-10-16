@@ -24,13 +24,16 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [ ] A way to ask for the `api` plan: /agents, /api and auth.md say clx switches it on "by
       request" but name no address or form (10.10). The channel will be the Telegram bot (§17,
       ADR 0030); then link it from those pages and the keys page.
-- [ ] The Telegram bot (§17, ADR 0030): the owner makes the bot with @BotFather and puts its token
-      in the project's secrets; then the webhook, sign-in by a mailed code, `/sites` `/links`, adding
-      sites and links, `/connect`, the notices.
-- [ ] The Russian pages on `ru.clx.cx` (§16, ADR 0030): the owner makes the public repository for
-      the built pages; then the URL function, the build and deploy to GitHub Pages, the DNS-only
-      `CNAME`, 301 from `clx.cx/ru/<page>` (not `/ru` with its sign-in card, not `/ru/app`), a
-      sitemap and robots.txt per host, a Search Console property for the new host.
+- [x] The Telegram bot (§17, ADR 0030): @clxcxbot on `POST /hook/telegram`, live 16.10 (the
+      webhook, sign-in by a mailed code, `/sites` `/links` `/accounts`, adding sites and links,
+      `/connect`, the notices).
+- [ ] The bot's first live conversation from a phone: link, `/sites`, `/site`, `/connect` on a test
+      Cloudflare account; the code e-mail reaching Yandex and mail.ru.
+- [ ] The Russian pages on `ru.clx.cx` (§16, ADR 0030): built and checked, off (`RU_LIVE`). To turn
+      on: the owner makes a public repository for the built pages with Pages from `gh-pages`; then
+      `RU_LIVE`, `scripts/deploy-ru.mjs`, the DNS-only `CNAME` `ru` → the Pages host, Pages'
+      certificate, `pnpm run deploy` (the 301s and the `/ru` sign-in page), a Search Console
+      property for the new host.
 - [x] `GET /v1/me` mixes field styles: `limits` is camelCase (`cfAccounts`, `rulesPerLink`), `use`
       snake_case (`cf_accounts`) — found by the live agent run of /agents (10.10). Pick snake_case
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,

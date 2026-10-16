@@ -6,6 +6,8 @@
 
 export const ORIGIN = 'https://clx.cx';
 export const REPO = 'https://github.com/investblog/clx';
+/** The Telegram bot (docs/spec.md §17): the way in where clx.cx does not open. */
+export const BOT_URL = 'https://t.me/clxcxbot';
 /** The footer's glyph links here (site/layout.ts): 301.st, the parent service; its Russian site is 301.ru. */
 export const COMPANY_URL: Record<Locale, string> = { en: 'https://301.st', ru: 'https://301.ru' };
 /** The app (sign-in and the pages of docs/spec.md §10): a hash-routed page, never indexed. */

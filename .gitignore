@@ -56,6 +56,9 @@ public/llms.txt
 public/openapi.*
 public/.well-known/
 public/og/
+public/_redirects
+# the Russian host's build (ADR 0030), published by scripts/deploy-ru.mjs to its own repository
+dist-ru/
 
 # agent infrastructure — this is a public repository: it holds the product only. The agent's rules,
 # plans, hooks, settings and memory stay on the maintainer's machine (canon BOOTSTRAP step 5).

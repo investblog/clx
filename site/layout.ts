@@ -4,7 +4,7 @@
 import * as FLAGS from 'country-flag-icons/string/3x2';
 import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
 import { STRINGS } from './i18n.ts';
-import { alternatesFor, appPathFor, authPathFor, ogImagePath, pathFor, urlFor } from './urls.ts';
+import { alternatesFor, appPathFor, authPathFor, ogImagePath, pathFor, renderingHost, urlFor } from './urls.ts';
 
 export function escapeHtml(v: string): string {
   return v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -30,7 +30,14 @@ export interface LayoutInput {
   body: string;
   /** schema.org nodes for the page's JSON-LD (site/build.ts `structuredData`). */
   jsonLd?: Record<string, unknown>[];
+  /** A copy kept on clx.cx for its sign-in card while the page itself is on the Russian host
+   *  (ADR 0030): never indexed, its canonical the real page. */
+  stub?: boolean;
 }
+
+/** The CSP of the Russian host's pages: GitHub Pages sends none of our headers (public/_headers is
+ *  clx.cx's). The same policy, without `frame-ancestors`, which a <meta> cannot set. */
+const RU_CSP = "default-src 'self'; script-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'";
 
 /** Open Graph and the Twitter card of an indexed page; its image is drawn by scripts/build-og.mjs. */
 function social(page: PageDef, locale: Locale, title: string, description: string | undefined): string[] {
@@ -137,17 +144,21 @@ export function footer(locale: Locale): string {
 }
 
 export function layout(input: LayoutInput): string {
-  const { page, locale, title, description, body, jsonLd } = input;
+  const { page, locale, title, description, body, jsonLd, stub } = input;
+  const indexed = page.indexed && !stub;
   const head = [
     '<meta charset="UTF-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+    renderingHost() === 'ru' ? `<meta http-equiv="Content-Security-Policy" content="${RU_CSP}" />` : '',
     `<title>${escapeHtml(title)}</title>`,
     description ? `<meta name="description" content="${escapeHtml(description)}" />` : '',
-    page.indexed
+    indexed
       ? [`<link rel="canonical" href="${urlFor(page.slug, locale)}" />`, ...alternatesFor(page.slug, page.locales).map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}" />`)].join('\n    ')
-      : '<meta name="robots" content="noindex" />',
-    ...(page.indexed ? social(page, locale, title, description) : []),
-    page.indexed && jsonLd?.length ? jsonLdBlock(jsonLd) : '',
+      : stub
+        ? `<meta name="robots" content="noindex" />\n    <link rel="canonical" href="${urlFor(page.slug, locale)}" />`
+        : '<meta name="robots" content="noindex" />',
+    ...(indexed ? social(page, locale, title, description) : []),
+    indexed && jsonLd?.length ? jsonLdBlock(jsonLd) : '',
     '<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml" />',
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',

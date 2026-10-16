@@ -7,7 +7,7 @@ import { chartOptions, themed } from './demo.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
 import { finalBlock, promoBlock } from './promo.ts';
 import type { Locale } from './pages.ts';
-import { authPathFor } from './urls.ts';
+import { authPathFor, pathFor } from './urls.ts';
 
 interface Chart {
   h: string;
@@ -227,7 +227,7 @@ const CLCK: CompareText = {
     links: [
       ['Условия использования Кликера', 'https://yandex.ru/legal/clck_termsofuse/ru/'],
       ['Яндекс Кликер', 'https://clck.ru/'],
-      ['Тарифы clx', '/ru/pricing'],
+      ['Тарифы clx', '/pricing'],
     ],
   },
   more: [['Короткие ссылки на своём домене', '/short-links'], ['Вместо LiveInternet', '/liveinternet-alternative']],
@@ -292,7 +292,7 @@ const LIVEINTERNET: CompareText = {
       ['LiveInternet: добавить сайт', 'https://www.liveinternet.ru/add'],
       ['Условия Яндекс Метрики', 'https://yandex.ru/legal/metrica_termsofuse/ru/'],
       ['Метрика: cookie', 'https://yandex.ru/support/metrica/ru/general/cookie-usage.html'],
-      ['Тарифы clx', '/ru/pricing'],
+      ['Тарифы clx', '/pricing'],
     ],
   },
   more: [['Счётчик посещений без cookie', '/analytics'], ['Вместо Кликера', '/clck-alternative']],
@@ -397,7 +397,7 @@ const PARENT: Record<Locale, CompareText> = {
         ['Тарифы 301.ru', 'https://301.ru/pricing'],
         ['Возможности 301.ru', 'https://301.ru/features'],
         ['301.ru: интеграция с Cloudflare', 'https://301.ru/docs/cloudflare-integration'],
-        ['Тарифы clx', '/ru/pricing'],
+        ['Тарифы clx', '/pricing'],
       ],
     },
     more: [['Как работает clx', '/how-it-works'], ['Тарифы clx', '/pricing']],
@@ -415,10 +415,15 @@ function chartCard(locale: Locale, c: Chart): string {
   return `<div class="card feature"><h3>${escapeHtml(c.h)}</h3>${themed('demo__chart', draw)}<p class="compare__note">${escapeHtml(c.note)}</p></div>`;
 }
 
-/** A source: our own page is a link; another service's is its address as text, in brackets — no link
- *  to it, unless the page is about a service of ours (`linked`). */
-const source = ([label, href]: [string, string], linked: boolean) =>
-  href.startsWith('/') || linked ? `<a href="${escapeHtml(href)}"${linked && !href.startsWith('/') ? ' rel="noopener"' : ''}>${escapeHtml(label)}</a>` : `${escapeHtml(label)} (${escapeHtml(href.replace(/^https:\/\/(www\.)?/u, '').replace(/\/$/u, ''))})`;
+/** A source: our own page — given by its slug, linked in the page's language — is a link; another
+ *  service's is its address as text, in brackets — no link to it, unless the page is about a service
+ *  of ours (`linked`). */
+const source = ([label, href]: [string, string], linked: boolean, locale: Locale) =>
+  href.startsWith('/')
+    ? `<a href="${pathFor(href, locale)}">${escapeHtml(label)}</a>`
+    : linked
+      ? `<a href="${escapeHtml(href)}" rel="noopener">${escapeHtml(label)}</a>`
+      : `${escapeHtml(label)} (${escapeHtml(href.replace(/^https:\/\/(www\.)?/u, '').replace(/\/$/u, ''))})`;
 
 function page(locale: Locale, t: CompareText): { title: string; description: string; body: string } {
   const start = `<a class="btn btn--primary btn--lg" href="${authPathFor(locale, 'register')}">${escapeHtml(t.start)}</a>`;
@@ -457,7 +462,7 @@ ${aside}<section class="home-section narrow-section">
 <section class="home-section narrow-section compare__sources">
   <h2 class="h3">${escapeHtml(t.sources.h)}</h2>
   <p>${escapeHtml(t.sources.checked)}</p>
-  <ul>${t.sources.links.map((s) => `<li>${source(s, !!t.ours)}</li>`).join('')}</ul>
+  <ul>${t.sources.links.map((s) => `<li>${source(s, !!t.ours, locale)}</li>`).join('')}</ul>
 </section>
 ${t.ours ? `${promoBlock(locale, [t.ours])}\n` : ''}${finalBlock(locale, t.final, t.start)}`;
   return { title: t.title, description: t.description, body };

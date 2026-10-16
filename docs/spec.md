@@ -1095,7 +1095,11 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   and `#recover` open, and a fragment never reaches the server; it stays `noindex`, canonical on
   `ru.clx.cx`. One URL function knows the host; canonical, hreflang and the switch derive from it;
   each host has its own sitemap and robots.txt. On `ru.clx.cx` the first way in is the Telegram bot
-  (§17), then sign-up and sign-in on clx.cx; the CSP is a `<meta>`.
+  (§17), then sign-up and sign-in on clx.cx; the CSP is a `<meta>`. Built and checked, off until the
+  host serves: `RU_LIVE` in `site/urls.ts` turns it on for both builds (`CLX_RU_ORIGIN` for a trial
+  build); `scripts/build-ui.mjs` then writes `dist-ru/` and `public/_redirects` (the 301s), and
+  `scripts/deploy-ru.mjs <repository>` pushes `dist-ru/` to its `gh-pages` as one orphan commit.
+  The Open Graph cards of the Russian pages stay on clx.cx.
 
 ## 17. The Telegram bot
 

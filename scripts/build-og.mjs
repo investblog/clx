@@ -153,17 +153,22 @@ export { regular, semibold, TEXT_W };
 async function main() {
   // From an empty folder: a card of a page or language since removed must not linger and be deployed.
   fs.rmSync(path.join(OUT, 'og'), { recursive: true, force: true });
-  const pages = fs
-    .readdirSync(OUT, { recursive: true })
-    .map((f) => String(f).replaceAll('\\', '/'))
-    .filter((f) => f.endsWith('.html'));
+  // The Russian host's pages too, when it has its own (ADR 0030): their cards stay on clx.cx.
+  const { RU_ORIGIN } = await import('../site/urls.ts');
+  const dirs = [OUT, ...(RU_ORIGIN ? [process.env.CLX_RU_OUT || 'dist-ru'] : [])];
+  const pages = dirs.flatMap((dir) =>
+    fs
+      .readdirSync(dir, { recursive: true })
+      .map((f) => path.join(dir, String(f)))
+      .filter((f) => f.endsWith('.html')),
+  );
   let made = 0;
   for (const f of pages) {
-    const html = fs.readFileSync(path.join(OUT, f), 'utf8');
+    const html = fs.readFileSync(f, 'utf8');
     const image = html.match(/<meta property="og:image" content="https:\/\/[^/]+(\/og\/[^"]+\.png)"/u)?.[1];
     if (!image) continue;
     const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/u)?.[1]?.replace(/<[^>]+>/gu, '').trim();
-    if (!h1) throw new Error(`public/${f} has og:image but no <h1>`);
+    if (!h1) throw new Error(`${f} has og:image but no <h1>`);
     const description = html.match(/<meta name="description" content="([^"]*)"/u)?.[1];
     const file = path.join(OUT, image.slice(1));
     fs.mkdirSync(path.dirname(file), { recursive: true });

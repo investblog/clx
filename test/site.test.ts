@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SITE_PAGES } from '../site/pages.ts';
 import { generateMatrix } from '../src/qr/generate';
 import { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } from '../site/urls.ts';
@@ -690,5 +690,53 @@ describe('generated pages', () => {
   it('the Russian footer links the English-only agent docs in English', () => {
     expect(read('ru.html')).toContain('<a href="/agents" hreflang="en">');
     expect(read('agents.html')).not.toContain('hreflang="ru"');
+  });
+});
+
+describe('the Russian host (ADR 0030)', () => {
+  // A build with the host on, into folders of its own: public/ and the real build are not touched.
+  const main = 'temp/site-test-main';
+  const ru = 'temp/site-test-ru';
+  const read = (dir: string, f: string) => fs.readFileSync(`${dir}/${f}`, 'utf8');
+  beforeAll(() => {
+    for (const d of [main, ru]) fs.rmSync(d, { recursive: true, force: true });
+    execFileSync(process.execPath, ['site/build.ts'], { stdio: 'pipe', env: { ...process.env, CLX_RU_ORIGIN: 'https://ru.clx.cx', CLX_SITE_OUT: main, CLX_RU_OUT: ru } });
+  });
+  afterAll(() => {
+    for (const d of [main, ru]) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it('Russian pages live on their host without /ru; links there are paths, to clx.cx whole URLs', () => {
+    const home = read(ru, 'index.html');
+    expect(home).toContain('<link rel="canonical" href="https://ru.clx.cx/" />');
+    expect(home).toContain('<meta http-equiv="Content-Security-Policy"');
+    // No sign-in card: the bot first, then sign-up and sign-in on clx.cx.
+    expect(home).not.toContain('data-auth');
+    expect(home).toMatch(/href="https:\/\/t\.me\/clxcxbot"[^]*href="https:\/\/clx\.cx\/ru#register"[^]*href="https:\/\/clx\.cx\/ru#login"/u);
+    const pricing = read(ru, 'pricing.html');
+    expect(pricing).toContain('<link rel="canonical" href="https://ru.clx.cx/pricing" />');
+    expect(pricing).toContain('href="/faq"');
+    expect(pricing).toContain('href="https://clx.cx/agents" hreflang="en"');
+    expect(pricing).not.toMatch(/href="\/ru[/"#]/u);
+    expect(read(ru, 'terms.html')).toContain('<a href="/abuse">');
+    expect(fs.existsSync(`${ru}/ru`)).toBe(false);
+    expect(read(ru, 'CNAME')).toBe('ru.clx.cx\n');
+  });
+
+  it('clx.cx keeps the Russian home page for its sign-in card, unindexed, and sends the rest there', () => {
+    const stub = read(main, 'ru.html');
+    expect(stub).toContain('<meta name="robots" content="noindex" />');
+    expect(stub).toContain('<link rel="canonical" href="https://ru.clx.cx/" />');
+    expect(stub).toContain('data-auth');
+    expect(fs.existsSync(`${main}/ru/pricing.html`)).toBe(false);
+    expect(fs.existsSync(`${main}/ru/app.html`)).toBe(true);
+    expect(read(main, '_redirects')).toContain('/ru/pricing https://ru.clx.cx/pricing 301\n');
+    expect(read(main, '_redirects')).not.toMatch(/^\/ru(\/app)? /mu);
+    // Each host's sitemap lists its own pages; the alternates cross over.
+    expect(read(main, 'sitemap.xml')).not.toContain('<loc>https://ru.clx.cx');
+    expect(read(main, 'sitemap.xml')).toContain('hreflang="ru" href="https://ru.clx.cx/pricing"');
+    expect(read(ru, 'sitemap.xml')).toContain('<loc>https://ru.clx.cx/pricing</loc>');
+    expect(read(ru, 'sitemap.xml')).not.toContain('<loc>https://clx.cx');
+    expect(read(main, 'pricing.html')).toContain('hreflang="ru" href="https://ru.clx.cx/pricing"');
   });
 });
