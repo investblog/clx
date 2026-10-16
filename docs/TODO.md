@@ -29,10 +29,12 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       `/connect`, the notices).
 - [x] The bot's first live conversation from a phone: checked by the owner 16.10. Its profile texts
       are English by default and Russian for a Russian Telegram (`scripts/tg-setup.mjs describe`).
-- [ ] The Russian pages on `ru.clx.cx` (§16, ADR 0030): on 16.10 — `RU_LIVE`, the pages published
-      to a public repository's `gh-pages` (`scripts/deploy-ru.mjs`), the DNS-only `CNAME` `ru` → the
-      Pages host. Left: Pages' certificate and HTTPS enforced, `pnpm run deploy` (the 301s, `/ru` among them, and
-      the sign-in card at `/ru/signin`), a Search Console property for the new host.
+- [x] The Russian pages on `ru.clx.cx` (§16, ADR 0030): live 16.10 — the pages on a public
+      repository's `gh-pages` (`scripts/deploy-ru.mjs`), the DNS-only `CNAME` `ru` → the Pages host,
+      HTTPS enforced; clx.cx answers 301 for `/ru`, `/ru/` and the old Russian pages, `/ru/app` and the card at
+      `/ru/signin` stay. Pages issued its certificate only after the custom domain was set again once the
+      `CNAME` resolved (set before it, nothing came for 35 minutes).
+- [ ] A Search Console property for `ru.clx.cx`, its sitemap submitted; the clx.cx sitemap resubmitted.
 - [x] `GET /v1/me` mixes field styles: `limits` is camelCase (`cfAccounts`, `rulesPerLink`), `use`
       snake_case (`cf_accounts`) — found by the live agent run of /agents (10.10). Pick snake_case
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
