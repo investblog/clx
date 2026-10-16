@@ -118,6 +118,7 @@ if (RU_ORIGIN) {
   fs.rmSync(RU_OUT, { recursive: true, force: true });
   const old = path.join(OUT, 'ru');
   if (fs.existsSync(old)) for (const f of fs.readdirSync(old, { recursive: true }).map(String)) if (f.endsWith('.html') && f !== 'app.html') fs.rmSync(path.join(old, f));
+  fs.rmSync(path.join(OUT, 'ru.html'), { force: true });
 }
 for (const page of SITE_PAGES)
   for (const locale of page.locales) {
@@ -126,10 +127,10 @@ for (const page of SITE_PAGES)
     renderingOn(host);
     const { html, title, description } = render(page, locale);
     write(fileFor(page.slug, locale), html, host);
-    // The Russian home page stays on clx.cx too, for its sign-in card (/ru#login), unindexed.
+    // The Russian home page is written on clx.cx too, at /ru/signin, for its sign-in card, unindexed.
     if (host === 'ru' && page.slug === '/') {
       renderingOn('main');
-      write('ru.html', render(page, locale, true).html);
+      write('ru/signin.html', render(page, locale, true).html);
     }
     renderingOn('main');
     const kw = KEYWORDS[page.slug]?.[locale];
@@ -198,7 +199,7 @@ function sitemap(host: Host): string {
 write('sitemap.xml', sitemap('main'));
 
 // The Russian host (ADR 0030): its sitemap and robots.txt, the GitHub Pages files, and on clx.cx a
-// 301 from each old /ru address to it — all but the home page (its sign-in card) and the app.
+// 301 from each old /ru address to it (/ru to its home page) — all but the app and the sign-in card.
 const ruPages = SITE_PAGES.filter((p) => p.locales.includes('ru') && p.slug !== '/' && p.slug !== '/404');
 if (RU_ORIGIN) {
   write('sitemap.xml', sitemap('ru'), 'ru');
@@ -206,7 +207,7 @@ if (RU_ORIGIN) {
   write('CNAME', `${new URL(RU_ORIGIN).hostname}\n`, 'ru');
   // GitHub Pages runs Jekyll otherwise, which drops files and folders that start with "_" or ".".
   write('.nojekyll', '', 'ru');
-  write('_redirects', `${ruPages.map((p) => `/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`).join('\n')}\n`);
+  write('_redirects', `/ru ${RU_ORIGIN}/ 301\n${ruPages.map((p) => `/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`).join('\n')}\n`);
 } else fs.rmSync(path.join(OUT, '_redirects'), { force: true });
 
 console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, the app in each, robots.txt, sitemap.xml${RU_ORIGIN ? `; Russian on ${RU_ORIGIN} (${RU_OUT}/)` : ''}`);

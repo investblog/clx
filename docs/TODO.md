@@ -31,8 +31,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       are English by default and Russian for a Russian Telegram (`scripts/tg-setup.mjs describe`).
 - [ ] The Russian pages on `ru.clx.cx` (§16, ADR 0030): on 16.10 — `RU_LIVE`, the pages published
       to a public repository's `gh-pages` (`scripts/deploy-ru.mjs`), the DNS-only `CNAME` `ru` → the
-      Pages host. Left: Pages' certificate and HTTPS enforced, `pnpm run deploy` (the 301s and the
-      `/ru` sign-in page), a Search Console property for the new host.
+      Pages host. Left: Pages' certificate and HTTPS enforced, `pnpm run deploy` (the 301s, `/ru` among them, and
+      the sign-in card at `/ru/signin`), a Search Console property for the new host.
 - [x] `GET /v1/me` mixes field styles: `limits` is camelCase (`cfAccounts`, `rulesPerLink`), `use`
       snake_case (`cf_accounts`) — found by the live agent run of /agents (10.10). Pick snake_case
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,

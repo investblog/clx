@@ -1025,8 +1025,9 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   header shows "Dashboard" (the app) instead of "Sign in" where the app left its mark
   (`localStorage` `clx-signed-in`, read by `/theme.js`).
 - **Sign-in on the home page** ([ADR 0026](./decisions/0026-sign-in-on-the-home-page.md)). Sign-in,
-  sign-up and the reset request are three forms of one card on each language's home page, shown by
-  the fragment — `/#login`, `/#register`, `/#recover` (`/ru#…`); beside the hero on a wide screen,
+  sign-up and the reset request are three forms of one card on the English home page and, since the
+  Russian pages have their own host, on `/ru/signin` (a copy of the Russian home page; §16), shown by
+  the fragment — `/#login`, `/#register`, `/#recover` (`/ru/signin#…`); beside the hero on a wide screen,
   under it on a narrow one; without a fragment the card is hidden. The header's "Sign in" opens
   `#login`, every call to sign up opens `#register`. Sign-in leads to `/app#/`, which takes the
   session from the refresh cookie. The app without a session goes to `#login` with the page asked for as
@@ -1090,10 +1091,10 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   From Russia sites behind Cloudflare often do not open without a VPN, so the Russian pages move to
   `ru.clx.cx` on GitHub Pages: a public repository holding only the built pages (an orphan commit),
   a `CNAME` record that is DNS only. Russian has no `/ru` prefix there; `clx.cx/ru/<page>` answers
-  301 to the same page on `ru.clx.cx`. The app (`clx.cx/ru/app`, it needs the API) and the Russian
-  home page `clx.cx/ru` stay: the home page carries the sign-in card that `/ru#login`, `#register`
-  and `#recover` open, and a fragment never reaches the server; it stays `noindex`, canonical on
-  `ru.clx.cx`. One URL function knows the host; canonical, hreflang and the switch derive from it;
+  301 to the same page on `ru.clx.cx`, `clx.cx/ru` to its home page. The app (`clx.cx/ru/app`, it
+  needs the API) and the Russian sign-in card stay on clx.cx, the card at `/ru/signin` (`#login`,
+  `#register`, `#recover`; `noindex`, canonical on `ru.clx.cx`); a page of `ru.clx.cx` opened with
+  a card's fragment (the old `/ru#login` keeps it through the 301) sends it there. One URL function knows the host; canonical, hreflang and the switch derive from it;
   each host has its own sitemap and robots.txt. On `ru.clx.cx` the first way in is the Telegram bot
   (§17), then sign-up and sign-in on clx.cx; the CSP is a `<meta>`. On since 16.10:
   `RU_LIVE` in `site/urls.ts` turns it on for both builds (`CLX_RU_ORIGIN` sets another origin, or

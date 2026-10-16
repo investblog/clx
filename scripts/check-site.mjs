@@ -25,10 +25,10 @@ const problems = [];
 const exists = (f) => fs.existsSync(path.join(OUT, f));
 
 // clx.cx's pages: those of the languages it serves, the app's, and — once Russian has its own host
-// (ADR 0030) — the Russian home page kept for its sign-in card.
+// (ADR 0030) — the Russian home page kept at /ru/signin for its sign-in card.
 const expected = new Set(ALL_LOCALES.map((l) => appFileFor(l)));
 for (const p of SITE_PAGES) for (const l of p.locales) if (hostOf(l) === 'main') expected.add(fileFor(p.slug, l));
-if (RU_ORIGIN) expected.add('ru.html');
+if (RU_ORIGIN) expected.add('ru/signin.html');
 const markdown = SITE_PAGES.filter((p) => p.markdown).map((p) => markdownFile(p.slug));
 const agentFiles = ['llms.txt', 'auth.md', '.well-known/auth.md', '.well-known/api-catalog', '.well-known/agent-skills/index.json', '.well-known/mcp/server-card.json', '.well-known/mcp/server-cards.json', 'openapi.yaml', 'openapi.json', ...markdown];
 for (const f of [...expected, 'app.js', 'site.js', 'app.css', 'robots.txt', 'sitemap.xml', 'keywords.json', ...STATIC_FILES, ...agentFiles]) if (!exists(f)) problems.push(`missing public/${f}`);
@@ -129,6 +129,8 @@ if (RU_ORIGIN) {
       if (!/^\/(ru\/app|app|ru#|#)/u.test(href) && !served(href)) problems.push(`${RU_OUT}/${f}: ${ORIGIN}${href} leads nowhere`);
   }
   const redirects = exists('_redirects') ? fs.readFileSync(path.join(OUT, '_redirects'), 'utf8') : '';
+  if (!redirects.split('\n').includes(`/ru ${RU_ORIGIN}/ 301`)) problems.push(`public/_redirects: /ru does not go to ${RU_ORIGIN}/`);
+  if (exists('ru.html')) problems.push('public/ru.html would be served at /ru in place of its 301');
   for (const p of SITE_PAGES.filter((x) => x.locales.includes('ru') && x.slug !== '/' && x.slug !== '/404'))
     if (!redirects.includes(`/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`)) problems.push(`public/_redirects: /ru${p.slug} does not go to ${RU_ORIGIN}${p.slug}`);
 }

@@ -381,6 +381,18 @@ describe('generated pages', () => {
     expect(run(1, 0.7)).toEqual([1]);
   });
 
+  it('site.js on a Russian page without the card sends a form of it to the card on clx.cx, with the way back', () => {
+    const run = (lang: string, hash: string) => {
+      const sent: string[] = [];
+      const document = { documentElement: { lang }, querySelector: () => null, querySelectorAll: () => [], addEventListener: () => {} };
+      vm.runInNewContext(read('site.js'), { document, location: { pathname: '/', hash, search: '?next=%2Fsites', replace: (u: string) => sent.push(u) }, Math, window: { addEventListener: () => {} } });
+      return sent;
+    };
+    expect(run('ru', '#login')).toEqual(['https://clx.cx/ru/signin?next=%2Fsites#login']);
+    expect(run('ru', '#pricing')).toEqual([]);
+    expect(run('en', '#register')).toEqual([]);
+  });
+
   /** site.js on a stand-in of the home page's card (site/auth.ts): what it shows, sends and opens. */
   async function cardStand(opts: { hash: string; sitekey: string | null; configFailures?: number; search?: string }) {
     let failures = opts.configFailures ?? 0;
@@ -726,7 +738,7 @@ describe('the Russian host (ADR 0030)', () => {
     expect(home).toContain('<meta http-equiv="Content-Security-Policy"');
     // No sign-in card: the bot first, then sign-up and sign-in on clx.cx.
     expect(home).not.toContain('data-auth');
-    expect(home).toMatch(/href="https:\/\/t\.me\/clxcxbot"[^]*href="https:\/\/clx\.cx\/ru#register"[^]*href="https:\/\/clx\.cx\/ru#login"/u);
+    expect(home).toMatch(/href="https:\/\/t\.me\/clxcxbot"[^]*href="https:\/\/clx\.cx\/ru\/signin#register"[^]*href="https:\/\/clx\.cx\/ru\/signin#login"/u);
     const pricing = read(ru, 'pricing.html');
     expect(pricing).toContain('<link rel="canonical" href="https://ru.clx.cx/pricing" />');
     expect(pricing).toContain('href="/faq"');
@@ -737,15 +749,19 @@ describe('the Russian host (ADR 0030)', () => {
     expect(read(ru, 'CNAME')).toBe('ru.clx.cx\n');
   });
 
-  it('clx.cx keeps the Russian home page for its sign-in card, unindexed, and sends the rest there', () => {
-    const stub = read(main, 'ru.html');
+  it('clx.cx keeps the Russian sign-in card at /ru/signin, unindexed, and sends the rest there', () => {
+    const stub = read(main, 'ru/signin.html');
     expect(stub).toContain('<meta name="robots" content="noindex" />');
     expect(stub).toContain('<link rel="canonical" href="https://ru.clx.cx/" />');
     expect(stub).toContain('data-auth');
+    expect(fs.existsSync(`${main}/ru.html`)).toBe(false);
     expect(fs.existsSync(`${main}/ru/pricing.html`)).toBe(false);
     expect(fs.existsSync(`${main}/ru/app.html`)).toBe(true);
+    expect(read(main, '_redirects')).toMatch(/^\/ru https:\/\/ru\.clx\.cx\/ 301\n/u);
     expect(read(main, '_redirects')).toContain('/ru/pricing https://ru.clx.cx/pricing 301\n');
-    expect(read(main, '_redirects')).not.toMatch(/^\/ru(\/app)? /mu);
+    expect(read(main, '_redirects')).not.toMatch(/^\/ru\/(app|signin) /mu);
+    // Its header signs in on the card itself.
+    expect(stub).toContain('href="/ru/signin#login"');
     // Each host's sitemap lists its own pages; the alternates cross over.
     expect(read(main, 'sitemap.xml')).not.toContain('<loc>https://ru.clx.cx');
     expect(read(main, 'sitemap.xml')).toContain('hreflang="ru" href="https://ru.clx.cx/pricing"');

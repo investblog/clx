@@ -3,6 +3,7 @@
 // use; pages read it while they draw, so a change of language takes effect on the next drawing.
 import { en } from './en';
 import { ru, type Dict } from './ru';
+import { signInPagePath } from '../../site/urls.ts';
 
 export type Locale = 'en' | 'ru';
 const DICTS: Record<Locale, Dict> = { en, ru };
@@ -23,8 +24,8 @@ export const dictOf = (l: Locale): Dict => DICTS[l];
 
 /** The app of a language: `/app`, `/ru/app`. */
 export const appPath = (l: Locale) => (l === 'en' ? '/app' : `/${l}/app`);
-/** The home page of a language, where the sign-in card is (ADR 0026): `/`, `/ru`. */
-export const homePath = (l: Locale) => (l === 'en' ? '/' : `/${l}`);
+/** The page of clx.cx with the language's sign-in card (ADR 0026, 0030): `/`, `/ru/signin`. */
+export const homePath = (l: Locale) => signInPagePath(l);
 
 const tag = () => (locale === 'ru' ? 'ru-RU' : 'en-GB');
 export const when = (iso: string | null | undefined) => (iso ? `${new Date(iso).toLocaleString(tag(), { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })} UTC` : '—');

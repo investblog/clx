@@ -88,12 +88,13 @@ The Russian site moves to `ru.clx.cx` on GitHub Pages: a public repository that 
 pages (an orphan commit of the build directory), a `CNAME` record that is DNS only — proxied, the
 host is behind Cloudflare again. Russian has no `/ru` prefix there.
 
-- `clx.cx/ru/<page>` answers 301 to the same page on `ru.clx.cx`. Two addresses stay on clx.cx:
-  the app (`/ru/app`), which needs the API, and the Russian home page `clx.cx/ru`, which carries the
-  sign-in card (§16) that the app, the e-mails and the site link to as `/ru#login`, `#register`,
-  `#recover` — a fragment never reaches the server, so the Worker could not tell those apart from
-  the plain page. It stays as the sign-in page for those who can open clx.cx: `noindex`, its
-  canonical on `ru.clx.cx`.
+- `clx.cx/ru/<page>` answers 301 to the same page on `ru.clx.cx`, and `clx.cx/ru` to its home
+  page. Two addresses stay on clx.cx: the app (`/ru/app`), which needs the API, and the Russian
+  sign-in card (§16), on a page of its own, `clx.cx/ru/signin` (`#login`, `#register`, `#recover`;
+  `noindex`, its canonical on `ru.clx.cx`). At first the card was to stay on `clx.cx/ru`; the owner
+  asked for `/ru` itself to redirect (16.10), and a page of its own lets it. The old `/ru#login`
+  keeps its fragment through the 301, so a page on `ru.clx.cx` opened with a card's fragment (it has
+  no card) sends it to `clx.cx/ru/signin`, `?next=` included.
 - The pages table (`site/pages.ts`) keeps one URL function that knows the Russian host; canonical
   and hreflang derive from it across the two hosts. Each host has its own sitemap and robots.txt
   listing its own pages.

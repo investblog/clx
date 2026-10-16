@@ -3,6 +3,11 @@
 // `/#/reset?t=…`, `/#/accounts/…`; the part after `#` never reaches the server, so only the page can
 // send them on. The theme switch lives in /theme.js, shared with the app.
 if (location.pathname === '/' && location.hash.startsWith('#/')) location.replace(`/app${location.hash}`);
+// The Russian host has no sign-in card (ADR 0030): a form asked for there — the old clx.cx/ru#login
+// comes here through its 301 with the fragment, the language switch of a card too — opens the card on
+// clx.cx, with the way back (?next=).
+else if (/^#(login|register|recover)$/u.test(location.hash) && document.documentElement.lang === 'ru' && !document.querySelector('[data-auth]'))
+  location.replace(`https://clx.cx/ru/signin${location.search}${location.hash}`);
 
 import './auth-client.ts';
 

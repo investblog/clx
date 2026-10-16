@@ -8,7 +8,7 @@
 //
 // The Russian host (docs/spec.md §16, ADR 0030): when the build is given `CLX_RU_ORIGIN`
 // (https://ru.clx.cx), Russian pages live there, without the `/ru` prefix, and a link between the
-// two hosts is absolute. The app and the sign-in card stay on clx.cx (`/ru/app`, `/ru#login`): they
+// two hosts is absolute. The app and the sign-in card stay on clx.cx (`/ru/app`, `/ru/signin#login`): they
 // need the API. Without it everything is on clx.cx, as before.
 import { APP_PATH, LOCALES, ORIGIN, type Locale } from './pages.ts';
 
@@ -51,10 +51,14 @@ export const pathFor = (slug: string, locale: Locale): string => link(hostOf(loc
  *  Always on clx.cx. */
 export const appPathFor = (locale: Locale): string => link('main', `${mainPrefix(locale)}${APP_PATH}`);
 
-/** A form of the home page's sign-in card (site/auth.ts, ADR 0026): `/#login`, `/ru#register` —
+/** The page of clx.cx that carries a language's sign-in card (ADR 0026): its home page, `/`, `/ru`;
+ *  once Russian has its own host, `/ru/signin` (`/ru` then redirects there). A path on clx.cx. */
+export const signInPagePath = (locale: Locale): string => (hostOf(locale) === 'ru' ? '/ru/signin' : mainPrefix(locale) || '/');
+
+/** A form of the sign-in card (site/auth.ts, ADR 0026): `/#login`, `/ru/signin#register` —
  *  always on clx.cx, where the API is. */
 export type AuthTab = 'login' | 'register' | 'recover';
-export const authPathFor = (locale: Locale, tab: AuthTab): string => link('main', `${mainPrefix(locale) || '/'}#${tab}`);
+export const authPathFor = (locale: Locale, tab: AuthTab): string => link('main', `${signInPagePath(locale)}#${tab}`);
 
 /** The file in its host's output: `index.html`, `ru.html`, `privacy.html`, `ru/privacy.html` (or
  *  `index.html`, `privacy.html` in the Russian host's own directory). */
