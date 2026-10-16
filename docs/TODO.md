@@ -34,7 +34,9 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       HTTPS enforced; clx.cx answers 301 for `/ru`, `/ru/` and the old Russian pages, `/ru/app` and the card at
       `/ru/signin` stay. Pages issued its certificate only after the custom domain was set again once the
       `CNAME` resolved (set before it, nothing came for 35 minutes).
-- [ ] A Search Console property for `ru.clx.cx`, its sitemap submitted; the clx.cx sitemap resubmitted.
+- [x] `ru.clx.cx` in Search Console: the domain property `clx.cx` covers it; its sitemap submitted
+      17.10 and read the same day (14 pages).
+- [ ] Resubmit the clx.cx sitemap (last read 14.10, before the Russian pages left it).
 - [x] `GET /v1/me` mixes field styles: `limits` is camelCase (`cfAccounts`, `rulesPerLink`), `use`
       snake_case (`cf_accounts`) — found by the live agent run of /agents (10.10). Pick snake_case
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
