@@ -27,8 +27,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] The Telegram bot (§17, ADR 0030): @clxcxbot on `POST /hook/telegram`, live 16.10 (the
       webhook, sign-in by a mailed code, `/sites` `/links` `/accounts`, adding sites and links,
       `/connect`, the notices).
-- [ ] The bot's first live conversation from a phone: link, `/sites`, `/site`, `/connect` on a test
-      Cloudflare account; the code e-mail reaching Yandex and mail.ru.
+- [x] The bot's first live conversation from a phone: checked by the owner 16.10. Its profile texts
+      are English by default and Russian for a Russian Telegram (`scripts/tg-setup.mjs describe`).
 - [ ] The Russian pages on `ru.clx.cx` (§16, ADR 0030): built and checked, off (`RU_LIVE`). To turn
       on: the owner makes a public repository for the built pages with Pages from `gh-pages`; then
       `RU_LIVE`, `scripts/deploy-ru.mjs`, the DNS-only `CNAME` `ru` → the Pages host, Pages'
