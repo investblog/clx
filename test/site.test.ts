@@ -4,11 +4,16 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { SITE_PAGES } from '../site/pages.ts';
 import { generateMatrix } from '../src/qr/generate';
-import { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } from '../site/urls.ts';
 import { PASSWORD_MIN } from '../src/auth/signup';
 import { nextRoute, signInPath } from '../ui/next.ts';
+
+// Most of this file checks the layout with Russian under clx.cx/ru (the host off, site/urls.ts),
+// which a build falls back to; the last block builds with the Russian host on. The address modules
+// read the switch when they load, so they are loaded after it is set.
+process.env.CLX_RU_ORIGIN = 'off';
+const { SITE_PAGES, STATIC_FILES } = await import('../site/pages.ts');
+const { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } = await import('../site/urls.ts');
 
 describe('addresses', () => {
   it('English at the root, Russian under /ru, no trailing slash on a home page', () => {
@@ -37,9 +42,18 @@ describe('addresses', () => {
 });
 
 describe('generated pages', () => {
-  const read = (f: string) => fs.readFileSync(`public/${f}`, 'utf8');
+  // Built with the host off into a folder of its own: public/ keeps the real build. What the
+  // generator does not write (the scripts, the hand-written files) is read from public/; anything
+  // else must come from this build.
+  const out = 'temp/site-test-off';
+  const notGenerated = new Set([...STATIC_FILES, 'site.js', 'app.js', 'app.css']);
+  const read = (f: string) => fs.readFileSync(`${notGenerated.has(f) ? 'public' : out}/${f}`, 'utf8');
   beforeAll(() => {
-    execFileSync(process.execPath, ['site/build.ts'], { stdio: 'pipe' });
+    fs.rmSync(out, { recursive: true, force: true });
+    execFileSync(process.execPath, ['site/build.ts'], { stdio: 'pipe', env: { ...process.env, CLX_RU_ORIGIN: 'off', CLX_SITE_OUT: out, CLX_RU_OUT: `${out}-ru` } });
+  });
+  afterAll(() => {
+    for (const d of [out, `${out}-ru`]) fs.rmSync(d, { recursive: true, force: true });
   });
 
   it('keywords.json: every page worth a link, in its languages; anchors pass the link pipeline’s rules', () => {

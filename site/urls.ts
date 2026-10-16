@@ -13,10 +13,11 @@
 import { APP_PATH, LOCALES, ORIGIN, type Locale } from './pages.ts';
 
 /** Set to 'https://ru.clx.cx' once that host serves the Russian pages (both builds then agree). */
-const RU_LIVE: string | null = null;
+const RU_LIVE: string | null = 'https://ru.clx.cx';
 /** The Russian host's origin, or null while Russian lives under clx.cx/ru. `CLX_RU_ORIGIN` sets it
- *  for a build that tries the host out (the tests). */
-export const RU_ORIGIN: string | null = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.CLX_RU_ORIGIN || RU_LIVE;
+ *  for a build that tries a layout out (the tests): an origin, or `off` for Russian under /ru. */
+const RU_ENV = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.CLX_RU_ORIGIN;
+export const RU_ORIGIN: string | null = RU_ENV === 'off' ? null : RU_ENV || RU_LIVE;
 
 export type Host = 'main' | 'ru';
 /** The host a language's pages are on. */

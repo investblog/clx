@@ -25,8 +25,6 @@ export const dictOf = (l: Locale): Dict => DICTS[l];
 export const appPath = (l: Locale) => (l === 'en' ? '/app' : `/${l}/app`);
 /** The home page of a language, where the sign-in card is (ADR 0026): `/`, `/ru`. */
 export const homePath = (l: Locale) => (l === 'en' ? '/' : `/${l}`);
-/** A page of the site in the language in use: `/privacy`, `/ru/privacy`. */
-export const sitePath = (slug: string) => (locale === 'en' ? slug : `/${locale}${slug}`);
 
 const tag = () => (locale === 'ru' ? 'ru-RU' : 'en-GB');
 export const when = (iso: string | null | undefined) => (iso ? `${new Date(iso).toLocaleString(tag(), { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })} UTC` : '—');

@@ -1009,7 +1009,7 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   `/how-it-works`, `/open-source`, `/vs-301`,
   `/faq`, `/privacy`, `/terms`, `/abuse` in English (`/short-links` shows its example link's flows
   as the app draws them, ADR 0019), the same
-  under `/ru` in Russian (`/ru`, `/ru/privacy`, …; no trailing slash) — to move to `ru.clx.cx`, see
+  in Russian on `ru.clx.cx` (`/`, `/privacy`, …; no trailing slash; `clx.cx/ru/<page>` redirects), see
   "The Russian host" below. The app at `/app` (and
   `/ru/app`, ADRs 0015, 0017) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).
@@ -1075,7 +1075,7 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   (`/faq` gathers the pages' own questions); an Open Graph card (its words over a sankey of flows made
   up from its path, `scripts/build-og.mjs`, ADR 0022) and JSON-LD for every indexed page
   (ADR 0016); comparison pages ([ADR 0018](./decisions/0018-comparison-pages.md)): `/bitly-alternative`,
-  `/plausible-alternative` in English, `/ru/clck-alternative`, `/ru/liveinternet-alternative` in Russian,
+  `/plausible-alternative` in English, `/clck-alternative`, `/liveinternet-alternative` in Russian (on `ru.clx.cx`),
   linked from their language's footer, and `/vs-301` in both languages — clx beside its parent service
   301.st (301.ru in Russian), with links to it; every fact about the other service is from its own pages, with
   its source and date, in `docs/comparisons.md`. `/how-it-works` (what clx creates in an account, the
@@ -1086,7 +1086,7 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   mark, the heading, the free plan in a line, the button as its only link). Pages link each other in their text (`seeAlso` in `site/layout.ts`): the tools to
   each other, to their comparison and to their group on `/faq`; a test requires every indexed page
   but the home page and the legal ones to be linked from another page's text.
-- **The Russian host** ([ADR 0030](./decisions/0030-telegram-bot-and-russian-host.md); planned).
+- **The Russian host** ([ADR 0030](./decisions/0030-telegram-bot-and-russian-host.md)).
   From Russia sites behind Cloudflare often do not open without a VPN, so the Russian pages move to
   `ru.clx.cx` on GitHub Pages: a public repository holding only the built pages (an orphan commit),
   a `CNAME` record that is DNS only. Russian has no `/ru` prefix there; `clx.cx/ru/<page>` answers
@@ -1095,9 +1095,10 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   and `#recover` open, and a fragment never reaches the server; it stays `noindex`, canonical on
   `ru.clx.cx`. One URL function knows the host; canonical, hreflang and the switch derive from it;
   each host has its own sitemap and robots.txt. On `ru.clx.cx` the first way in is the Telegram bot
-  (§17), then sign-up and sign-in on clx.cx; the CSP is a `<meta>`. Built and checked, off until the
-  host serves: `RU_LIVE` in `site/urls.ts` turns it on for both builds (`CLX_RU_ORIGIN` for a trial
-  build); `scripts/build-ui.mjs` then writes `dist-ru/` and `public/_redirects` (the 301s), and
+  (§17), then sign-up and sign-in on clx.cx; the CSP is a `<meta>`. On since 16.10:
+  `RU_LIVE` in `site/urls.ts` turns it on for both builds (`CLX_RU_ORIGIN` sets another origin, or
+  `off` for Russian under `/ru`, for a trial build); `scripts/build-ui.mjs` writes `dist-ru/` and
+  `public/_redirects` (the 301s), and
   `scripts/deploy-ru.mjs <repository>` pushes `dist-ru/` to its `gh-pages` as one orphan commit.
   The Open Graph cards of the Russian pages stay on clx.cx.
 
