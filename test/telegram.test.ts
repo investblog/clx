@@ -128,8 +128,12 @@ describe('the webhook', () => {
 
   it('30 messages a minute per Telegram user; past that the bot is silent', async () => {
     const tg = nextTg();
-    for (let i = 0; i < 31; i++) await say(tg, '/help');
-    expect(fakeTg.sent.filter((m) => m.chat_id === tg)).toHaveLength(30);
+    // The binding counts in fixed one-minute windows: a burst that crosses a window's edge gets two
+    // windows' worth, never more.
+    for (let i = 0; i < 70; i++) await say(tg, '/help');
+    const answered = fakeTg.sent.filter((m) => m.chat_id === tg).length;
+    expect(answered).toBeGreaterThanOrEqual(30);
+    expect(answered).toBeLessThanOrEqual(60);
   });
 });
 
