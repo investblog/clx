@@ -151,6 +151,8 @@ export function layout(input: LayoutInput): string {
     '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
     renderingHost() === 'ru' ? `<meta http-equiv="Content-Security-Policy" content="${RU_CSP}" />` : '',
     `<title>${escapeHtml(title)}</title>`,
+    // Search Console ownership (URL-prefix property); harmless on both hosts.
+    '<meta name="google-site-verification" content="nnNTBc0aJDgV3xTwDc5bSiOmDh_I5edqGmbY_PqYSdM" />',
     description ? `<meta name="description" content="${escapeHtml(description)}" />` : '',
     indexed
       ? [`<link rel="canonical" href="${urlFor(page.slug, locale)}" />`, ...alternatesFor(page.slug, page.locales).map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}" />`)].join('\n    ')
