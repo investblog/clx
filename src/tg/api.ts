@@ -34,7 +34,19 @@ export async function sendMessage(env: Env, chatId: number, text: string): Promi
   return ok;
 }
 
-export const deleteMessage = (env: Env, chatId: number, messageId: number) => tgCall<boolean>(env, 'deleteMessage', { chat_id: chatId, message_id: messageId });
+/** Whether `userId` is an admin of the chat, by Telegram's own answer; no answer is no. */
+export async function isChatAdmin(env: Env, chatId: number, userId: number): Promise<boolean> {
+  const m = await tgCall<{ status?: string }>(env, 'getChatMember', { chat_id: chatId, user_id: userId });
+  return m?.status === 'creator' || m?.status === 'administrator';
+}
+
+/** The bot's username, lower case, from getMe; '' when Telegram does not answer. */
+export const botName = async (env: Env) => ((await tgCall<{ username?: string }>(env, 'getMe', {}))?.username ?? '').toLowerCase();
+
+/** The bot's own user id: the token's part before the colon. */
+export const botId = (env: Env) => Number((env.TELEGRAM_BOT_TOKEN ?? '').split(':')[0]);
+
+export const deleteMessage =(env: Env, chatId: number, messageId: number) => tgCall<boolean>(env, 'deleteMessage', { chat_id: chatId, message_id: messageId });
 
 /** Parts of at most MESSAGE_MAX characters, cut between lines, so no tag is cut in two: the bot's
  *  lists put one record a line and never open a tag across lines. */

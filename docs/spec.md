@@ -882,7 +882,8 @@ that adds a site and embeds its counter at build time.
   `docs/openapi.yaml`; a test checks that every route in the code is in it and back.
 - **Plans** ([ADR 0014](./decisions/0014-a-key-on-free.md)). `free` — what sign-up gives (limits
   in §8), the page and one API key, so an agent can set clx up within those limits. `api` — the
-  higher limits of §8 and up to 5 keys; switched on by an admin on request, free of charge for now
+  higher limits of §8 and up to 5 keys; switched on by an admin on request (the bot's `/support`,
+  §17), free of charge for now
   (billing is out of scope; a paid plan comes later). Neither
   plan requires Workers Paid in the user's Cloudflare accounts — the upgrade advice (§8) says when
   one should move.
@@ -1119,13 +1120,16 @@ command menus in English and Russian).
   transaction as what it allows. The webhook takes one connection (`max_connections: 1`), so a
   user's updates come one at a time, in order.
   A reply Telegram does not take is logged, not retried: a repeat would mail a second code.
-  Private chats only; anything else is answered 200 unrecorded. Without
+  Private chats and the support group (`TELEGRAM_SUPPORT_CHAT`, below) only; anything else is
+  answered 200 unrecorded. Without
   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_CODE_KEY` — 503 `telegram_not_configured`.
 - **Identity.** `/start` → an e-mail address → a six-digit code mailed to it (an HMAC with
   `TELEGRAM_CODE_KEY`, 15 minutes, three tries counted atomically) → the account found or made (the
   address confirmed) and linked. The same answer whether the account existed. One Telegram user ↔
   one account, unique on both sides. An account made in the bot has no password; the reset request
-  sets one for the site. Sign-up keeps the site's switches and limits; Turnstile has no place in a
+  sets one for the site. `t.me/clxcxbot?start=<source>` (1–32 of `A–Z a–z 0–9 _ -`, lower-cased)
+  is written to `users.source` of an account the bot makes, never to an existing one (ADR 0031).
+  Sign-up keeps the site's switches and limits; Turnstile has no place in a
   chat, so codes are limited per Telegram user (checked first), per address and by the site's daily
   mail budget.
 - **The link.** `/unlink` in the bot; in the app the account shows the linked Telegram user and
@@ -1145,7 +1149,7 @@ command menus in English and Russian).
   bootstrap token, the message deleted; unless the connection finished and clx confirmed the
   token deleted, the bot says it may still be valid and how to revoke it by hand — any failure
   there is final, since the bot keeps no token to try again with), `/lang ru|en`,
-  `/unlink`, `/cancel`, `/help`. Not in the bot: the password, API keys, disconnecting an account,
+  `/unlink`, `/cancel`, `/help`; signed in or not, `/support` and `/terms` (below). Not in the bot: the password, API keys, disconnecting an account,
   deleting a site — page-only routes refuse the `telegram` principal as they refuse an API key.
 - **Notices.** What clx mails a user about an account — the upgrade advice (§8), the token about to
   expire or no longer working, the worker gone silent — also goes to the linked Telegram user, in
@@ -1155,3 +1159,22 @@ command menus in English and Russian).
   that is not text (a photo, a sticker) is ignored: it answers no question and spends no try.
 - **Dialogs.** A step lives two hours, a code 15 minutes; a command ends the dialog it interrupts
   (`/help` excepted).
+- **Support** ([ADR 0031](./decisions/0031-bot-support-group.md), `src/tg/support.ts`). The group
+  `TELEGRAM_SUPPORT_CHAT` (a var; without it `/support` says support is not set up). `/support`
+  sends the next message, or the text after it, to the group as `🆘 #u<Telegram id> #<language>`,
+  who wrote it and, for a linked Telegram, the address, plan and source — one message, cut to fit
+  4,096 characters once escaped (3,000 of the question at most); one Telegram does not take is
+  told to the person, not retried. The question's dialog ends before the send, so a failure after
+  it does not post it twice. No outbox, on purpose: a Worker that dies between ending the dialog
+  and the send loses that question (the person sees no "sent" and asks again), and one that dies
+  after an inline `/support <text>` was sent may post it twice — both rare, both harmless in a chat. An admin's reply to a question — routed only by its first line,
+  `🆘 #u<id> #<language>`, never by a tag elsewhere in the bot's messages — goes to that person in
+  that language, and the group hears whether it went. clx stores nothing for it; the messages stay
+  in the group, whose every member reads them, so the group holds the support staff only (the
+  privacy page says so). Telegram sends to the person can repeat only if a Worker dies after the
+  send and before the update is marked done. Admins are Telegram's answer (`getChatMember`: `creator`,
+  `administrator`) on every reply and command; anyone else is not heard, nor is a command addressed
+  to another bot (`/plan@other_bot`; the bot's own name from `getMe`). Operator commands there:
+  `/user <email>`, `/plan <email> free|api` (the person is told in Telegram), `/sources [days]`,
+  `/help`; their menu is set for the group's admins only (`tg-setup.mjs commands`). `/terms` — the
+  terms in three lines and links to the full terms and privacy pages.

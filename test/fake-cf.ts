@@ -392,10 +392,16 @@ export const fakeTg = {
   deleted: [] as { chat_id: number; message_id: number }[],
   /** while true, every call fails (Telegram unreachable) */
   down: false,
+  /** "chat:user" pairs getChatMember answers as administrator */
+  admins: new Set<string>(),
+  /** chats a message to fails (the bot blocked) */
+  blocked: new Set<number>(),
   reset() {
     this.sent = [];
     this.deleted = [];
     this.down = false;
+    this.admins = new Set();
+    this.blocked = new Set();
   },
   /** The texts sent to a chat, joined. */
   said(chat: number) {
@@ -407,7 +413,10 @@ function telegram(url: URL, init: RequestInit): Response {
   if (fakeTg.down) return Response.json({ ok: false, description: 'down' }, { status: 502 });
   const method = url.pathname.split('/').pop();
   const body = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+  if (method === 'sendMessage' && fakeTg.blocked.has(Number(body.chat_id))) return Response.json({ ok: false, description: 'Forbidden: bot was blocked by the user' }, { status: 403 });
   if (method === 'sendMessage') fakeTg.sent.push({ chat_id: Number(body.chat_id), text: String(body.text) });
+  else if (method === 'getMe') return Response.json({ ok: true, result: { id: 123, is_bot: true, username: 'clxcxbot' } });
+  else if (method === 'getChatMember') return Response.json({ ok: true, result: { status: fakeTg.admins.has(`${body.chat_id}:${body.user_id}`) ? 'administrator' : 'member' } });
   else if (method === 'deleteMessage') fakeTg.deleted.push({ chat_id: Number(body.chat_id), message_id: Number(body.message_id) });
   else return Response.json({ ok: false, description: 'unknown method' }, { status: 404 });
   return Response.json({ ok: true, result: true });

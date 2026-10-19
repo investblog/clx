@@ -26,6 +26,9 @@ export interface Env {
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   TELEGRAM_CODE_KEY?: string;
+  /** The support group's chat id (§17), a var in wrangler.jsonc: /support lands there, its admins
+   *  answer by reply and run the operator commands. Without it /support is off. */
+  TELEGRAM_SUPPORT_CHAT?: string;
   /** Workers Static Assets (public/): the pages with a markdown copy are served through the Worker (§16). */
   ASSETS: Fetcher;
 }

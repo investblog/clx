@@ -1,6 +1,9 @@
 // The bot's words (docs/spec.md §17), one object per language with the same shape: a text missing
 // in one language fails `tsc`. HTML: what comes from outside goes through `esc` at the call site.
+import { LIMITS } from '../limits';
 import type { Locale } from '../mail-text';
+
+const API = LIMITS.api;
 
 const CF_TOKENS = 'https://dash.cloudflare.com/?to=/:account/api-tokens';
 
@@ -59,11 +62,19 @@ export interface BotText {
   connected(name: string, state: string): string;
   tokenDeleted: string;
   tokenMayLive(account: string): string;
+  // support and the terms
+  terms: string;
+  askSupport: string;
+  supportSent: string;
+  supportOff: string;
+  supportFailed: string;
+  supportReply(text: string): string;
+  planChanged(plan: string): string;
 }
 
 const en: BotText = {
   help:
-    'Commands:\n/sites — sites with views of 7 days and today\n/links — short links with clicks of 7 days\n/accounts — Cloudflare accounts\n/site <code>host</code> — add a site, get its snippet\n/link <code>url</code> — make a short link\n/connect — connect a Cloudflare account\n/lang ru|en — the language\n/unlink — unlink this Telegram from the account\n/cancel — stop the current question\n\nThe rest — deleting, keys, the password — is in the app at clx.cx.',
+    'Commands:\n/sites — sites with views of 7 days and today\n/links — short links with clicks of 7 days\n/accounts — Cloudflare accounts\n/site <code>host</code> — add a site, get its snippet\n/link <code>url</code> — make a short link\n/connect — connect a Cloudflare account\n/lang ru|en — the language\n/unlink — unlink this Telegram from the account\n/cancel — stop the current question\n/support — write to support (ask for the api plan here too)\n/terms — the terms and privacy\n\nThe rest — deleting, keys, the password — is in the app at clx.cx.',
   hello: 'clx: a visit counter and short links in your own Cloudflare account. Send your e-mail address — I will send a code to it.',
   askEmail: 'Send your e-mail address: I will send a code to it. A new address gets a new account.',
   badEmail: 'That does not look like an e-mail address. Send it once more, or /cancel.',
@@ -127,11 +138,19 @@ const en: BotText = {
   connected: (name, state) => `Connected: <b>${name}</b> — ${state}. The worker installs in the background; /accounts shows how it goes.`,
   tokenDeleted: 'The bootstrap token is deleted in Cloudflare.',
   tokenMayLive: (account) => `<b>The bootstrap token may still be valid.</b> Revoke it by hand: https://dash.cloudflare.com/${account}/api-tokens`,
+  terms:
+    'In short: clx is free; the counter and the links run in your own Cloudflare account, on its quotas; the counter sets no cookies and keeps no IP addresses; clx.cx keeps only the totals.\n\nThe terms: https://clx.cx/terms\nPrivacy: https://clx.cx/privacy',
+  askSupport: 'Write your question in one message: what you did and what went wrong. For the api plan, say how many sites and Cloudflare accounts you need. /cancel to stop.',
+  supportSent: 'Sent to support. The answer comes here, in this chat.',
+  supportOff: 'Support in the bot is not set up yet. Try again later.',
+  supportFailed: 'The question did not reach support. Try /support again in a few minutes.',
+  supportReply: (text) => `<b>Support:</b>\n${text}`,
+  planChanged: (plan) => (plan === 'api' ? `Your plan is now <b>api</b>: up to ${API.cfAccounts} Cloudflare accounts, ${API.sites} sites and ${API.apiKeys} API keys.` : 'Your plan is now <b>free</b>.'),
 };
 
 const ru: BotText = {
   help:
-    'Команды:\n/sites — сайты: просмотры за 7 дней и сегодня\n/links — короткие ссылки: клики за 7 дней\n/accounts — аккаунты Cloudflare\n/site <code>хост</code> — добавить сайт и получить сниппет\n/link <code>адрес</code> — сделать короткую ссылку\n/connect — подключить аккаунт Cloudflare\n/lang ru|en — язык\n/unlink — отвязать этот Telegram от аккаунта\n/cancel — прервать текущий вопрос\n\nОстальное — удаление, ключи, пароль — в кабинете на clx.cx.',
+    'Команды:\n/sites — сайты: просмотры за 7 дней и сегодня\n/links — короткие ссылки: клики за 7 дней\n/accounts — аккаунты Cloudflare\n/site <code>хост</code> — добавить сайт и получить сниппет\n/link <code>адрес</code> — сделать короткую ссылку\n/connect — подключить аккаунт Cloudflare\n/lang ru|en — язык\n/unlink — отвязать этот Telegram от аккаунта\n/cancel — прервать текущий вопрос\n/support — написать в поддержку (план api просят тоже здесь)\n/terms — условия и конфиденциальность\n\nОстальное — удаление, ключи, пароль — в кабинете на clx.cx.',
   hello: 'clx: счётчик посещений и короткие ссылки в вашем собственном аккаунте Cloudflare. Пришлите адрес почты — я отправлю на него код.',
   askEmail: 'Пришлите адрес почты: я отправлю на него код. Для нового адреса заведу новый аккаунт.',
   badEmail: 'Это не похоже на адрес почты. Пришлите ещё раз или /cancel.',
@@ -195,6 +214,14 @@ const ru: BotText = {
   connected: (name, state) => `Подключён: <b>${name}</b> — ${state}. Воркер ставится в фоне; как идёт — /accounts.`,
   tokenDeleted: 'Bootstrap-токен удалён в Cloudflare.',
   tokenMayLive: (account) => `<b>Bootstrap-токен, возможно, ещё действует.</b> Отзовите его вручную: https://dash.cloudflare.com/${account}/api-tokens`,
+  terms:
+    'Коротко: clx бесплатный; счётчик и ссылки работают в вашем собственном аккаунте Cloudflare, в его квотах; счётчик не ставит кук и не хранит IP-адресов; на clx.cx хранятся только итоги.\n\nУсловия: https://ru.clx.cx/terms\nКонфиденциальность: https://ru.clx.cx/privacy',
+  askSupport: 'Напишите вопрос одним сообщением: что делали и что пошло не так. Для плана api — сколько нужно сайтов и аккаунтов Cloudflare. Прервать — /cancel.',
+  supportSent: 'Отправил в поддержку. Ответ придёт сюда, в этот чат.',
+  supportOff: 'Поддержка в боте ещё не настроена. Попробуйте позже.',
+  supportFailed: 'Вопрос не дошёл до поддержки. Повторите /support через несколько минут.',
+  supportReply: (text) => `<b>Поддержка:</b>\n${text}`,
+  planChanged: (plan) => (plan === 'api' ? `Ваш план теперь <b>api</b>: до ${API.cfAccounts} аккаунтов Cloudflare, ${API.sites} сайтов и ${API.apiKeys} ключей API.` : 'Ваш план теперь <b>free</b>.'),
 };
 
 export const BOT: Record<Locale, BotText> = { en, ru };

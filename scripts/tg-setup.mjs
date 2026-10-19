@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// node scripts/tg-setup.mjs [setup | describe | info | delete]
+// node scripts/tg-setup.mjs [setup | commands | describe | info | delete]
 //
 // The Telegram bot (docs/spec.md §17). Its token is read from .secrets/telegram.env
 // (TELEGRAM_BOT_TOKEN=…, put there by the owner); nothing secret is printed.
@@ -7,6 +7,8 @@
 //   TELEGRAM_CODE_KEY and puts them too (values on stdin, through scripts/wrangler.mjs), then points
 //   the webhook at <origin>/hook/telegram with that secret and sets the command menus (en, ru).
 //   A new code key voids the codes mailed before it — they live 15 minutes.
+// - commands: sets the command menus only — en, ru, and the operator menu for the admins of the
+//   support group (TELEGRAM_SUPPORT_CHAT in wrangler.jsonc).
 // - describe: sets the profile texts (description, short description; en default, ru) only.
 // - info: the webhook's state and the profile texts, without the token.
 // - delete: takes the webhook off; the Worker's secrets stay.
@@ -17,8 +19,8 @@ import { lockSecrets, SECRETS } from './secrets-dir.mjs';
 
 const ORIGIN = process.env.CLX_ORIGIN ?? 'https://clx.cx';
 const cmd = process.argv[2] ?? 'setup';
-if (!['setup', 'describe', 'info', 'delete'].includes(cmd)) {
-  console.error('usage: node scripts/tg-setup.mjs [setup | describe | info | delete]');
+if (!['setup', 'commands', 'describe', 'info', 'delete'].includes(cmd)) {
+  console.error('usage: node scripts/tg-setup.mjs [setup | commands | describe | info | delete]');
   process.exit(2);
 }
 
@@ -64,6 +66,8 @@ const COMMANDS = {
     ['lang', 'Language: /lang ru or /lang en'],
     ['unlink', 'Unlink this Telegram'],
     ['cancel', 'Stop the current question'],
+    ['support', 'Write to support'],
+    ['terms', 'Terms and privacy'],
     ['help', 'What the bot can do'],
   ],
   ru: [
@@ -76,9 +80,30 @@ const COMMANDS = {
     ['lang', 'Язык: /lang ru или /lang en'],
     ['unlink', 'Отвязать этот Telegram'],
     ['cancel', 'Прервать текущий вопрос'],
+    ['support', 'Написать в поддержку'],
+    ['terms', 'Условия и конфиденциальность'],
     ['help', 'Что умеет бот'],
   ],
 };
+
+// The support group's admins see the operator commands (src/tg/support.ts) in its menu.
+const OPERATOR = [
+  ['user', 'The account: /user email'],
+  ['plan', 'Switch the plan: /plan email free|api'],
+  ['sources', 'Sign-ups by start parameter: /sources [days]'],
+  ['help', 'Operator commands'],
+];
+
+async function commands() {
+  for (const [lang, list] of Object.entries(COMMANDS)) {
+    const commands = list.map(([command, description]) => ({ command, description }));
+    await bot('setMyCommands', lang === 'en' ? { commands } : { commands, language_code: lang });
+  }
+  // The chat id is the var TELEGRAM_SUPPORT_CHAT of wrangler.jsonc.
+  const chat = fs.existsSync('wrangler.jsonc') ? fs.readFileSync('wrangler.jsonc', 'utf8').match(/"TELEGRAM_SUPPORT_CHAT"\s*:\s*"(-?\d+)"/u)?.[1] : undefined;
+  if (chat) await bot('setMyCommands', { commands: OPERATOR.map(([command, description]) => ({ command, description })), scope: { type: 'chat_administrators', chat_id: Number(chat) } });
+  return chat;
+}
 
 // The profile texts: English for everyone, Russian for a Russian Telegram (the owner's wording).
 const ABOUT = {
@@ -91,7 +116,8 @@ const ABOUT = {
       '• add a site and get its counter code;',
       '• make a short link;',
       '• connect a Cloudflare account;',
-      '• get notices about limits and the token.',
+      '• get notices about limits and the token;',
+      '• write to support.',
       '',
       'Works where clx.cx does not open.',
     ].join('\n'),
@@ -106,7 +132,8 @@ const ABOUT = {
       '• добавить сайт и получить код счётчика;',
       '• создать короткую ссылку;',
       '• подключить аккаунт Cloudflare;',
-      '• получать уведомления о лимитах и токене.',
+      '• получать уведомления о лимитах и токене;',
+      '• написать в поддержку.',
       '',
       'Работает там, где clx.cx не открывается.',
     ].join('\n'),
@@ -122,7 +149,10 @@ async function describe() {
   }
 }
 
-if (cmd === 'describe') {
+if (cmd === 'commands') {
+  const chat = await commands();
+  console.log(`command menus set (en, ru)${chat ? `; operator menu for the admins of ${chat}` : '; no TELEGRAM_SUPPORT_CHAT in wrangler.jsonc, no operator menu'}`);
+} else if (cmd === 'describe') {
   await describe();
   console.log('description and short description set (en default, ru)');
 } else if (cmd === 'info') {
@@ -145,10 +175,7 @@ if (cmd === 'describe') {
   // One connection: Telegram sends a user's updates one at a time and in order, so a later message
   // (/cancel) is never handled before an earlier one (the token it cancels).
   await bot('setWebhook', { url: `${ORIGIN}/hook/telegram`, secret_token: secret, allowed_updates: ['message'], max_connections: 1 });
-  for (const [lang, list] of Object.entries(COMMANDS)) {
-    const commands = list.map(([command, description]) => ({ command, description }));
-    await bot('setMyCommands', lang === 'en' ? { commands } : { commands, language_code: lang });
-  }
+  await commands();
   const me = await bot('getMe');
   await describe();
   console.log(`webhook: ${ORIGIN}/hook/telegram for @${me.username}; commands and profile texts set (en, ru)`);

@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { sameBytes } from '../auth/password';
 import type { Env } from '../types';
 import { handleMessage, type Fetcher, type TgMessage } from './bot';
+import { supportChat } from './support';
 
 /** Handled updates are kept two days: Telegram gives up redelivering long before. */
 export const UPDATES_TTL = 2 * 86_400_000;
@@ -23,9 +24,10 @@ export function telegram(fetcher: Fetcher) {
     if (!sameBytes(enc.encode(c.req.header('x-telegram-bot-api-secret-token') ?? ''), enc.encode(env.TELEGRAM_WEBHOOK_SECRET))) return c.json({ error: { code: 'unauthorized', message: 'Wrong secret.' } }, 401);
     const update = (await c.req.json().catch(() => null)) as { update_id?: unknown; message?: TgMessage } | null;
     const msg = update?.message;
-    // Only a person's private message is anything to the bot; the rest is answered 200 unrecorded,
-    // and Telegram does not send it again.
-    if (!update || typeof update.update_id !== 'number' || !msg || msg.chat?.type !== 'private' || !msg.from || msg.from.is_bot) return c.json({ ok: true });
+    // Only a person's private message, or one in the support group, is anything to the bot; the rest
+    // is answered 200 unrecorded, and Telegram does not send it again.
+    const chatOk = msg?.chat?.type === 'private' || (msg?.chat?.id !== undefined && msg.chat.id === supportChat(env));
+    if (!update || typeof update.update_id !== 'number' || !msg || !chatOk || !msg.from || msg.from.is_bot) return c.json({ ok: true });
     const updateId = update.update_id;
     const now = Date.now();
     const running = () => c.json({ error: { code: 'operation_in_progress', message: 'Still running; retry.' } }, 500);

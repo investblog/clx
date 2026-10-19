@@ -10,6 +10,9 @@ import type { Env } from '../src/types';
 import { fakeCtx, testEnv } from './env';
 import { ACC, BOOT, fakeCf, fakeTg, useFakeCloudflare } from './fake-cf';
 
+/** The support group (§17); the bot's own id is the token's '123'. */
+const GROUP = -100777;
+const BOT_ID = 123;
 let env: Env;
 let dispose: () => Promise<void>;
 const mail: { to: string; subject: string; text: string }[] = [];
@@ -20,6 +23,7 @@ beforeAll(async () => {
     TELEGRAM_BOT_TOKEN: '123:bot',
     TELEGRAM_WEBHOOK_SECRET: 'hook-secret',
     TELEGRAM_CODE_KEY: 'code-key',
+    TELEGRAM_SUPPORT_CHAT: String(GROUP),
     EMAIL: { send: async (m) => (mail.push(m), { messageId: `m${mail.length}` }) },
   };
 });
@@ -423,5 +427,136 @@ describe('notices', () => {
       env.EMAIL!.send = send;
     }
     expect(fakeTg.said(tg)).not.toContain('clx: later');
+  });
+});
+
+/** A message in the support group from `from`, optionally a reply to a message of `reply.from`. */
+async function inGroup(from: number, text: string, reply?: { from: number; text: string }): Promise<number> {
+  const id = ++updateId;
+  return hook({ update_id: id, message: { message_id: id, from: { id: from }, chat: { id: GROUP, type: 'supergroup' }, text, ...(reply ? { reply_to_message: { from: { id: reply.from }, text: reply.text } } : {}) } });
+}
+const toGroup = () => fakeTg.sent.filter((m) => m.chat_id === GROUP);
+
+describe('support', () => {
+  it('/support takes a question signed in or not; it lands in the group with who asked', async () => {
+    const stranger = nextTg();
+    await say(stranger, '/support');
+    expect(last(stranger)).toContain('Write your question');
+    await say(stranger, 'Cannot sign in <help>');
+    expect(last(stranger)).toContain('Sent to support');
+    expect(toGroup().at(-1)!.text).toBe(`🆘 #u${stranger} #en\n@u${stranger} · not signed in\n\nCannot sign in &lt;help&gt;`);
+    // The question is over: the next text is not sent again.
+    await say(stranger, 'more');
+    expect(toGroup()).toHaveLength(1);
+    const tg = nextTg();
+    const userId = await signIn(tg, 'asks@example.com');
+    await env.DB.prepare("UPDATE users SET source = 'zenno' WHERE id = ?").bind(userId).run();
+    await say(tg, '/support I need the api plan for 40 sites');
+    expect(toGroup().at(-1)!.text).toBe(`🆘 #u${tg} #en\n@u${tg} · asks@example.com · plan free · source zenno\n\nI need the api plan for 40 sites`);
+  });
+
+  it('without a support group /support says so; a group that does not take it is told to the person', async () => {
+    const tg = nextTg();
+    const id = ++updateId;
+    await hook({ update_id: id, message: { message_id: id, from: { id: tg }, chat: { id: tg, type: 'private' }, text: '/support hi' } }, 'hook-secret', { ...env, TELEGRAM_SUPPORT_CHAT: '' });
+    expect(last(tg)).toContain('not set up yet');
+    fakeTg.blocked.add(GROUP);
+    await say(tg, '/support hi');
+    expect(last(tg)).toContain('did not reach support');
+  });
+
+  it("an admin's reply to the bot's message goes to the person, in their language; others are not heard", async () => {
+    const tg = nextTg();
+    await say(tg, '/support вопрос', { lang: 'ru' });
+    const question = toGroup().at(-1)!.text;
+    expect(question).toContain(`#u${tg} #ru`);
+    const admin = 9001;
+    const member = 9002;
+    fakeTg.admins.add(`${GROUP}:${admin}`);
+    // A member's reply, an admin's reply to someone else, talk without a reply: silence.
+    await inGroup(member, 'I am not support', { from: BOT_ID, text: question });
+    await inGroup(admin, 'a note', { from: member, text: question });
+    await inGroup(admin, 'just talking');
+    expect(fakeTg.said(tg)).not.toContain('Поддержка');
+    await inGroup(admin, 'Ответ <b>', { from: BOT_ID, text: question });
+    expect(last(tg)).toBe('<b>Поддержка:</b>\nОтвет &lt;b&gt;');
+    expect(toGroup().at(-1)!.text).toBe(`✓ sent to #u${tg}`);
+    // A tag the bot echoed in another answer routes nothing: only a question's header does.
+    const victim = nextTg();
+    await inGroup(admin, `/user #u${victim} #en`);
+    const echo = toGroup().at(-1)!.text;
+    expect(echo).toContain(`#u${victim}`);
+    await inGroup(admin, 'phish', { from: BOT_ID, text: echo });
+    expect(fakeTg.said(victim)).toBe('');
+    fakeTg.blocked.add(tg);
+    await inGroup(admin, 'again', { from: BOT_ID, text: question });
+    expect(toGroup().at(-1)!.text).toContain('not delivered');
+  });
+
+  it('a long question that escaping stretches stays one message with its header', async () => {
+    const tg = nextTg();
+    await say(tg, `/support ${'<&'.repeat(1400)}`);
+    expect(toGroup()).toHaveLength(1);
+    expect(toGroup()[0]!.text.length).toBeLessThanOrEqual(4096);
+    expect(toGroup()[0]!.text).toMatch(new RegExp(`^🆘 #u${tg} #en\\n`, 'u'));
+    // Never cut inside an entity.
+    expect(toGroup()[0]!.text).not.toMatch(/&(?!amp;|lt;|gt;)/u);
+  });
+
+  it('operator commands: admins only; /plan switches it and tells the person; /user and /sources', async () => {
+    const tg = nextTg();
+    await say(tg, '/start zenno');
+    await say(tg, 'Op@Example.com');
+    await say(tg, codeIn(mail.filter((m) => m.to === 'op@example.com').at(-1)));
+    expect(await env.DB.prepare("SELECT source FROM users WHERE email = 'op@example.com'").first<string>('source')).toBe('zenno');
+    const admin = 9003;
+    await inGroup(admin, '/plan op@example.com api');
+    expect(toGroup()).toEqual([]);
+    expect(await env.DB.prepare("SELECT plan FROM users WHERE email = 'op@example.com'").first<string>('plan')).toBe('free');
+    fakeTg.admins.add(`${GROUP}:${admin}`);
+    // A command for another bot of the group is not ours.
+    await inGroup(admin, '/plan@other_bot op@example.com api');
+    expect(await env.DB.prepare("SELECT plan FROM users WHERE email = 'op@example.com'").first<string>('plan')).toBe('free');
+    await inGroup(admin, '/plan@ClxCxBot Op@example.com api');
+    expect(await env.DB.prepare("SELECT plan FROM users WHERE email = 'op@example.com'").first<string>('plan')).toBe('api');
+    expect(last(tg)).toContain('Your plan is now <b>api</b>: up to 50 Cloudflare accounts');
+    expect(toGroup().at(-1)!.text).toBe('op@example.com: plan api — told in Telegram');
+    await inGroup(admin, '/plan op@example.com gold');
+    expect(toGroup().at(-1)!.text).toContain('Use: /plan');
+    await inGroup(admin, '/user op@example.com');
+    expect(toGroup().at(-1)!.text).toContain('plan api');
+    expect(toGroup().at(-1)!.text).toContain(`#u${tg} · source zenno`);
+    await inGroup(admin, '/user nobody@example.com');
+    expect(toGroup().at(-1)!.text).toContain('No account');
+    await env.DB.prepare("INSERT INTO users (email, password_hash, created_at) VALUES ('site@example.com', 'x', ?)").bind(Date.now()).run();
+    await inGroup(admin, '/sources');
+    expect(toGroup().at(-1)!.text).toContain('zenno — 1');
+    expect(toGroup().at(-1)!.text).toContain('— — 1');
+    await inGroup(admin, '/help');
+    expect(toGroup().at(-1)!.text).toContain('Operator commands');
+  });
+
+  it('a start parameter is kept only for an account the bot makes, and only if it is well-formed', async () => {
+    await env.DB.prepare("INSERT INTO users (email, password_hash, created_at) VALUES ('old@example.com', 'x', 0)").run();
+    const a = nextTg();
+    await say(a, '/start forum');
+    await say(a, 'old@example.com');
+    await say(a, codeIn(mail.filter((m) => m.to === 'old@example.com').at(-1)));
+    expect(await env.DB.prepare("SELECT source FROM users WHERE email = 'old@example.com'").first<string | null>('source')).toBeNull();
+    const b = nextTg();
+    await say(b, '/start bad.param!');
+    await say(b, 'fresh@example.com');
+    await say(b, codeIn(mail.filter((m) => m.to === 'fresh@example.com').at(-1)));
+    expect(await env.DB.prepare("SELECT source FROM users WHERE email = 'fresh@example.com'").first<string | null>('source')).toBeNull();
+  });
+
+  it('/terms answers with the short terms, signed in or not; any other group is still ignored', async () => {
+    const tg = nextTg();
+    await say(tg, '/terms');
+    expect(last(tg)).toContain('https://clx.cx/terms');
+    const other = nextTg();
+    expect((await say(other, '/support hi', { chat: 'group' })).status).toBe(200);
+    expect(fakeTg.said(other)).toBe('');
+    expect(toGroup()).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@ import { appUrl, localeOf, MAIL, type Locale } from '../mail-text';
 import type { Env } from '../types';
 import { deleteMessage, esc, sendMessage } from './api';
 import { advance, advanceSpending, dialogOf, endDialog, endDialogIf, identityOf, issueCode, startDialog, stillHolds, tryCode, type Dialog, type Identity } from './state';
+import { operatorMessage, supportChat, toSupport } from './support';
 import { BOT, sparkline, type BotText } from './text';
 
 type Ctx = Context['executionCtx'];
@@ -22,9 +23,13 @@ export interface TgMessage {
   from?: { id: number; is_bot?: boolean; username?: string; first_name?: string; language_code?: string };
   chat: { id: number; type: string };
   text?: string;
+  /** In the support group: the message an admin answers. */
+  reply_to_message?: { from?: { id: number }; text?: string };
 }
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/u;
+/** A start parameter kept as the account's source: Telegram allows A–Z, a–z, 0–9, _ and - (§17). */
+const SOURCE = /^[A-Za-z0-9_-]{1,32}$/u;
 /** Mailed codes per Telegram user a day — checked before the address's own limit. */
 const CODES_A_DAY = { max: 5, windowSec: 86_400 };
 /** How many sites or links a list shows; the rest are in the app. */
@@ -66,8 +71,11 @@ function refusal(turn: Turn, r: { status: number; body: Record<string, any> }): 
 
 export async function handleMessage(env: Env, exec: Ctx, fetcher: Fetcher, updateId: number, msg: TgMessage): Promise<void> {
   const from = msg.from;
-  // Private chats only: answers carry snippets and codes, and a group would read them.
-  if (msg.chat.type !== 'private' || !from || from.is_bot) return;
+  if (!from || from.is_bot) return;
+  // The support group: its admins' replies and operator commands (support.ts).
+  if (msg.chat.id === supportChat(env)) return typeof msg.text === 'string' ? operatorMessage(env, msg, Date.now()) : undefined;
+  // Otherwise private chats only: answers carry snippets and codes, and a group would read them.
+  if (msg.chat.type !== 'private') return;
   // A photo, a sticker, a file: nothing the bot asked for. It changes no question and spends no try.
   if (typeof msg.text !== 'string') return;
   const now = Date.now();
@@ -98,9 +106,17 @@ async function command_(turn: Turn, command: string, arg: string): Promise<void>
   const { t } = turn;
   if (command === 'help') return void (await say(turn, t.help));
   if (command === 'cancel') return void (await say(turn, t.cancelled));
+  if (command === 'terms') return void (await say(turn, t.terms));
+  // Support takes a question signed in or not: one who cannot sign in needs it most.
+  if (command === 'support') {
+    if (supportChat(turn.env) === null) return void (await say(turn, t.supportOff));
+    return arg ? question(turn, arg) : ask(turn, 'support', {}, t.askSupport);
+  }
   if (command === 'start') {
     if (turn.me) return void (await say(turn, t.help));
-    await startDialog(turn.env, turn.tg, 'email', {}, turn.now);
+    // t.me/<bot>?start=<source>: where the person came from, kept if the bot makes the account.
+    const source = SOURCE.test(arg) ? arg.toLowerCase() : null;
+    await startDialog(turn.env, turn.tg, 'email', source ? { source } : {}, turn.now);
     return void (await say(turn, t.hello));
   }
   if (!turn.me) return void (await say(turn, command === 'lang' || Object.hasOwn(COMMANDS, command) ? t.needLink : t.unknownCommand));
@@ -121,6 +137,17 @@ const COMMANDS: Record<string, (turn: Turn, arg: string) => Promise<void>> = {
   unlink,
 };
 
+/** A question to the support group, with who asks: the account if the Telegram is linked. The
+ *  question ends (`end`) before it is sent, as the token's step does: a failure after the send
+ *  must not bring the same message back to a live question and post it twice. */
+async function question(turn: Turn, text: string, end?: () => Promise<unknown>): Promise<void> {
+  const me = turn.me;
+  const account = me ? await turn.env.DB.prepare('SELECT plan, source FROM users WHERE id = ?').bind(me.user_id).first<{ plan: string; source: string | null }>() : null;
+  await end?.();
+  const sent = await toSupport(turn.env, { tg: turn.tg, who: turn.who, lang: turn.lang, email: me?.email ?? null, plan: account?.plan ?? null, source: account?.source ?? null }, text);
+  await say(turn, sent ? turn.t.supportSent : turn.t.supportFailed);
+}
+
 async function ask(turn: Turn, stepName: string, data: Record<string, unknown>, question: string): Promise<void> {
   await startDialog(turn.env, turn.tg, stepName, data, turn.now);
   await say(turn, question);
@@ -130,9 +157,11 @@ async function step(turn: Turn, d: Dialog, text: string): Promise<void> {
   const { t } = turn;
   switch (d.step) {
     case 'email':
-      return emailStep(turn, text);
+      return emailStep(turn, d, text);
     case 'link_code':
       return linkCode(turn, d, text);
+    case 'support':
+      return question(turn, text, () => endDialogIf(turn.env, turn.tg, d.nonce));
   }
   if (!turn.me) return void (await say(turn, t.needLink));
   // An answer that acts ends its question after the action: a passing failure leaves the question,
@@ -170,18 +199,19 @@ async function step(turn: Turn, d: Dialog, text: string): Promise<void> {
 
 // ---- sign-in: an address, a mailed code, the link ----
 
-async function emailStep(turn: Turn, text: string): Promise<void> {
+async function emailStep(turn: Turn, d: Dialog, text: string): Promise<void> {
   const { env, t } = turn;
   const email = text.toLowerCase();
+  const source = typeof d.data.source === 'string' ? d.data.source : null;
   if (!EMAIL.test(email) || new TextEncoder().encode(email).length > 254) return void (await say(turn, t.badEmail));
   // The Telegram user's own limit first: one who is over it cannot use up an address's.
   if (await overLimit(env, `tg:code:${turn.tg}`, CODES_A_DAY, turn.now)) return void (await say(turn, t.tooManyCodes));
   // Over the address's limit no e-mail goes, and the answer is the same: it tells nothing about the address.
   if (await reserveMail(env, email, turn.now)) {
-    const code = await issueCode(env, turn.tg, 'link', 'link_code', { email, lang: turn.lang }, turn.now);
+    const code = await issueCode(env, turn.tg, 'link', 'link_code', { email, lang: turn.lang, source }, turn.now);
     const mail = MAIL[turn.lang].tgCode(code, 'link');
     await deliverMail(env, email, mail.subject, mail.text);
-  } else await startDialog(env, turn.tg, 'link_code', { email, purpose: 'link' }, turn.now);
+  } else await startDialog(env, turn.tg, 'link_code', { email, purpose: 'link', source }, turn.now);
   await say(turn, t.codeSent);
 }
 
@@ -204,9 +234,10 @@ async function linkCode(turn: Turn, d: Dialog, text: string): Promise<void> {
   const [made, linked, spent] = await db.batch([
     db
       .prepare(
-        `INSERT INTO users (email, password_hash, created_at, session_version, locale, email_confirmed_at) SELECT ?1, ?4, ?2, ?2, ?3, ?2 WHERE ${stillHolds} ON CONFLICT (email) DO UPDATE SET email_confirmed_at = coalesce(email_confirmed_at, ?2) RETURNING id, locale`,
+        // The source only for an account made here (ON CONFLICT leaves an old one's as it was).
+        `INSERT INTO users (email, password_hash, created_at, session_version, locale, email_confirmed_at, source) SELECT ?1, ?4, ?2, ?2, ?3, ?2, ?5 WHERE ${stillHolds} ON CONFLICT (email) DO UPDATE SET email_confirmed_at = coalesce(email_confirmed_at, ?2) RETURNING id, locale`,
       )
-      .bind(email, turn.now, lang, unusableHash(), ...code),
+      .bind(email, turn.now, lang, unusableHash(), typeof d.data.source === 'string' ? d.data.source : null, ...code),
     db
       .prepare(`INSERT INTO tg_identities (tg_user_id, user_id, username, linked_at) SELECT ?, id, ?, ? FROM users WHERE email = ? AND ${stillHolds} ON CONFLICT DO NOTHING`)
       .bind(turn.tg, turn.msg.from?.username ?? null, turn.now, email, ...code),
