@@ -67,13 +67,17 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       freed rowid; both started at session version 0; Codex 07.10). New users now start at the
       sign-up time as their session version.
 - [ ] Proxy mode for the counter (a site not on Cloudflare) — after v2, if needed.
-- [ ] `over` from "pushes reporting write failures" (§8): the heartbeat carries the worker's error
-      text only, with no clean sign of a failed D1 write — add one to the push body when it is
-      needed. (The advice e-mails, the silence, renew and revoked e-mails — done in stage 6c.)
-- [ ] Account e-mails are not retried: a notice whose send fails (no `EMAIL`, Email Sending down)
-      is lost — the state it reports is still on the account's page.
-- [ ] The API's share of the per-account write budget (§8): idempotency rows and changes made
-      through `/v1` are not counted yet — only the receiver's writes are (stage 4c).
+Left as they are (owner, 19.10.2026) — not worth their cost now; reopened only if a real case needs one:
+- `over` from "pushes reporting write failures" (§8): the heartbeat carries the worker's error
+  text only, with no clean sign of a failed D1 write. `over` already comes from writes at the
+  limit in the account's analytics; a new sign would be a new bundle, rolled out by ADR 0032.
+- Account e-mails are not retried: a notice whose send fails (no `EMAIL`, Email Sending down)
+  is lost — the state it reports is still on the account's page, and a sign-in or reset e-mail
+  is asked for again by the person.
+- The API's share of the per-account write budget (§8): idempotency rows and changes made
+  through `/v1` are not counted — only the receiver's writes are (stage 4c). Counted in the same
+  budget they would take quota from the worker's reports; API writes are bounded by the key's
+  rate limit (120 a minute). If they need a bound of their own: a daily cap of changes per user.
 - [x] Flaky tests — Windows runs out of outgoing ports. **10.10: the owner widened the range on the
       dev machine** (`netsh int ipv4 set dynamicport tcp start=10000 num=55000`); `test/ports.ts` now
       waits only while fewer than 15,000 of the range's ports are free, so there it does not wait. A
