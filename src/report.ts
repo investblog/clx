@@ -3,7 +3,7 @@
 // user's clx-edge database; breakdowns from that database through the D1 REST API when asked for. The
 // breakdowns are best effort: no token, a Cloudflare error or a timeout leaves them unavailable
 // while the totals still come. Reads of the user's database are not logged (§8).
-import { dayOf, HOUR_COLUMNS } from '../edge/contract';
+import { dayOf, HOUR_COLUMNS, OTHER } from '../edge/contract';
 import { CfError, cf } from './cf/api';
 import { inService, workingToken, type EdgeAccount } from './cf/connect';
 import { planOf, writeBudget } from './limits';
@@ -28,7 +28,10 @@ export type Unavailable = 'not_installed' | 'cloudflare' | 'rate_limited';
 // D1 takes at most 5 terms in a compound SELECT (cloudflare-facts.md), so the six view dimensions
 // are one pass over the rows joined with a list of dimension names, not six UNION ALL terms. The
 // value is named `val`, never `key`: json_each has a column `key`, and GROUP BY would take that one.
-const COLUMNS = { pages: 'page', sources: 'source', countries: 'country', devices: 'device', browsers: 'browser', os: 'os' } as const;
+// The row of the views beyond the detail caps names only its page, `(other)` (edge/contract.ts):
+// its views are other in every dimension, not Direct or Unknown.
+const otherOr = (col: string) => `CASE WHEN page = '${OTHER}' THEN page ELSE ${col} END`;
+const COLUMNS = { pages: 'page', sources: otherOr('source'), countries: otherOr('country'), devices: otherOr('device'), browsers: otherOr('browser'), os: otherOr('os') } as const;
 /** A link's flows, source → destination (its `page`, edge/contract.ts `destinationOf`), as one more
  *  dimension of the same pass: `source || ' ' || page` — a source is a host, `qr` or '' and has no
  *  space. Up to FLOWS of them, far more than a chart's 8 × 8, so its top sources and destinations

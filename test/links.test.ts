@@ -462,6 +462,21 @@ describe('the report of a link', () => {
     expect(b.flows.map((f: { to: string }) => parseDestination(f.to))).toContainEqual({ rule: { countries: [], devices: ['mobile'] }, url: long.slice(0, 504) });
   });
 
+  it('the views beyond the detail caps are other in every breakdown, not Direct or Unknown', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
+    await visit('https://go.example.com/promo');
+    const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;
+    userDb()
+      .prepare("INSERT INTO views_hourly (target, hour, page, source, country, device, browser, os, views) VALUES (?, ?, '(other)', '', '', '', '', '', 3)")
+      .run(t, Math.floor(Date.now() / 3_600_000));
+    const b = (await call('GET', `/v1/links/${id}/report?period=today&breakdowns=1`)).body.report.breakdowns;
+    for (const dim of ['pages', 'sources', 'countries', 'devices', 'browsers', 'os']) {
+      expect(b[dim]).toContainEqual({ key: '(other)', n: 3 });
+      expect(b[dim].reduce((n: number, e: { n: number }) => n + e.n, 0)).toBe(4);
+    }
+    expect(b.sources).toContainEqual({ key: '', n: 1 }); // the one direct click
+  });
+
   it('closed days from clx.cx, today from the account; the 7 days add up', async () => {
     const id = (await addLink({ code: 'promo', url: 'https://example.org/' })).body.link.id;
     const t = (await env.DB.prepare('SELECT target FROM links').first<string>('target'))!;

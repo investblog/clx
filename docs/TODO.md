@@ -50,11 +50,9 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       `linkhost:` entry sent the request to `fetch(request)`, and a link host has no origin. Now a
       GET or HEAD of a one-segment path that could be a link answers `503 Retry-After` (§8); a site's
       route has two segments at least, so its requests still pass through (19.10, clx-edge 115260b9b611).
-- [ ] **Views over the detail caps show as direct** (found 11.10 with ADR 0019): the `(other)` row
-      keeps only `page = '(other)'`, so in the `sources` breakdown its views have source `''` and the
-      app names them "Direct" (the other dimensions: "Unknown"). The flows chart already treats that
-      row as other on both sides; the per-dimension breakdowns should do the same (in `src/report.ts`,
-      not the worker).
+- [x] **Views over the detail caps show as direct** (found 11.10 with ADR 0019): the `(other)` row
+      keeps only `page = '(other)'`, so its views were "Direct" in `sources` and "Unknown" elsewhere.
+      `src/report.ts` now reads that row as `(other)` in every dimension (19.10).
 - [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published
       and `src/qr` gives way to the dependency (ADR 0009).
 
