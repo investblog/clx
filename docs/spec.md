@@ -242,10 +242,15 @@ Why:
   current `<path>`, `<c>` and `<s>`, the generated script, excluded paths, and the retiring paths of
   past rotations with their expiry. A request whose host and path are not in the active config
   is passed through to the origin.
-- **Rotation** (`rotate`, §15): a new seed gives a new `<path>` and names; clx.cx creates the new
-  route, records its ID, syncs a config with both paths, and after 30 days (cached pages) syncs
-  one without the old path and deletes the old route by its recorded ID. Deleting a site deletes
-  every recorded route of it.
+- **Rotation** (`rotate`, §15): a new seed gives a new `<path>` and names; clx.cx records the new
+  seed as the rotation under way, creates the new route, records its ID, syncs a config with both
+  paths, and after 30 days (cached pages) syncs one without the old path and deletes the old route
+  by its recorded ID. A rotation that dies after Cloudflare made the route is finished by a retry
+  with the recorded seed, the route adopted by its pattern; not retried, it is undone by the cron
+  (the route deleted by its pattern, the seed forgotten): the call that died answered no rotation,
+  so a retry after that rotates once, afresh. Deleting a site deletes every recorded route of it;
+  a route still in the making (a new site's or a rotation's, recorded by pattern only) is looked for
+  under the account's lease that call holds, and a disconnect finds it by its pattern too.
 - **Low footprint.** The goal is that the counter adds **no static signature** shared by sites —
   nothing in the page source, the URLs or the answers that a footprint scan, a crawler or an ad
   blocker list could match across sites or to clx:
@@ -622,7 +627,7 @@ When a quota runs out:
   working**;
 - **D1 writes** — writes fail; the collector answers `204` without writing, redirects keep working
   (reads remain);
-- **D1 reads (5M)** — a redirect cannot read the link → `503 Retry-After`; the isolate cache is no
+- **D1 reads (5M)** — a redirect cannot read the link or its host → `503 Retry-After` (with the host unread, for any GET or HEAD of a one-segment path that could be a link: a site's route has two at least); the isolate cache is no
   guarantee.
 To grow, the user moves to Workers Paid; clx changes nothing. Workers Paid is **never required**,
 on any clx plan — clx tells the user when it is time (below).

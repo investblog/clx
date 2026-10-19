@@ -41,17 +41,15 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
       before the MCP server (ADR 0023) handed it to agents.
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
-- [ ] **Rotation is not durable** (Codex, 10.10): `rotate()` in `src/cf/sites.ts` creates the new
-      Cloudflare route before it records the seed and route ID, outside an `operations` row. A crash
-      between the two leaves a route recorded nowhere, and a retry makes another seed and route —
-      against §15 ("recorded before the first Cloudflare call"). Record the seed and the operation
-      first, as the install does. Until then the site does not promise it.
-- [ ] **A link host's config read that fails falls through** (Codex, 10.10): in `edge/worker.ts`
-      an unreadable `linkhost:` entry (D1 down, the daily reads used up) becomes `null` and the request
-      goes to `fetch(request)` — the link host has no origin, so the visitor gets Cloudflare's error,
-      not the `503 Retry-After` of §8, which comes only when the host was readable and the link was
-      not. Answer 503 for a host routed to the worker whose config cannot be read; until then the
-      pricing page says only that links stop working.
+- [x] **Rotation is not durable** (Codex, 10.10): `rotate()` in `src/cf/sites.ts` created the new
+      Cloudflare route before it recorded the seed. Now the seed is recorded first (`sites.rotating`,
+      migration 0014); a retry finishes the rotation and adopts the route, the cron undoes one left
+      alone, a delete or disconnect finds an unrecorded route (a rotation's or a new site's) by its
+      pattern (19.10).
+- [x] **A link host's config read that fails falls through** (Codex, 10.10): an unreadable
+      `linkhost:` entry sent the request to `fetch(request)`, and a link host has no origin. Now a
+      GET or HEAD of a one-segment path that could be a link answers `503 Retry-After` (§8); a site's
+      route has two segments at least, so its requests still pass through (19.10, clx-edge 115260b9b611).
 - [ ] **Views over the detail caps show as direct** (found 11.10 with ADR 0019): the `(other)` row
       keeps only `page = '(other)'`, so in the `sources` breakdown its views have source `''` and the
       app names them "Direct" (the other dimensions: "Unknown"). The flows chart already treats that

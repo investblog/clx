@@ -36,6 +36,8 @@ export interface SiteRow {
   route_id: string | null;
   retiring: string;
   retire_at: number | null;
+  /** The seed of a rotation under way, recorded before its route is made. */
+  rotating: string | null;
   revision: number;
   error: string | null;
   created_at: number;
@@ -119,9 +121,16 @@ export async function ensureRoute(token: string, log: CallLog, zoneId: string, p
 
 /**
  * Delete a recorded route — only if it is still what clx made: the recorded pattern, to clx-edge. A
- * route the user has since pointed elsewhere is no longer ours and is left (§4 ownership).
+ * route the user has since pointed elsewhere is no longer ours and is left (§4 ownership). With no
+ * ID, the route of the pattern: one a rotation made but died before recording (§15).
  */
-async function dropRoute(token: string, log: CallLog, zoneId: string, routeId: string, pattern: string): Promise<'deleted' | 'gone' | 'not_ours'> {
+async function dropRoute(token: string, log: CallLog, zoneId: string, routeId: string | null, pattern: string): Promise<'deleted' | 'gone' | 'not_ours'> {
+  if (!routeId) {
+    const there = (await cf<{ id: string; pattern: string; script?: string }[]>(token, 'GET', `/zones/${zoneId}/workers/routes`)).find((r) => r.pattern === pattern);
+    if (!there) return 'gone';
+    if (there.script !== SCRIPT) return 'not_ours';
+    routeId = there.id;
+  }
   const path = `/zones/${zoneId}/workers/routes/${routeId}`;
   const gone = (e: unknown) => {
     if (e instanceof CfError && e.status === 404) return null;
@@ -145,8 +154,8 @@ async function revise(db: D1Database, accountId: string, siteId: string, set: st
   return !!changed!.meta.changes;
 }
 
-/** The row as read: the same seed, state, route and retiring list (a compare-and-swap). */
-const unchanged = (s: SiteRow): [string, unknown[]] => [' AND seed = ? AND state = ? AND route_id IS ? AND retiring = ?', [s.seed, s.state, s.route_id, s.retiring]];
+/** The row as read: the same seed, state, route, retiring list and rotation (a compare-and-swap). */
+const unchanged = (s: SiteRow): [string, unknown[]] => [' AND seed = ? AND state = ? AND route_id IS ? AND retiring = ? AND rotating IS ?', [s.seed, s.state, s.route_id, s.retiring, s.rotating]];
 
 const siteById = (db: D1Database, id: string) => db.prepare('SELECT * FROM sites WHERE id = ?').bind(id).first<SiteRow>();
 
@@ -251,13 +260,25 @@ export async function rotateSite(env: Env, principal: string, edge: EdgeAccount,
 async function rotate(env: Env, principal: string, edge: EdgeAccount, site: SiteRow): Promise<SiteRow> {
   const token = await workingToken(env, edge);
   const log: CallLog = { db: env.DB, edgeAccountId: edge.id, principal };
-  const seed = newId();
+  // The new seed is recorded before its route is made (§15): a retry of a rotation that died after
+  // Cloudflare made the route finishes it with the same seed, the route adopted; left alone, the cron
+  // undoes it (undoRotation) — the call that died answered no rotation.
+  let seed = site.rotating;
+  if (!seed) {
+    seed = newId();
+    const set = await env.DB.prepare("UPDATE sites SET rotating = ?, updated_at = ? WHERE id = ? AND state = 'active' AND seed = ? AND rotating IS NULL").bind(seed, Date.now(), site.id, site.seed).run();
+    if (!set.meta.changes) changedMeanwhile();
+    site = { ...site, rotating: seed };
+  }
   const pattern = patternOf(site.host, seed);
   const r = await ensureRoute(token, log, site.zone_id, pattern);
-  if (!('id' in r)) return fail(409, 'route_conflict', `The new path is already routed to another worker (${r.conflict}); rotate again.`, { worker: r.conflict });
+  if (!('id' in r)) {
+    await env.DB.prepare('UPDATE sites SET rotating = NULL WHERE id = ? AND rotating = ?').bind(site.id, seed).run();
+    return fail(409, 'route_conflict', `The new path is already routed to another worker (${r.conflict}); rotate again.`, { worker: r.conflict });
+  }
   const retiring = [...(JSON.parse(site.retiring) as Retiring[]), { seed: site.seed, route_id: site.route_id, until: Date.now() + RETIRE_AFTER }];
   const [where, whereArgs] = unchanged(site);
-  if (!(await revise(env.DB, site.account_id, site.id, 'seed = ?, route_id = ?, retiring = ?, retire_at = ?', [seed, r.id, JSON.stringify(retiring), Math.min(...retiring.map((x) => x.until))], where, whereArgs))) {
+  if (!(await revise(env.DB, site.account_id, site.id, 'seed = ?, rotating = NULL, route_id = ?, retiring = ?, retire_at = ?', [seed, r.id, JSON.stringify(retiring), Math.min(...retiring.map((x) => x.until))], where, whereArgs))) {
     // Rotated, deleted or disconnected meanwhile: the route just made would be recorded nowhere.
     await dropRoute(token, log, site.zone_id, r.id, pattern);
     changedMeanwhile();
@@ -266,15 +287,43 @@ async function rotate(env: Env, principal: string, edge: EdgeAccount, site: Site
 }
 
 /**
+ * A rotation that died and was not retried: its route, if Cloudflare made it, is deleted by its
+ * pattern and the rotation forgotten — under the lease, which a live rotation holds. The row is read
+ * again under it: a retry may have finished the rotation since, and its route is the site's now. A
+ * route that is not clx's any more is left; the rotation is forgotten all the same.
+ */
+export async function undoRotation(env: Env, edge: EdgeAccount, siteId: string, seed: string): Promise<void> {
+  const site = await siteById(env.DB, siteId);
+  if (site?.rotating !== seed) return;
+  const token = await workingToken(env, edge);
+  await dropRoute(token, { db: env.DB, edgeAccountId: edge.id, principal: 'cron' }, site.zone_id, null, patternOf(site.host, seed));
+  await env.DB.prepare('UPDATE sites SET rotating = NULL WHERE id = ? AND rotating = ?').bind(site.id, seed).run();
+}
+
+/**
  * Remove a site; its row stays (totals, §15) as `deleted`, and the worker forgets it. The row is
  * marked first — every route becomes due for removal now — and only then are the routes deleted, so
  * a delete that loses a race deletes nothing, and one that dies halfway leaves the rest to the cron.
+ * A route that may be in the making (a new site's, a rotation's) is looked for by its pattern, under
+ * the lease the call making it holds, so never before it exists.
  */
 export async function deleteSite(env: Env, principal: string, edge: EdgeAccount, site: SiteRow): Promise<SiteRow> {
   if (site.state === 'deleted') return site;
-  const due: Retiring[] = [{ seed: site.seed, route_id: site.route_id, until: 0 }, ...(JSON.parse(site.retiring) as Retiring[]).map((r) => ({ ...r, until: 0 }))].filter((r) => r.route_id);
+  if (site.state !== 'route_pending' && !site.rotating) return removeSite(env, principal, edge, site);
+  return (await leased(env.DB, edge.id, async () => removeSite(env, principal, edge, (await siteById(env.DB, site.id))!))) ?? fail(409, 'operation_in_progress', 'Another operation on this Cloudflare account is running; retry shortly.');
+}
+
+async function removeSite(env: Env, principal: string, edge: EdgeAccount, site: SiteRow): Promise<SiteRow> {
+  if (site.state === 'deleted') return site;
+  const due: Retiring[] = [
+    // A route without an ID is looked for by its pattern: a new site's may be made and not recorded.
+    ...(site.route_id || site.state === 'route_pending' ? [{ seed: site.seed, route_id: site.route_id, until: 0 }] : []),
+    ...(JSON.parse(site.retiring) as Retiring[]).map((r) => ({ ...r, until: 0 })),
+    // So may a rotation's under way.
+    ...(site.rotating ? [{ seed: site.rotating, route_id: null, until: 0 }] : []),
+  ];
   const [where, whereArgs] = unchanged(site);
-  if (!(await revise(env.DB, site.account_id, site.id, "state = 'deleted', route_id = NULL, retiring = ?, retire_at = ?, error = NULL", [JSON.stringify(due), due.length ? 0 : null], where, whereArgs))) changedMeanwhile();
+  if (!(await revise(env.DB, site.account_id, site.id, "state = 'deleted', route_id = NULL, retiring = ?, retire_at = ?, rotating = NULL, error = NULL", [JSON.stringify(due), due.length ? 0 : null], where, whereArgs))) changedMeanwhile();
   // Routes Cloudflare will not delete now stay due: the cron finishes them.
   await removeDue(env, edge, (await siteById(env.DB, site.id))!, principal, Date.now()).catch((e: unknown) => console.error('delete site', site.id, e instanceof Error ? e.message : e));
   return (await siteById(env.DB, site.id))!;
@@ -290,19 +339,25 @@ async function removeDue(env: Env, edge: EdgeAccount, s: SiteRow, principal: str
   const log: CallLog = { db: env.DB, edgeAccountId: edge.id, principal };
   const all = JSON.parse(s.retiring) as Retiring[];
   const notOurs: string[] = [];
-  for (const r of all.filter((x) => x.until <= now && x.route_id)) if ((await dropRoute(token, log, s.zone_id, r.route_id!, patternOf(s.host, r.seed))) === 'not_ours') notOurs.push(patternOf(s.host, r.seed));
+  for (const r of all.filter((x) => x.until <= now)) if ((await dropRoute(token, log, s.zone_id, r.route_id, patternOf(s.host, r.seed))) === 'not_ours') notOurs.push(patternOf(s.host, r.seed));
   const left = all.filter((x) => x.until > now);
   const error = notOurs.length ? JSON.stringify({ code: 'route_not_ours', routes: notOurs }) : s.error;
   const [where, whereArgs] = unchanged(s);
   return revise(env.DB, s.account_id, s.id, 'retiring = ?, retire_at = ?, error = ?', [JSON.stringify(left), left.length ? Math.min(...left.map((x) => x.until)) : null, error], where, whereArgs);
 }
 
-/** The routes clx recorded for a site: the current one and those of past seeds still served. */
-function routesOf(s: SiteRow): { zone_id: string; route_id: string; pattern: string }[] {
-  return [
-    ...(s.route_id ? [{ zone_id: s.zone_id, route_id: s.route_id, pattern: patternOf(s.host, s.seed) }] : []),
-    ...(JSON.parse(s.retiring) as Retiring[]).filter((r) => r.route_id).map((r) => ({ zone_id: s.zone_id, route_id: r.route_id!, pattern: patternOf(s.host, r.seed) })),
+/**
+ * The routes clx recorded for a site: the current one, those of past seeds still served, and a
+ * rotation's under way. One without an ID — a new site's or a rotation's, which may be made and not
+ * recorded — is found by its pattern.
+ */
+function routesOf(s: SiteRow): { zone_id: string; route_id: string | null; pattern: string }[] {
+  const seeds: { seed: string; route_id: string | null }[] = [
+    ...(s.route_id || s.state === 'route_pending' ? [{ seed: s.seed, route_id: s.route_id }] : []),
+    ...(JSON.parse(s.retiring) as Retiring[]),
+    ...(s.rotating ? [{ seed: s.rotating, route_id: null }] : []),
   ];
+  return seeds.map((r) => ({ zone_id: s.zone_id, route_id: r.route_id, pattern: patternOf(s.host, r.seed) }));
 }
 
 export const lit = (s: string) => `'${s.replace(/'/gu, "''")}'`;
@@ -414,6 +469,23 @@ export async function runSites(env: Env, now = Date.now()): Promise<{ synced: nu
     if (edge && inService(edge)) await placeRoute(env, edge, s, 'cron').catch((e: unknown) => console.error('route', s.id, e instanceof Error ? e.message : e));
   }
 
+  // Rotations that died and were not retried: undone (a live one holds the lease). One that fails
+  // goes to the back of the queue.
+  const rotating = (
+    await db
+      .prepare("SELECT s.* FROM sites s JOIN edge_accounts e ON e.id = s.account_id WHERE s.rotating IS NOT NULL AND e.state IN ('ready', 'no_connection') AND s.updated_at < ? ORDER BY s.updated_at LIMIT 20")
+      .bind(now - 60_000)
+      .all<SiteRow>()
+  ).results;
+  for (const s of rotating) {
+    const edge = await edgeById(db, s.account_id);
+    if (!edge) continue;
+    await leased(db, edge.id, () => undoRotation(env, edge, s.id, s.rotating!)).catch(async (e: unknown) => {
+      console.error('undo rotation', s.id, e instanceof Error ? e.message : e);
+      await db.prepare('UPDATE sites SET updated_at = ? WHERE id = ? AND rotating = ?').bind(now, s.id, s.rotating).run();
+    });
+  }
+
   const due = (await db.prepare('SELECT * FROM sites WHERE retire_at <= ? LIMIT 20').bind(now).all<SiteRow>()).results;
   let retired = 0;
   for (const s of due) {
@@ -426,7 +498,7 @@ export async function runSites(env: Env, now = Date.now()): Promise<{ synced: nu
 
 /** Every route clx recorded for the account's sites — for disconnect (§4). Deleted sites too: their
  *  routes may still be due for removal. (Link hosts are custom domains: src/cf/links.ts.) */
-export async function recordedRoutes(db: D1Database, accountId: string): Promise<{ zone_id: string; route_id: string; pattern: string }[]> {
+export async function recordedRoutes(db: D1Database, accountId: string): Promise<{ zone_id: string; route_id: string | null; pattern: string }[]> {
   const sites = await db.prepare('SELECT * FROM sites WHERE account_id = ?').bind(accountId).all<SiteRow>();
   return sites.results.flatMap(routesOf);
 }

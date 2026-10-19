@@ -3,7 +3,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signAccess } from '../src/auth/jwt';
-import { runSites } from '../src/cf/sites';
+import { edgeById } from '../src/cf/connect';
+import { runSites, undoRotation } from '../src/cf/sites';
 import { app } from '../src/index';
 import { namesFor, scriptFor } from '../src/snippet';
 import type { Env } from '../src/types';
@@ -283,6 +284,100 @@ describe('review fixes (4a)', () => {
     const r = await call('POST', `/v1/sites/${site.id}/rotate`);
     expect(r.body.error.code).toBe('operation_in_progress');
     expect(routes()).toHaveLength(1); // only the first route; the new one is gone again
+  });
+
+  /** A rotation whose Worker dies once Cloudflare made the new route, before clx records it. */
+  async function rotationDies(siteId: string) {
+    fakeCf.onRouteMade = async () => {
+      fakeCf.onRouteMade = null;
+      throw new Error('the Worker died here');
+    };
+    expect((await call('POST', `/v1/sites/${siteId}/rotate`)).status).toBeGreaterThanOrEqual(500);
+    expect(routes()).toHaveLength(2);
+    return (await env.DB.prepare('SELECT seed, rotating FROM sites WHERE id = ?').bind(siteId).first<{ seed: string; rotating: string }>())!;
+  }
+
+  it('a rotation that died and was not retried is undone by the cron: its route goes, the site is as it was', async () => {
+    const { site } = (await addSite('example.com')).body;
+    const half = await rotationDies(site.id);
+    expect(half.rotating).toEqual(expect.any(String));
+    expect((await call('GET', `/v1/sites/${site.id}`)).body.site.path).toBe(site.path);
+    await runSites(env);
+    expect(routes()).toHaveLength(2); // a minute is left for a retry
+    await env.DB.prepare('UPDATE sites SET updated_at = 0').run();
+    await runSites(env);
+    expect(await env.DB.prepare('SELECT seed, rotating FROM sites').first()).toEqual({ seed: half.seed, rotating: null });
+    expect(routes()).toEqual([expect.objectContaining({ pattern: `example.com${site.path}/*` })]);
+    // A retry of the call that died now rotates once, afresh.
+    const r = await call('POST', `/v1/sites/${site.id}/rotate`);
+    expect(r.body.site.path).not.toBe(site.path);
+    expect(routes()).toHaveLength(2);
+  });
+
+  it('a retry of a rotation that died resumes it with the same seed, the route adopted', async () => {
+    const { site } = (await addSite('example.com')).body;
+    const half = await rotationDies(site.id);
+    const r = await call('POST', `/v1/sites/${site.id}/rotate`);
+    expect(r.body.site.path).toBe(namesFor(half.rotating).path);
+    expect(routes()).toHaveLength(2);
+    expect(await env.DB.prepare('SELECT rotating FROM sites').first()).toEqual({ rotating: null });
+  });
+
+  it('an undo that picked a rotation a retry has finished since leaves it alone', async () => {
+    const { site } = (await addSite('example.com')).body;
+    const half = await rotationDies(site.id);
+    expect((await call('POST', `/v1/sites/${site.id}/rotate`)).status).toBe(200);
+    // The cron chose the row before the retry, and got the lease after it.
+    await undoRotation(env, (await edgeById(env.DB, accountId))!, site.id, half.rotating);
+    expect(routes()).toHaveLength(2);
+    expect(await env.DB.prepare('SELECT seed FROM sites').first()).toEqual({ seed: half.rotating });
+  });
+
+  it('a delete while a rotation is making its route waits for it (the lease), never looking too early', async () => {
+    const { site } = (await addSite('example.com')).body;
+    let during: Awaited<ReturnType<typeof call>> | undefined;
+    fakeCf.onRoutePost = async () => {
+      fakeCf.onRoutePost = null;
+      during = await call('DELETE', `/v1/sites/${site.id}`);
+    };
+    expect((await call('POST', `/v1/sites/${site.id}/rotate`)).status).toBe(200);
+    expect(during!.body.error.code).toBe('operation_in_progress');
+    expect((await call('DELETE', `/v1/sites/${site.id}`)).body.site.state).toBe('deleted');
+    expect(routes()).toEqual([]);
+  });
+
+  it('a new site whose route was made but not recorded: a delete finds it by its pattern', async () => {
+    fakeCf.onRouteMade = async () => {
+      fakeCf.onRouteMade = null;
+      throw new Error('the Worker died here');
+    };
+    const { site } = (await addSite('example.com')).body;
+    expect(site.state).toBe('route_pending');
+    expect(routes()).toHaveLength(1);
+    expect((await call('DELETE', `/v1/sites/${site.id}`)).body.site.state).toBe('deleted');
+    expect(routes()).toEqual([]);
+  });
+
+  it('a half-done rotation whose delete could not remove the route: a disconnect still does', async () => {
+    const { site } = (await addSite('example.com')).body;
+    await rotationDies(site.id);
+    fakeCf.failOnce.add('/workers/routes');
+    expect((await call('DELETE', `/v1/sites/${site.id}`)).body.site.state).toBe('deleted');
+    expect(routes()).toHaveLength(2);
+    expect((await call('DELETE', `/v1/accounts/${accountId}`)).body).toMatchObject({ ok: true, left: [] });
+    expect(routes()).toEqual([]);
+  });
+
+  it('a delete, or a disconnect, while a rotation is half done removes its unrecorded route too', async () => {
+    const { site } = (await addSite('example.com')).body;
+    await rotationDies(site.id);
+    expect((await call('DELETE', `/v1/sites/${site.id}`)).body.site.state).toBe('deleted');
+    expect(routes()).toEqual([]);
+
+    const blog = (await addSite('blog.example.com')).body.site;
+    await rotationDies(blog.id);
+    expect((await call('DELETE', `/v1/accounts/${accountId}`)).body).toMatchObject({ ok: true, left: [] });
+    expect(routes()).toEqual([]);
   });
 
   it('a route made for a site that went meanwhile is removed', async () => {

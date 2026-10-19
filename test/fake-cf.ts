@@ -43,6 +43,8 @@ export const fakeCf = {
   paid: false,
   /** called when a route is made, before the answer: a concurrent change lands here */
   onRoutePost: null as null | (() => Promise<void>),
+  /** called once the route is made, before the answer: a throw is a Worker that died there */
+  onRouteMade: null as null | (() => Promise<void>),
   /** called when zones are listed, before the answer: a concurrent change lands here */
   onZones: null as null | (() => Promise<void>),
   scripts: new Map<string, Script>(),
@@ -86,6 +88,7 @@ export const fakeCf = {
     this.analytics = {};
     this.dbSize = 1_000_000;
     this.onRoutePost = null;
+    this.onRouteMade = null;
     this.onZones = null;
     this.scripts.clear();
     for (const d of this.dbs.values()) d.db.close();
@@ -273,6 +276,7 @@ async function zones(path: string, method: string, init: RequestInit, url: URL):
     const route = { id: `r${++fakeCf.seq}`, pattern: body.pattern, script: body.script };
     await fakeCf.onRoutePost?.();
     list.push(route);
+    await fakeCf.onRouteMade?.();
     return ok(route);
   }
   if (m[2] && method === 'GET') {

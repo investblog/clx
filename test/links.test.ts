@@ -96,6 +96,31 @@ const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KH
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 const visit = (url: string, headers: Record<string, string> = {}, country?: string) => viaWorker(url, { headers: { 'user-agent': CHROME, 'cf-connecting-ip': '198.51.100.7', ...headers } }, country);
 
+describe('the worker with its config unreadable (D1 down, the reads used up)', () => {
+  async function unreadable(url: string, method = 'GET') {
+    vi.resetModules();
+    const worker = (await import('../edge/worker')).default;
+    let origin = false;
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async () => ((origin = true), new Response('the origin')));
+    try {
+      const down = { prepare: () => ({ bind: () => ({ first: () => Promise.reject(new Error('D1 down')) }) }) };
+      const res = await worker.fetch(new Request(url, { method }), { DB: down } as never, fakeCtx().ctx);
+      return { status: res.status, retry: res.headers.get('retry-after'), origin };
+    } finally {
+      vi.stubGlobal('fetch', realFetch);
+    }
+  }
+
+  it("a link's address is asked again later; a site's path still passes through", async () => {
+    expect(await unreadable('https://go.example.com/promo')).toEqual({ status: 503, retry: '30', origin: false });
+    expect(await unreadable('https://go.example.com/promo', 'HEAD')).toMatchObject({ status: 503 });
+    // Not a link's address: a site's counter path, another method.
+    expect(await unreadable('https://example.com/abcd/efgh.js')).toMatchObject({ origin: true });
+    expect(await unreadable('https://go.example.com/promo', 'POST')).toMatchObject({ origin: true });
+  });
+});
+
 describe('link hosts', () => {
   it('a named host becomes a custom domain of clx-edge — no route, no DNS record to make — and reaches the worker', async () => {
     const r = await setHost('go.example.com');

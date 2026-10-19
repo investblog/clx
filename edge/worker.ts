@@ -74,8 +74,13 @@ export default {
       }
     }
     // A link host is the worker's custom domain and has no origin behind it: nothing passes through.
-    // Unreadable config: as for a site, behave as if the host were not ours.
-    if (await configFor<object>(env, linkHostKey(url.hostname)).catch(() => null)) {
+    const linkHost = await configFor<object>(env, linkHostKey(url.hostname)).catch(() => undefined);
+    // Unreadable (D1 down, the daily reads used up): what could be a link's address is told to try
+    // again later (§8) — passed through, it would get only Cloudflare's error. A site's own requests
+    // never look like one: its route is `<host>/<path>/*`, two segments at least.
+    if (linkHost === undefined && !site && CODE.test(url.pathname.slice(1)) && (request.method === 'GET' || request.method === 'HEAD'))
+      return new Response(null, { status: 503, headers: { 'retry-after': '30' } });
+    if (linkHost) {
       const code = url.pathname.slice(1);
       if (!CODE.test(code) || (request.method !== 'GET' && request.method !== 'HEAD')) return new Response(null, { status: 404 });
       const link = await configFor<LinkConfig>(env, linkKey(url.hostname, code)).then(

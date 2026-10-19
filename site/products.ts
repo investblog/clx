@@ -437,7 +437,7 @@ const PRICING: Record<Locale, PricingText> = {
       },
       {
         h: 'If a quota runs out',
-        p: 'Out of worker requests (100,000 a day), the counter’s path answers with an error and short links stop working; your pages themselves are not affected. Out of D1 writes, the counter stops counting and links keep redirecting. Out of D1 reads (5 million a day), links stop working too. Each lasts until the quota resets.',
+        p: 'Out of worker requests (100,000 a day), the counter’s path answers with an error and short links stop working; your pages themselves are not affected. Out of D1 writes, the counter stops counting and links keep redirecting. Out of D1 reads (5 million a day), links answer “try again later” (503). Each lasts until the quota resets.',
       },
       {
         h: 'Paid plans later',
@@ -478,7 +478,7 @@ const PRICING: Record<Locale, PricingText> = {
       },
       {
         h: 'Если квота кончилась',
-        p: 'Кончились запросы к воркерам (100 000 в сутки) — путь счётчика отвечает ошибкой, а короткие ссылки перестают работать; сами страницы сайта не затронуты. Кончились записи D1 — счётчик перестаёт считать, ссылки переадресуют. Кончились чтения D1 (5 млн в сутки) — ссылки тоже перестают работать. Всё это — до сброса квоты.',
+        p: 'Кончились запросы к воркерам (100 000 в сутки) — путь счётчика отвечает ошибкой, а короткие ссылки перестают работать; сами страницы сайта не затронуты. Кончились записи D1 — счётчик перестаёт считать, ссылки переадресуют. Кончились чтения D1 (5 млн в сутки) — ссылки отвечают «попробуйте позже» (503). Всё это — до сброса квоты.',
       },
       {
         h: 'Платные тарифы позже',
