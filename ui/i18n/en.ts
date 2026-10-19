@@ -197,7 +197,7 @@ export const en: Dict = {
   },
   keys: {
     intro: ['A key is for agents, site generators and the console (', 'the guide for agents', '). It is shown once; clx.cx keeps only its hash.'],
-    free: 'The free plan has one key and the same limits as the app; more accounts, sites and keys come with the api plan — on request.',
+    free: 'The free plan has one key and the same limits as the app; more accounts, sites and keys come with the api plan — ask for it with /support in the Telegram bot @clxcxbot.',
     api: (n: number) => `Up to ${n} keys.`,
     colKey: 'Key',
     colScopes: 'Scopes',

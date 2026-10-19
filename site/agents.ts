@@ -3,7 +3,7 @@
 // page is made from it); a curl here that the API does not take is a bug of this file.
 import { SUPPORTED_VERSIONS } from '../src/mcp/protocol.ts';
 import { SERVER_INFO, TABLE } from '../src/mcp/table.ts';
-import { ORIGIN } from './pages.ts';
+import { BOT_URL, ORIGIN } from './pages.ts';
 
 export const SKILL = {
   name: 'clx-sites',
@@ -21,7 +21,7 @@ export function agentsBody(): string {
 
 <h2 id="ask">What to ask your human for</h2>
 <ol>
-<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a> and confirms their address. The free plan has one key, enough for one Cloudflare account, 10 sites and 200 links; the <code>api</code> plan (more accounts, sites and keys) is switched on by clx on request. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites. The key is shown once.</li>
+<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a> and confirms their address. The free plan has one key, enough for one Cloudflare account, 10 sites and 200 links; the <code>api</code> plan (more accounts, sites and keys) is switched on by clx on request: the person sends <code>/support</code> to the Telegram bot <a href="${BOT_URL}">@clxcxbot</a>. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites. The key is shown once.</li>
 <li><strong>The Cloudflare account ID</strong> — 32 hex characters, in the dashboard address after <code>dash.cloudflare.com/</code>.</li>
 <li><strong>A bootstrap token</strong>, made by the person in that account. clx uses it within one request to make its own working token, then deletes it. Steps for them:
 <ol>
@@ -182,7 +182,8 @@ clx's management API (${ORIGIN}/v1) takes **bearer API keys**:
 - The person issues a key on the Keys page of the app, choosing its scopes (\`accounts\`, \`sites\`,
   \`links\`, \`reports\`) and, optionally, the Cloudflare accounts and client IPs it may be used for.
   The key is shown once; one per user on the free plan, up to 5 on the \`api\` plan (switched on by
-  clx on request), revoked one by one.
+  clx on request), revoked one by one. The person asks for that plan by sending /support to the
+  Telegram bot at ${BOT_URL}.
 
 The MCP server (${ORIGIN}/mcp) takes the same key in the same header.
 

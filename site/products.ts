@@ -353,7 +353,7 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
         ['Do my customers need their own Cloudflare accounts?', 'Yes: a counter runs in the account its site is served from. A customer connects it once with a bootstrap token, by hand or through your integration.'],
         ['Can footprint scanners or ad blockers spot clx?', 'No signature in the page, the URLs or the answers is shared by clx sites or names clx, beyond the browser’s own API names. Someone watching can still see the behaviour — a same-origin POST answered with an empty 204.'],
         ['Is there an SDK?', 'No: the API is plain HTTP with an OpenAPI contract, and AI agents have a walkthrough of their own.'],
-        ['What does it cost?', 'The API plan is switched on by request and is free for now; Workers Paid is never required.'],
+        ['What does it cost?', 'The API plan is switched on by request (/support in the Telegram bot @clxcxbot) and is free for now; Workers Paid is never required.'],
       ],
     },
     faqKey: 'generators',
@@ -400,7 +400,7 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
         ['Нужны ли клиентам свои аккаунты Cloudflare?', 'Да: счётчик работает в том аккаунте, где обслуживается сайт. Клиент подключает его один раз bootstrap-токеном — сам или через вашу интеграцию.'],
         ['Найдут ли clx сканеры футпринтов или блокировщики рекламы?', 'В странице, адресах и ответах нет сигнатуры, общей для сайтов clx или похожей на clx, кроме имён API самого браузера. Наблюдатель всё же может заметить поведение — POST на свой сайт с пустым ответом 204.'],
         ['Есть ли SDK?', 'Нет: API — обычный HTTP с контрактом OpenAPI, а для ИИ-агентов есть отдельная пошаговая инструкция.'],
-        ['Сколько это стоит?', 'Тариф API включается по запросу и пока бесплатен; Workers Paid не нужен.'],
+        ['Сколько это стоит?', 'Тариф API включается по запросу (/support в Telegram-боте @clxcxbot) и пока бесплатен; Workers Paid не нужен.'],
       ],
     },
     faqKey: 'generators',
@@ -425,7 +425,7 @@ const PRICING: Record<Locale, PricingText> = {
       { name: 'Free', price: '$0', points: ['1 Cloudflare account', '10 sites', '200 links, 10 rules each', '1 API key'] },
       { name: 'API', price: 'On request, free for now', points: ['50 Cloudflare accounts', '500 sites', '10,000 links, 10 rules each', '5 API keys, limited by account and IP'] },
     ],
-    note: 'The API plan is switched on by request; the way to ask for it is coming.',
+    note: 'The API plan is switched on by request: send /support to the Telegram bot @clxcxbot.',
     sections: [
       {
         h: 'What Cloudflare gives for free',
@@ -466,7 +466,7 @@ const PRICING: Record<Locale, PricingText> = {
       { name: 'Free', price: 'Бесплатно', points: ['1 аккаунт Cloudflare', '10 сайтов', '200 ссылок, по 10 правил', '1 ключ API'] },
       { name: 'API', price: 'По запросу, пока бесплатно', points: ['50 аккаунтов Cloudflare', '500 сайтов', '10 000 ссылок, по 10 правил', '5 ключей API с ограничением по аккаунтам и IP'] },
     ],
-    note: 'Тариф API включается по запросу; способ запросить его скоро появится.',
+    note: 'Тариф API включается по запросу: напишите /support Telegram-боту @clxcxbot.',
     sections: [
       {
         h: 'Что Cloudflare даёт бесплатно',

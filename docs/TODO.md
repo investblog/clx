@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-10-16
+updated: 2026-10-19
 ---
 
 # Backlog
@@ -21,9 +21,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       sign-in with the new password, the account deleted with nothing of it left in D1. Mail passed
       DKIM, SPF and DMARC.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
-- [ ] A way to ask for the `api` plan: /agents, /api and auth.md say clx switches it on "by
-      request" but name no address or form (10.10). The channel will be the Telegram bot (§17,
-      ADR 0030); then link it from those pages and the keys page.
+- [x] A way to ask for the `api` plan: `/support` in the bot (§17, ADR 0031), named on /agents, /api,
+      auth.md, the pricing page and the keys page (19.10).
 - [x] The Telegram bot (§17, ADR 0030): @clxcxbot on `POST /hook/telegram`, live 16.10 (the
       webhook, sign-in by a mailed code, `/sites` `/links` `/accounts`, adding sites and links,
       `/connect`, the notices).
@@ -36,7 +35,7 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       `CNAME` resolved (set before it, nothing came for 35 minutes).
 - [x] `ru.clx.cx` in Search Console: the domain property `clx.cx` covers it; its sitemap submitted
       17.10 and read the same day (14 pages).
-- [ ] Resubmit the clx.cx sitemap (last read 14.10, before the Russian pages left it).
+- [x] Resubmit the clx.cx sitemap (last read 14.10, before the Russian pages left it): the owner, 18.10.
 - [x] `GET /v1/me` mixes field styles: `limits` is camelCase (`cfAccounts`, `rulesPerLink`), `use`
       snake_case (`cf_accounts`) — found by the live agent run of /agents (10.10). Pick snake_case
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
