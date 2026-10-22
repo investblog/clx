@@ -9,7 +9,7 @@ import { addLink, addLinkHost, deleteLink, deleteLinkHost, linkHostById, linkHos
 import { addSite, deleteSite, listZones, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { verifyPassword } from '../auth/password';
 import { sha256 } from '../lib/crypto';
-import { generateMatrix, renderSvg } from '../qr';
+import QR from '@spintax/qr-svg';
 import { LIMITS, planOf, SCOPES } from '../limits';
 import { LOCALES, type Locale } from '../mail-text';
 import { linkReport, PERIODS, siteReport, type Period } from '../report';
@@ -622,7 +622,7 @@ v1.get('/links/:id/qr.svg', async (c) => {
   if (!host) fail(404, 'not_found', 'The link host of this link is gone.');
   const size = c.req.query('size');
   if (size !== undefined && !/^(6[4-9]|[7-9]\d|[1-9]\d{2,3})$/u.test(size)) fail(400, 'invalid_request', '"size" must be an integer 64–9999 (pixels); without it the SVG scales to its container.', { field: 'size' });
-  const svg = renderSvg(generateMatrix(`https://${host}/${link.code}?q`, { ecc: 'M' }), size ? { size: Number(size) } : {});
+  const svg = QR.renderSvg(QR.generateMatrix(`https://${host}/${link.code}?q`, { ecc: 'M' }), size ? { size: Number(size) } : {});
   return c.body(svg, 200, { 'content-type': 'image/svg+xml', 'content-disposition': `inline; filename="${link.code}.svg"` });
 });
 

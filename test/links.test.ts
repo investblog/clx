@@ -8,7 +8,7 @@ import type { EdgeAccount } from '../src/cf/connect';
 import { runLinkHosts } from '../src/cf/links';
 import { runSites } from '../src/cf/sites';
 import { app } from '../src/index';
-import { generateMatrix, renderSvg } from '../src/qr';
+import QR from '@spintax/qr-svg';
 import { receive } from '../src/push';
 import { clearReportCache, linkReport } from '../src/report';
 import type { Env } from '../src/types';
@@ -392,7 +392,7 @@ describe('links', () => {
     expect(((await denied.json()) as { error: { code: string } }).error.code).toBe('scope_required');
     const r = await get();
     expect(r).toMatchObject({ status: 200, type: 'image/svg+xml', disposition: 'inline; filename="promo.svg"', cache: 'no-store' });
-    expect(r.body).toBe(renderSvg(generateMatrix('https://go.example.com/promo?q', { ecc: 'M' })));
+    expect(r.body).toBe(QR.renderSvg(QR.generateMatrix('https://go.example.com/promo?q', { ecc: 'M' })));
     expect((await get('?size=256')).body).toContain('width="256" height="256"');
     expect((await get('?size=10')).status).toBe(400);
     await call('DELETE', `/v1/links/${id}`);

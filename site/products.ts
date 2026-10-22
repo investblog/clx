@@ -4,7 +4,7 @@
 // §7 totals, §8 limits); the words are here, one object per language of one shape.
 import Rank from 'affiliate-charts/charts-rank.js';
 import Sankey from 'affiliate-charts/charts-sankey.js';
-import { generateMatrix } from '../src/qr/generate.ts';
+import QR from '@spintax/qr-svg';
 import { flowChart } from '../ui/flows.ts';
 import { chartOptions, demoReport, themed } from './demo.ts';
 import { STRINGS } from './i18n.ts';
@@ -255,11 +255,11 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
   },
 };
 
-/** A QR code as SVG: the matrix from src/qr (the app's QR, ADR 0009), dark modules as one path with a
- *  quiet zone of 4. Drawn here rather than by src/qr/render.ts, whose extensionless import the
- *  site's Node build cannot load. */
+/** A QR code as SVG: the matrix from @spintax/qr-svg (the app's QR, ADR 0033), one subpath per dark module with a
+ *  quiet zone of 4. Drawn here, not by the package's renderSvg, so the page's markup stays as it was
+ *  (site.test.ts compares it module by module). */
 function qrSvg(text: string): string {
-  const { data, size } = generateMatrix(text, { ecc: 'M' });
+  const { data, size } = QR.generateMatrix(text, { ecc: 'M' });
   const q = 4;
   const d = data.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`M${x + q} ${y + q}h1v1h-1z`] : []))).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size + 2 * q} ${size + 2 * q}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path fill="#111" d="${d}"/></svg>`;
@@ -594,7 +594,7 @@ const OPEN: Record<Locale, ProductText> = {
       },
       {
         h: 'The QR code library',
-        p: 'The QR codes are drawn by @301st/qr-svg, a separate library under the MIT licence; until it is on npm, its copy lives in the repository with its own licence and tests.',
+        p: 'The QR codes are drawn by @spintax/qr-svg, a separate library on npm under the MIT licence, with no dependencies of its own.',
       },
     ],
     setup: {
@@ -626,7 +626,7 @@ const OPEN: Record<Locale, ProductText> = {
       },
       {
         h: 'Библиотека QR-кодов',
-        p: 'QR-коды рисует @301st/qr-svg — отдельная библиотека под лицензией MIT; пока её нет в npm, копия лежит в репозитории со своей лицензией и тестами.',
+        p: 'QR-коды рисует @spintax/qr-svg — отдельная библиотека в npm под лицензией MIT, без собственных зависимостей.',
       },
     ],
     setup: {

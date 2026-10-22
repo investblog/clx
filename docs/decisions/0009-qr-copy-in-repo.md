@@ -1,7 +1,7 @@
 ---
 title: The QR library is copied into the repository until it is on npm
 type: decision
-status: accepted
+status: superseded
 date: 2026-10-06
 ---
 

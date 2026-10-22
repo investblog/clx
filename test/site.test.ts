@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { generateMatrix } from '../src/qr/generate';
+import QR from '@spintax/qr-svg';
 import { PASSWORD_MIN } from '../src/auth/signup';
 import { nextRoute, signInPath } from '../ui/next.ts';
 
@@ -605,7 +605,7 @@ describe('generated pages', () => {
   it('the example link’s QR code is the one the app would make for its address', () => {
     const svg = read('short-links.html').match(/<div class="link-card__qr">(<svg[\s\S]*?<\/svg>)/u)![1]!;
     const drawn = new Set([...svg.matchAll(/M(\d+) (\d+)h1v1h-1z/gu)].map((m) => `${Number(m[1]) - 4},${Number(m[2]) - 4}`));
-    const { data } = generateMatrix('https://k7q.example.com/spring?q', { ecc: 'M' });
+    const { data } = QR.generateMatrix('https://k7q.example.com/spring?q', { ecc: 'M' });
     const expected = new Set(data.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`${x},${y}`] : []))));
     expect(drawn.size).toBeGreaterThan(100);
     expect([...drawn].sort()).toEqual([...expected].sort());

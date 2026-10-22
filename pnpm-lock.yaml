@@ -8,15 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@spintax/qr-svg':
+        specifier: 0.1.0
+        version: 0.1.0
       affiliate-charts:
         specifier: 1.1.0
         version: 1.1.0
       hono:
         specifier: ^4.13.9
         version: 4.13.12
-      uqr:
-        specifier: ^0.1.3
-        version: 0.1.3
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^5.20260926.1
@@ -33,9 +33,6 @@ importers:
       esbuild:
         specifier: 0.28.1
         version: 0.28.1
-      jsqr:
-        specifier: ^1.4.0
-        version: 1.4.0
       opentype.js:
         specifier: 1.3.4
         version: 1.3.4
@@ -711,6 +708,10 @@ packages:
   '@speed-highlight/core@1.2.24':
     resolution: {integrity: sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw==}
 
+  '@spintax/qr-svg@0.1.0':
+    resolution: {integrity: sha512-yVzgFACrB0piLltONFAzp8klSzcYn3jAwXzKRnD8nYA7elftV2sRESj74wPZcNeDm5YvMMM0XhWSdO/hU54mPQ==}
+    engines: {node: '>=22'}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -822,9 +823,6 @@ packages:
   hono@4.13.12:
     resolution: {integrity: sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw==}
     engines: {node: '>=16.9.0'}
-
-  jsqr@1.4.0:
-    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   kleur@4.1.5:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
@@ -1024,9 +1022,6 @@ packages:
 
   unenv@2.0.0-rc.24:
     resolution: {integrity: sha512-i7qRCmY42zmCwnYlh9H2SvLEypEFGye5iRmEMKjcGi7zk9UquigRjFtTLz0TYqr0ZGLZhaMHl/foy1bZR+Cwlw==}
-
-  uqr@0.1.3:
-    resolution: {integrity: sha512-0rjE8iEJe4YmT9TOhwsZtqCMRLc5DXZUI2UEYUUg63ikBkqqE5EYWaI0etFe/5KUcmcYwLih2RND1kq+hrUJXA==}
 
   vite@8.3.2:
     resolution: {integrity: sha512-SQr1x6W5vVSbROg7vsyXIaxK9b0G7zsT68acdWWRmnBUsgDieLCRG+Rep9WdZgcposvv/GSnr4GUUBqB3vXq6w==}
@@ -1545,6 +1540,8 @@ snapshots:
 
   '@speed-highlight/core@1.2.24': {}
 
+  '@spintax/qr-svg@0.1.0': {}
+
   '@standard-schema/spec@1.1.0': {}
 
   '@types/chai@5.2.3':
@@ -1666,8 +1663,6 @@ snapshots:
     optional: true
 
   hono@4.13.12: {}
-
-  jsqr@1.4.0: {}
 
   kleur@4.1.5: {}
 
@@ -1888,8 +1883,6 @@ snapshots:
   unenv@2.0.0-rc.24:
     dependencies:
       pathe: 2.0.3
-
-  uqr@0.1.3: {}
 
   vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.1)(yaml@2.9.1):
     dependencies:

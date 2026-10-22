@@ -400,7 +400,7 @@ Why:
   host and its code is unique on that host; the worker looks a link up by the host and the code.
   Config keys: `linkhost:<host>` and `link:<host>/<code>` (ADR 0024; ADR 0008 had one host and
   `link:<code>`).
-- **QR** — SVG via `@301st/qr-svg` (§11), built on clx.cx (download as SVG; `GET
+- **QR** — SVG via `@spintax/qr-svg` (§11), built on clx.cx (download as SVG; `GET
   /v1/links/{id}/qr.svg`, error correction M, an optional `size` in pixels). The address in the QR
   is `k7q.example.com/<code>?q`; the worker records `?q` as source `qr` and does not pass it on.
   Built on clx.cx, not in the browser, so that API clients get it too.
@@ -775,13 +775,12 @@ Pages:
 
 - **clx:** a public repository with a clean history, AGPL-3.0, a README, `wrangler.example.jsonc`.
   The repository holds the product only.
-- **`@301st/qr-svg`** — a separate open library on npm, MIT, in its own public repository. API:
-  `generateMatrix(text, opts)`, `renderSvg(matrix, opts)`, `buildPathData`. Build with tsup → ESM +
-  `.d.ts`, `exports`/`files`, `sideEffects: false`, one dependency — `uqr`; tests decode the output
-  back with `jsqr`; a README; CI — tests on PRs, publishing on a tag with provenance. Links do not
-  wait for it: until it is published, clx keeps **a copy of its source in the repository**
-  (`src/qr/`, with its MIT license and its tests) — a `file:` path would put a private folder into
-  the public `package.json` ([ADR 0009](./decisions/0009-qr-copy-in-repo.md)).
+- **`@spintax/qr-svg`** — a separate open library on npm, MIT, in its own public repository
+  (`investblog/qr-svg`), published 22.10.2026 with provenance. API: `generateMatrix(text, opts)`,
+  `renderSvg(matrix, opts)`, `buildPathData`. One ES5 file, zero dependencies (the uqr encoder is
+  ported into it and tested against uqr); its tests decode the output back with `jsqr`. clx pins the
+  exact version and imports it by default ([ADR 0033](./decisions/0033-qr-from-npm.md), which
+  replaced the copy in `src/qr/` of [ADR 0009](./decisions/0009-qr-copy-in-repo.md)).
 
 ## 12. What v1 loses
 
@@ -876,8 +875,8 @@ stage.
    with a phone → a click with source `qr`; an interrupted sync leaves the previous links working.
 6. **Sign-up** (§9): e-mails, Turnstile, reset, privacy/terms/abuse. Check: a live e-mail; reusing an
    e-mail token is refused.
-7. **`@301st/qr-svg`** (§11) — in parallel with 2–4. At stage 5 clx keeps a copy of it in the
-   repository (`src/qr/`), after publishing — takes it from npm and drops the copy.
+7. **`@spintax/qr-svg`** (§11) — in parallel with 2–4. At stage 5 clx kept a copy of it in the
+   repository (`src/qr/`); published 22.10.2026, clx takes it from npm (ADR 0033).
 
 ## 15. Management API
 

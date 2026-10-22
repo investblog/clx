@@ -23,7 +23,7 @@ its §14, the API contract in [`docs/openapi.yaml`](docs/openapi.yaml), and what
 to do on a live account in [`docs/cloudflare-facts.md`](docs/cloudflare-facts.md). Done: sign-up,
 the management API, connecting a Cloudflare account, installing, updating and removing the
 `clx-edge` worker (`edge/`), the counter, short links with QR codes and rules, reports, the app and
-the site. Open: publishing `@301st/qr-svg` on npm (stage 7).
+the site.
 
 ## Development
 
@@ -57,5 +57,5 @@ node scripts/user.mjs admin you@example.com on   # rollouts of clx-edge (docs/sp
 
 ## License
 
-[AGPL-3.0](LICENSE). The QR code library, `@301st/qr-svg`, is a separate MIT package; until it is
-published on npm a copy lives in [`src/qr/`](src/qr/) under its own [MIT license](src/qr/LICENSE).
+[AGPL-3.0](LICENSE). The QR codes are drawn by
+[`@spintax/qr-svg`](https://github.com/investblog/qr-svg), a separate MIT package.

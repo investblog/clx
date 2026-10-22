@@ -4,3 +4,4 @@ allowBuilds:
   workerd: true
 minimumReleaseAgeExclude:
   - affiliate-charts@1.1.0
+  - '@spintax/qr-svg@0.1.0'

@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-10-19
+updated: 2026-10-22
 ---
 
 # Backlog
@@ -53,8 +53,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] **Views over the detail caps show as direct** (found 11.10 with ADR 0019): the `(other)` row
       keeps only `page = '(other)'`, so its views were "Direct" in `sources` and "Unknown" elsewhere.
       `src/report.ts` now reads that row as `(other)` in every dimension (19.10).
-- [ ] Stage 7: the `301st` organisation on npm and `npm login`; then `@301st/qr-svg` is published
-      and `src/qr` gives way to the dependency (ADR 0009).
+- [x] Stage 7: the QR library published as `@spintax/qr-svg` 0.1.0 (22.10, no npm organisation
+      needed — the `spintax` account); `src/qr` gave way to the dependency (ADR 0033).
 
 - [ ] Open questions of spec §13, on a test Cloudflare account: rights for Workers Custom Domains.
       (A route on a Pages host — verified 05.10, §13 item 9; an ignored `INSERT OR IGNORE` writes

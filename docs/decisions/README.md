@@ -14,7 +14,7 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0006](./0006-backups-after-release.md) | Backups of the clx.cx database to R2 — after the release | 06.10.2026 | §13 |
 | [0007](./0007-both-crons-at-upload.md) | The working cron is set at upload, next to the self-check | 06.10.2026 | §4, §5 |
 | [0008](./0008-link-host-and-codes.md) | One link host per account, links keyed by code alone (superseded by 0024) | 06.10.2026 | §6 |
-| [0009](./0009-qr-copy-in-repo.md) | The QR library is copied into the repository until it is on npm | 06.10.2026 | §6, §11, §14 |
+| [0009](./0009-qr-copy-in-repo.md) | The QR library is copied into the repository until it is on npm (superseded by 0033) | 06.10.2026 | §6, §11, §14 |
 | [0010](./0010-session-version-starts-at-sign-up.md) | A new user's session version starts at the sign-up time | 07.10.2026 | §9 |
 | [0011](./0011-zone-picker.md) | The host fields suggest the account's zones | 10.10.2026 | §10, §15 |
 | [0012](./0012-site-and-app.md) | A site at the root, the app at /app; English and Russian | 10.10.2026 | §9, §10, §16 |
@@ -38,3 +38,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0030](./0030-telegram-bot-and-russian-host.md) | A Telegram bot as a full client; the Russian pages on ru.clx.cx (GitHub Pages) | 16.10.2026 | §16, §17 |
 | [0031](./0031-bot-support-group.md) | The bot's support group: answers by reply, operator commands, the start parameter | 19.10.2026 | §15, §17 |
 | [0032](./0032-edge-rollout-order.md) | A clx-edge rollout reaches one account first, then the rest, each update confirmed | 19.10.2026 | §4 |
+| [0033](./0033-qr-from-npm.md) | The QR code comes from `@spintax/qr-svg` on npm; the copy in the repository goes | 22.10.2026 | §6, §11, §14 |
