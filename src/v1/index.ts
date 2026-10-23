@@ -6,7 +6,7 @@ import { CfError } from '../cf/api';
 import { accountView, connect, workingToken, type EdgeAccount } from '../cf/connect';
 import { disconnect, runDeploy, startDeploy } from '../cf/deploy';
 import { addLink, addLinkHost, deleteLink, deleteLinkHost, linkHostById, linkHostView, linkView, patchLink, type LinkHostRow, type LinkRow } from '../cf/links';
-import { addSite, deleteSite, listZones, patchSite, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
+import { addSite, deleteSite, listZones, patchSite, refusePaused, rotateSite, siteView, syncAccount, validHost, type SiteRow } from '../cf/sites';
 import { verifyPassword } from '../auth/password';
 import { sha256 } from '../lib/crypto';
 import QR from '@spintax/qr-svg';
@@ -17,9 +17,13 @@ import type { Env, Principal } from '../types';
 import { KEY_PREFIX, mayTouch, principalOf, requireScope, requireSession } from './auth';
 import { ApiError, errorBody, fail, newId } from './http';
 import { canonicalPath, IDEM_TTL, idempotent, type Answer } from './idempotency';
+import { balanceOf, DAY_PRICE, GRACE_MS, isoDay, openPeriod, paidThrough, PRO_PRICE, proOff, proOn } from '../billing/pro';
+import { markReplan, resumeNext } from '../billing/pause';
 
 type C = Context<{ Bindings: Env }>;
 const MAX_BODY = 65_536;
+/** A delete's mark older than this belongs to a delete that died (§18): the cron clears it. */
+export const DELETING_TTL = 15 * 60_000;
 
 async function bodyOf(c: C): Promise<Record<string, unknown>> {
   if (Number(c.req.header('content-length') ?? 0) > MAX_BODY) fail(413, 'payload_too_large', 'The request body is over 64 KB.');
@@ -88,7 +92,7 @@ v1.get(
     const row = (await c.env.DB.prepare('SELECT id, email, email_confirmed_at, locale FROM users WHERE id = ?').bind(p.userId).first<{ id: number; email: string; email_confirmed_at: number | null; locale: string }>())!;
     const user = { id: row.id, email: row.email, email_confirmed: row.email_confirmed_at !== null, locale: row.locale };
     const use = await c.env.DB.prepare(
-      "SELECT (SELECT count(*) FROM edge_accounts WHERE user_id = ?1 AND state != 'pending') AS cf_accounts, (SELECT count(*) FROM api_keys WHERE user_id = ?1 AND revoked_at IS NULL) AS api_keys",
+      "SELECT (SELECT count(*) FROM edge_accounts WHERE user_id = ?1 AND state != 'pending' AND paused_at IS NULL) AS cf_accounts, (SELECT count(*) FROM api_keys WHERE user_id = ?1 AND revoked_at IS NULL AND paused_at IS NULL) AS api_keys",
     )
       .bind(p.userId)
       .first<{ cf_accounts: number; api_keys: number }>();
@@ -127,53 +131,88 @@ v1.delete(
     // refused here, before anything is ended.
     if (await db.prepare('SELECT 1 FROM edge_accounts WHERE user_id = ? AND lease_until > ?').bind(p.userId, Date.now()).first())
       fail(409, 'operation_in_progress', 'An operation on one of your Cloudflare accounts is running; retry in a minute.');
-    // The fence first: every session and API key of the user ends, so nothing of theirs can start a
-    // new connect while the accounts are being disconnected (this call runs on).
-    await db.batch([
-      db.prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?').bind(p.userId),
-      db.prepare('UPDATE api_keys SET revoked_at = coalesce(revoked_at, ?) WHERE user_id = ?').bind(Date.now(), p.userId),
-    ]);
-    const keys = (await db.prepare('SELECT id FROM api_keys WHERE user_id = ?').bind(p.userId).all<{ id: string }>()).results.map((k) => `k:${k.id}`);
-    const left: string[] = [];
-    const revoke: string[] = [];
-    const ids: string[] = [];
-    // Again until none is left: a connect that began before the fence may add one meanwhile.
-    for (let round = 0; round < 3; round++) {
-      const accounts = (await db.prepare('SELECT * FROM edge_accounts WHERE user_id = ?').bind(p.userId).all<EdgeAccount>()).results;
-      if (!accounts.length) break;
-      for (const a of accounts) {
-        const r = await disconnect(c.env, p.id, a);
-        ids.push(a.id);
-        left.push(...r.left);
-        if (r.revoke_token) revoke.push(r.revoke_token);
-      }
+    // Money left, or a payment still open, refuses the delete (§18). The check and the mark are one
+    // statement, and every money writer requires the mark to be absent, so nothing lands between
+    // this and the archive; a mark left by a delete that died is cleared by the cron after 15 minutes.
+    const now = Date.now();
+    const marked = await db
+      .prepare('UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0')
+      .bind(now, p.userId, DELETING_TTL)
+      .run();
+    if (!marked.meta.changes) {
+      const balance = await balanceOf(db, p.userId);
+      if (balance !== 0) fail(409, 'balance_not_empty', 'There is money on your balance; spend it or ask for a refund in /support before deleting the account.', { balance_micro_usd: balance });
+      fail(409, 'operation_in_progress', 'The account is being deleted already; retry in a minute.');
     }
-    // An account still there — a connect that began before the fence and is still running — is
-    // never deleted by the cascade behind its back (its token would be left in Cloudflare): the
-    // delete stops here; signed in again, the user repeats it once that connect is over.
-    // What was disconnected goes at once either way — a repeat would not find these accounts again.
-    const accountIds = JSON.stringify(ids);
-    const disconnected = [
-      ...['hourly', 'daily', 'departed'].map((t) => db.prepare(`DELETE FROM ${t} WHERE account_id IN (SELECT value FROM json_each(?))`).bind(accountIds)),
-      db.prepare('DELETE FROM cf_calls WHERE edge_account_id IN (SELECT value FROM json_each(?))').bind(accountIds),
-    ];
-    if (await db.prepare('SELECT 1 FROM edge_accounts WHERE user_id = ?').bind(p.userId).first()) {
-      await db.batch(disconnected);
-      fail(409, 'operation_in_progress', 'A Cloudflare account was being connected meanwhile; sign in again and repeat the delete in a minute.', { left, revoke_tokens: revoke });
+    try {
+      return await deleteUser(c, p, now);
+    } catch (e) {
+      await db.prepare('UPDATE users SET deleting_at = NULL WHERE id = ? AND deleting_at = ?').bind(p.userId, now).run();
+      throw e;
     }
-    const email = await db.prepare('SELECT email FROM users WHERE id = ?').bind(p.userId).first<string>('email');
-    await db.batch([
-      ...disconnected,
-      // The keys' idempotency records; the session's own go after this answer is stored, within 24 hours.
-      db.prepare('DELETE FROM idempotency WHERE principal IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
-      db.prepare('DELETE FROM email_sends WHERE email = ?').bind(email),
-      // Keys, sites, links, link hosts, e-mail tokens and what is left of the accounts go with the
-      // user (ON DELETE CASCADE).
-      db.prepare('DELETE FROM users WHERE id = ?').bind(p.userId),
-    ]);
-    return { status: 200, body: { ok: true, left, revoke_tokens: revoke } };
   }),
 );
+
+/** A user's account goes (§9) — after the money checks of DELETE /me. */
+async function deleteUser(c: C, p: Principal, now: number): Promise<Answer> {
+  const db = c.env.DB;
+  // The fence first: every session and API key of the user ends, so nothing of theirs can start a
+  // new connect while the accounts are being disconnected (this call runs on).
+  await db.batch([
+    db.prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?').bind(p.userId),
+    db.prepare('UPDATE api_keys SET revoked_at = coalesce(revoked_at, ?) WHERE user_id = ?').bind(Date.now(), p.userId),
+  ]);
+  const keys = (await db.prepare('SELECT id FROM api_keys WHERE user_id = ?').bind(p.userId).all<{ id: string }>()).results.map((k) => `k:${k.id}`);
+  const left: string[] = [];
+  const revoke: string[] = [];
+  const ids: string[] = [];
+  // Again until none is left: a connect that began before the fence may add one meanwhile.
+  for (let round = 0; round < 3; round++) {
+    const accounts = (await db.prepare('SELECT * FROM edge_accounts WHERE user_id = ?').bind(p.userId).all<EdgeAccount>()).results;
+    if (!accounts.length) break;
+    for (const a of accounts) {
+      const r = await disconnect(c.env, p.id, a);
+      ids.push(a.id);
+      left.push(...r.left);
+      if (r.revoke_token) revoke.push(r.revoke_token);
+    }
+  }
+  // An account still there — a connect that began before the fence and is still running — is
+  // never deleted by the cascade behind its back (its token would be left in Cloudflare): the
+  // delete stops here; signed in again, the user repeats it once that connect is over.
+  // What was disconnected goes at once either way — a repeat would not find these accounts again.
+  const accountIds = JSON.stringify(ids);
+  const disconnected = [
+    ...['hourly', 'daily', 'departed'].map((t) => db.prepare(`DELETE FROM ${t} WHERE account_id IN (SELECT value FROM json_each(?))`).bind(accountIds)),
+    db.prepare('DELETE FROM cf_calls WHERE edge_account_id IN (SELECT value FROM json_each(?))').bind(accountIds),
+  ];
+  if (await db.prepare('SELECT 1 FROM edge_accounts WHERE user_id = ?').bind(p.userId).first()) {
+    await db.batch(disconnected);
+    fail(409, 'operation_in_progress', 'A Cloudflare account was being connected meanwhile; sign in again and repeat the delete in a minute.', { left, revoke_tokens: revoke });
+  }
+  const email = await db.prepare('SELECT email FROM users WHERE id = ?').bind(p.userId).first<string>('email');
+  await db.batch([
+    ...disconnected,
+    // Money records stay for accounting, without the address and never under this user id, which
+    // SQLite gives to the next user (§18, ADR 0010).
+    db
+      .prepare(
+        `INSERT INTO billing_archive (user_created_at, deleted_at, data)
+         SELECT created_at, ?2, json_object(
+           'ledger', (SELECT json_group_array(json_object('id', id, 'type', type, 'amount', amount, 'op_key', op_key, 'day', day, 'invoice_id', invoice_id, 'note', note, 'by_tg', by_tg, 'by_name', by_name, 'at', created_at)) FROM ledger WHERE user_id = ?1),
+           'pro_periods', (SELECT json_group_array(json_object('start_day', start_day, 'end_day', end_day)) FROM pro_periods WHERE user_id = ?1))
+         FROM users WHERE id = ?1 AND (EXISTS (SELECT 1 FROM ledger WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM pro_periods WHERE user_id = ?1))`,
+      )
+      .bind(p.userId, now),
+    // The keys' idempotency records; the session's own go after this answer is stored, within 24 hours.
+    db.prepare('DELETE FROM idempotency WHERE principal IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
+    db.prepare('DELETE FROM email_sends WHERE email = ?').bind(email),
+    // Keys, sites, links, link hosts, e-mail tokens and what is left of the accounts go with the
+    // user (ON DELETE CASCADE).
+    db.prepare('DELETE FROM users WHERE id = ?').bind(p.userId),
+  ]);
+  return { status: 200, body: { ok: true, left, revoke_tokens: revoke } };
+}
 
 /** Unlink the Telegram of the account (§17) — from a page session: this is how a stolen Telegram is
  *  taken back. */
@@ -192,8 +231,9 @@ v1.delete(
 
 // ---- API keys: issued, listed and revoked from a page session only ----
 
-const keyView = (k: { id: string; prefix: string; scopes: string; allow_accounts: string | null; allow_ips: string | null; created_at: number; last_used_day: number | null }) => ({
+const keyView = (k: { id: string; prefix: string; scopes: string; allow_accounts: string | null; allow_ips: string | null; created_at: number; last_used_day: number | null; paused_at?: number | null }) => ({
   id: k.id,
+  paused_at: k.paused_at ? new Date(k.paused_at).toISOString() : null,
   prefix: k.prefix,
   scopes: k.scopes.split(','),
   allow_accounts: k.allow_accounts?.split(',') ?? null,
@@ -235,7 +275,7 @@ v1.post(
       const row = { id: newId(), prefix: key.slice(0, 8), scopes: scopes.join(','), allow_accounts: accounts?.join(',') ?? null, allow_ips: ips?.join(',') ?? null, created_at: Date.now(), last_used_day: null };
       // The limit is part of the insert, so two calls at once cannot both pass it.
       const added = await c.env.DB.prepare(
-        'INSERT INTO api_keys (id, user_id, prefix, key_hash, scopes, allow_accounts, allow_ips, created_at, idem_ref) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10 WHERE (SELECT count(*) FROM api_keys WHERE user_id = ?2 AND revoked_at IS NULL) < ?9',
+        'INSERT INTO api_keys (id, user_id, prefix, key_hash, scopes, allow_accounts, allow_ips, created_at, idem_ref) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10 WHERE (SELECT count(*) FROM api_keys WHERE user_id = ?2 AND revoked_at IS NULL AND paused_at IS NULL) < ?9',
       )
         .bind(row.id, p.userId, row.prefix, await sha256(key), row.scopes, row.allow_accounts, row.allow_ips, row.created_at, limits.apiKeys, idemRef)
         .run();
@@ -265,10 +305,14 @@ v1.patch(
     const set: [string, string | null][] = [];
     if ('allow_accounts' in body) set.push(['allow_accounts', stringList(body.allow_accounts, 'allow_accounts', /^[0-9a-f]{32}$/u, limits.cfAccounts)?.join(',') ?? null]);
     if ('allow_ips' in body) set.push(['allow_ips', stringList(body.allow_ips, 'allow_ips', /^[0-9a-f.:]{2,45}$/u, 20)?.join(',') ?? null]);
-    const row = await c.env.DB.prepare(`UPDATE api_keys SET ${set.map(([col]) => `${col} = ?`).join(', ')} WHERE id = ? AND user_id = ? AND revoked_at IS NULL RETURNING *`)
+    const row = await c.env.DB.prepare(`UPDATE api_keys SET ${set.map(([col]) => `${col} = ?`).join(', ')} WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND paused_at IS NULL RETURNING *`)
       .bind(...set.map(([, v]) => v), c.req.param('id'), p.userId)
       .first<Parameters<typeof keyView>[0]>();
-    if (!row) fail(404, 'not_found', 'No such key.');
+    if (!row) {
+      const key = await c.env.DB.prepare('SELECT paused_at FROM api_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL').bind(c.req.param('id'), p.userId).first<{ paused_at: number | null }>();
+      if (key) refusePaused(key, 'key');
+      fail(404, 'not_found', 'No such key.');
+    }
     return { status: 200, body: keyView(row!) };
   }),
 );
@@ -276,8 +320,10 @@ v1.patch(
 v1.delete(
   '/keys/:id',
   handle({ session: true }, async (c, p) => {
+    await markReplan(c.env, p);
     const done = await c.env.DB.prepare('UPDATE api_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL').bind(Date.now(), c.req.param('id'), p.userId).run();
     if (!done.meta.changes) fail(404, 'not_found', 'No such key.');
+    await resumeNext(c.env, p);
     return { status: 200, body: { ok: true } };
   }),
 );
@@ -350,6 +396,7 @@ v1.post(
   '/accounts/:id/token',
   handle({ scope: 'accounts' }, async (c, p, body) => {
     const edge = await accountOf(c, p);
+    refusePaused(edge, 'Cloudflare account');
     const bootstrap = typeof body.bootstrap_token === 'string' ? body.bootstrap_token : '';
     if (!BOOTSTRAP.test(bootstrap)) fail(400, 'invalid_request', '"bootstrap_token" is missing or malformed.', { field: 'bootstrap_token' });
     return { status: 200, body: { account: accountView(await connect(c.env, p, edge.cf_account_id, bootstrap, edge)) } };
@@ -358,12 +405,21 @@ v1.post(
 
 v1.post(
   '/accounts/:id/install',
-  handle({ scope: 'accounts' }, async (c, p) => ({ status: 202, body: { account: accountView(await install(c, p, await accountOf(c, p))) } })),
+  handle({ scope: 'accounts' }, async (c, p) => {
+    const edge = await accountOf(c, p);
+    refusePaused(edge, 'Cloudflare account');
+    return { status: 202, body: { account: accountView(await install(c, p, edge)) } };
+  }),
 );
 
 v1.delete(
   '/accounts/:id',
-  handle({ scope: 'accounts' }, async (c, p) => ({ status: 200, body: { ok: true, ...(await disconnect(c.env, p.id, await accountOf(c, p))) } })),
+  handle({ scope: 'accounts' }, async (c, p) => {
+    await markReplan(c.env, p);
+    const left = await disconnect(c.env, p.id, await accountOf(c, p));
+    await resumeNext(c.env, p);
+    return { status: 200, body: { ok: true, ...left } };
+  }),
 );
 
 // ---- Sites (§5) ----
@@ -491,7 +547,9 @@ v1.delete(
   '/sites/:id',
   handle({ scope: 'sites' }, async (c, p) => {
     const { site, edge } = await siteOf(c, p);
+    await markReplan(c.env, p);
     const deleted = await deleteSite(c.env, p.id, edge, site);
+    await resumeNext(c.env, p);
     sync(c, p, edge.id);
     return { status: 200, body: { site: siteView(deleted, edge.synced_revision) } };
   }),
@@ -660,8 +718,51 @@ v1.delete(
   '/links/:id',
   handle({ scope: 'links' }, async (c, p) => {
     const { link, edge, host } = await linkOf(c, p);
+    await markReplan(c.env, p);
     const deleted = await deleteLink(c.env, link);
+    await resumeNext(c.env, p);
     sync(c, p, edge.id);
     return { status: 200, body: { link: linkView(deleted, host, edge.synced_revision) } };
+  }),
+);
+
+/** The balance and Pro (§18): the balance, the open period, the last 50 journal rows. */
+async function billingView(db: D1Database, userId: number) {
+  const user = (await db.prepare('SELECT plan_comp, grace_since FROM users WHERE id = ?').bind(userId).first<{ plan_comp: number; grace_since: number | null }>())!;
+  const period = await openPeriod(db, userId);
+  const through = await paidThrough(db, userId, period);
+  const journal = (
+    await db
+      .prepare('SELECT id, type, amount, day, invoice_id, note, created_at FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 50')
+      .bind(userId)
+      .all<{ id: number; type: string; amount: number; day: number | null; invoice_id: string | null; note: string | null; created_at: number }>()
+  ).results;
+  return {
+    balance_micro_usd: await balanceOf(db, userId),
+    pro: {
+      on: !!period || !!user.plan_comp,
+      given: !!user.plan_comp,
+      since: period ? isoDay(period.start_day) : null,
+      paid_through: through === null ? null : isoDay(through),
+      grace_until: user.grace_since === null ? null : new Date(user.grace_since + GRACE_MS).toISOString(),
+      price_micro_usd: PRO_PRICE,
+      day_micro_usd: DAY_PRICE,
+    },
+    journal: journal.map((r) => ({ id: r.id, type: r.type, amount_micro_usd: r.amount, day: r.day === null ? null : isoDay(r.day), invoice_id: r.invoice_id, note: r.note, at: new Date(r.created_at).toISOString() })),
+  };
+}
+
+v1.get(
+  '/billing',
+  handle({ scope: 'billing' }, async (c, p) => ({ status: 200, body: await billingView(c.env.DB, p.userId) })),
+);
+
+/** Pro on or off (§18): on needs a confirmed e-mail and $9 on the balance; off ends it after today. */
+v1.post(
+  '/billing/pro',
+  handle({ scope: 'billing' }, async (c, p, body) => {
+    if (typeof body.on !== 'boolean') fail(400, 'invalid_request', '"on" must be true or false.', { field: 'on' });
+    await (body.on ? proOn(c.env, p.userId) : proOff(c.env, p.userId));
+    return { status: 200, body: await billingView(c.env.DB, p.userId) };
   }),
 );

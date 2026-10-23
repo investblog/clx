@@ -1221,14 +1221,17 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   (`deposit`, `charge`, `bonus`, `adjustment`, `refund`, `partner_transfer`); no row is ever changed.
   A mutable balance would lose a race silently; a journal shows it.
 - **Pro periods.** Pro is on while a row of `pro_periods` (user, start date, end date or none) is
-  open. `POST /v1/billing/pro {on: true}` needs a balance of at least $9: it opens a period (or
-  reopens one that ends tomorrow — off and on within a day) and charges today. `{on: false}` sets
-  the end to tomorrow: today is paid, nothing after it. `users.plan` follows: `api` while a period
-  is open or `plan_comp` is set, else `free`.
+  open. `POST /v1/billing/pro {on: true}` opens a period in one statement that requires a balance
+  of at least $9 (and no delete under way), then charges today; switched off and on within a day,
+  a second period starts the same day and the day is still charged once. `{on: false}` ends the
+  period after today, or at its first unpaid day. `users.plan` follows: `api` while a period is open
+  or `plan_comp` is set, else `free`.
 - **Charges.** One day is 300,000 micro-USD ($9 / 30, exact). A charge is one conditional `INSERT`
-  — only if the balance covers it — under a unique index on `(user_id, charge_date)`, so a cron
+  — only if the balance covers it, the period is still open and holds the day, no plan is given by
+  hand and no delete is under way — under a unique index on `(user_id, charge_date)`, so a cron
   delivered twice (`cloudflare-facts.md`), a switch racing the cron, or off-and-on in one day charges
-  once. The cron of clx.cx at 00:05 UTC charges every open period's unpaid days up to today, oldest
+  once. Each hourly run of clx.cx's cron (at :20) settles up to 100 users, graces first and the oldest
+  grace first, then open periods not yet charged today — their unpaid days up to today, oldest
   first, a whole day at a time; a deposit runs the same for its user at once.
 - **Grace.** The first day not covered sets `users.grace_since`: Pro keeps working, the user gets an
   e-mail and a Telegram notice. When no unpaid day is left the grace ends. If one is still there 3
@@ -1244,7 +1247,13 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   the link answers `404`; every site and link of a paused account is withdrawn, its worker stays.
   A paused key is refused like a revoked one. Paused objects keep their host or code reserved, show
   "paused" on the page and in `/v1`, can be deleted but not changed, and do not count against
-  limits. Pro again clears every `paused_at` and syncs them back.
+  limits. Pro again clears every `paused_at` and syncs them back; on free, deleting or revoking a
+  kept object lets the next paused one work (a mark, `users.replan_at`, set before the delete and
+  cleared after, leaves a run that died in between to the check below). Each hour the cron
+  re-applies the plan to users so marked, users whose
+  stored plan disagrees with their periods, or who have more working on free than free allows (a
+  downgrade that failed halfway, an object made by a call that began on Pro, a connect that
+  finished after the pause).
 - **A plan given by hand** (`/plan <email> api`, §17) sets `plan_comp` and settles the paid period
   as a grace that ran out would, but without the plan changing: closed at its first unpaid day, or
   after today when all is paid, and `grace_since` cleared; no charges while `plan_comp` is set.
@@ -1305,7 +1314,9 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   journal rows, invoices and partner rows are copied into `billing_archive` (one row per deleted
   user, without the address) and then deleted with the user — never kept under a user id SQLite
   gives to the next user (ADR 0010).
-- **Users on `api` before billing** get a $9 bonus and an open period, with a notice 14 days before
+- **Low balance.** A user with Pro on whose balance covers fewer than 14 days is told once (e-mail
+  and Telegram), and again only after it has been above. Users on `api` before billing get a $9
+  bonus and an open period from the migration (`0015`); this notice comes 14 days before
   the bonus runs out.
 
 ## 19. Partners

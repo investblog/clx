@@ -28,9 +28,9 @@ prepaid balance with daily charges since 09.2026.
 - **Charged by the UTC day: $0.30** (9,000,000 / 30 = 300,000 micro-USD, exact) — a calendar month
   is never used. Pro is a **period** (`pro_periods`: start, end): switching on opens one and
   charges the current day at once (a balance of at least $9 is needed); the cron charges each
-  open period's current day at 00:05 UTC. One charge per user and day (a unique index), so a cron
+  open period's current day in its first hourly run of the UTC day (00:20). One charge per user and day (a unique index), so a cron
   delivered twice, a switch racing the cron, or off-and-on within a day charges once. Switching off
-  ends the period after the day already paid; on again the same day reopens it.
+  ends the period after the day already paid; on again needs $9 again, and a day is charged once.
 - **Not enough money — grace, then the period closes and the debt is forgiven.** A day the balance
   does not cover starts 3 days of grace: Pro keeps working, an e-mail and a Telegram notice go.
   Each top-up (and each cron run) pays the unpaid days of the open period, oldest first, a whole day

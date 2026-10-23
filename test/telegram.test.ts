@@ -520,7 +520,7 @@ describe('support', () => {
     await inGroup(admin, '/plan@ClxCxBot Op@example.com api');
     expect(await env.DB.prepare("SELECT plan FROM users WHERE email = 'op@example.com'").first<string>('plan')).toBe('api');
     expect(last(tg)).toContain('Your plan is now <b>api</b>: up to 50 Cloudflare accounts');
-    expect(toGroup().at(-1)!.text).toBe('op@example.com: plan api — told in Telegram');
+    expect(toGroup().at(-1)!.text).toBe('op@example.com: plan api (given, not charged) — told in Telegram');
     await inGroup(admin, '/plan op@example.com gold');
     expect(toGroup().at(-1)!.text).toContain('Use: /plan');
     await inGroup(admin, '/user op@example.com');

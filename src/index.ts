@@ -3,6 +3,8 @@ import { admin } from './admin';
 import { runAdvice } from './advice';
 import { auth } from './auth/routes';
 import { signup } from './auth/signup';
+import { reconcilePlans } from './billing/pause';
+import { GRACE_MS, LOW_DAYS, lowBalances, markLowTold, runCharges } from './billing/pro';
 import { checkTokens } from './cf/connect';
 import { runOperations } from './cf/deploy';
 import { runLinkHosts } from './cf/links';
@@ -15,7 +17,7 @@ import { mcp } from './mcp/index';
 import type { Env } from './types';
 import { telegram, UPDATES_TTL } from './tg/webhook';
 import { IDEM_TTL } from './v1/idempotency';
-import { v1 } from './v1/index';
+import { DELETING_TTL, v1 } from './v1/index';
 
 const CF_CALLS_TTL = 90 * 86_400_000;
 const HOURLY_HOURS = 48;
@@ -44,6 +46,18 @@ async function mailSilence(env: Env, a: { id: string; user_id: number; cf_accoun
   if (!user) return;
   const mail = MAIL[user.locale].silence(a.cf_account_name ?? a.cf_account_id, appUrl(env, user.locale, `#/accounts/${a.id}`));
   await sendNotice(env, user, mail.subject, mail.text, now, true);
+}
+
+/** Pro's balance runs low, its grace started, or it ran out and the account is back on free (§18):
+ *  told once. */
+async function mailPro(env: Env, userId: number, what: 'low' | 'grace' | 'ended', now: number): Promise<boolean> {
+  const user = await recipient(env, userId);
+  if (!user) return false;
+  const link = appUrl(env, user.locale, '#/billing');
+  const text = MAIL[user.locale];
+  const mail = what === 'low' ? text.proLow(LOW_DAYS, link) : what === 'grace' ? text.proGrace(now + GRACE_MS, link) : text.proEnded(link);
+  // The low-balance notice is tried again until its e-mail goes; the others go once, Telegram anyway.
+  return sendNotice(env, user, mail.subject, mail.text, now, what !== 'low');
 }
 
 export const app = new Hono<{ Bindings: Env }>();
@@ -125,6 +139,17 @@ export default {
         console.log(`tokens checked ${r.checked}, revoked ${r.revoked}, connects lost ${r.lost}`);
         const a = await runAdvice(env, now);
         if (a.advised) console.log(`advice: ${a.advised} accounts`);
+        // A delete that died left its mark (§18): money moves for that user again.
+        await env.DB.prepare('UPDATE users SET deleting_at = NULL WHERE deleting_at < ?').bind(now - DELETING_TTL).run();
+        // Pro (§18): today's day charged for every open period, graces followed, ended ones closed.
+        const charges = await runCharges(env, now);
+        if (charges.users) console.log(`charges: ${charges.users} users, grace ${charges.grace.length}, closed ${charges.closed.length}`);
+        for (const id of charges.grace) await mailPro(env, id, 'grace', now).catch((e: unknown) => console.error('grace mail', id, e instanceof Error ? e.message : e));
+        for (const id of charges.closed) await mailPro(env, id, 'ended', now).catch((e: unknown) => console.error('pro ended mail', id, e instanceof Error ? e.message : e));
+        for (const id of await lowBalances(env)) if (await mailPro(env, id, 'low', now).catch((e: unknown) => (console.error('low balance mail', id, e instanceof Error ? e.message : e), false))) await markLowTold(env, id, now);
+        // A plan that disagrees with its periods, or more working on free than free allows.
+        const plans = await reconcilePlans(env, now);
+        if (plans) console.log(`plans reconciled: ${plans}`);
       })(),
     );
   },

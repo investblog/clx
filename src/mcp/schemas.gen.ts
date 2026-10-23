@@ -772,5 +772,41 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
       "breakdowns"
     ],
     "body": []
+  },
+  "get_billing": {
+    "description": "The balance, Pro and the last 50 journal rows (scope billing)\n\nMoney is integer micro-USD (1 USD = 1,000,000). Pro — the `api` plan — is $9 per 30 days,\ncharged by the UTC day from the balance (docs/spec.md §18).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": []
+  },
+  "set_pro": {
+    "description": "Switch Pro on or off (scope billing)\n\nOn needs a confirmed e-mail and at least $9 on the balance (`insufficient_balance`), and\ncharges today; a day is charged once, however often Pro is switched. Off ends Pro after today\n(or at its first unpaid day, which is then not owed); the account returns to free and what is\nbeyond its limits is paused, not deleted.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "on": {
+          "type": "boolean"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[!-~]{1,200}$",
+          "description": "Sent as the Idempotency-Key: the same key and arguments within 24 hours return the first answer and change nothing again. Without one the server makes one, and a repeated call is not protected."
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": [
+      "on"
+    ]
   }
 };

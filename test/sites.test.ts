@@ -3,6 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signAccess } from '../src/auth/jwt';
+import { applyPlan } from '../src/billing/pause';
 import { edgeById } from '../src/cf/connect';
 import { runSites, undoRotation } from '../src/cf/sites';
 import { app } from '../src/index';
@@ -418,6 +419,24 @@ describe('review fixes (4a)', () => {
     await runSites(env);
     const row = userDb().prepare("SELECT c.deleted FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = 'site:example.com' ORDER BY c.revision DESC LIMIT 1").get() as { deleted: number };
     expect(row.deleted).toBe(1);
+  });
+
+  it('a paused site (§18) is withdrawn from the worker and comes back when Pro is on', async () => {
+    const { site } = (await addSite('example.com')).body;
+    await runSites(env);
+    const latest = () => userDb().prepare("SELECT c.deleted FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = 'site:example.com' ORDER BY c.revision DESC LIMIT 1").get() as { deleted: number };
+    expect(latest().deleted).toBe(0);
+    // Two accounts on free: the account is not the one kept, so all of it pauses.
+    await env.DB.prepare("INSERT INTO edge_accounts (id, user_id, cf_account_id, state, created_at, updated_at) VALUES ('ea_old', 1, 'old-cf-account', 'ready', -1, 0)").run();
+    await env.DB.prepare("UPDATE users SET plan = 'free' WHERE id = 1").run();
+    await applyPlan(env, 1);
+    expect((await call('GET', `/v1/sites/${site.id}`)).body.site.paused_at).not.toBeNull();
+    await runSites(env);
+    expect(latest().deleted).toBe(1);
+    await env.DB.prepare("DELETE FROM edge_accounts WHERE id = 'ea_old'").run();
+    await applyPlan(env, 1);
+    await runSites(env);
+    expect(latest().deleted).toBe(0);
   });
 
   it("a worker database ahead of clx is written over: every site again, above its head", async () => {

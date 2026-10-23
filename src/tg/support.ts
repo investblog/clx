@@ -3,6 +3,7 @@
 // group, and every other group, gets silence.
 import { localeOf, type Locale } from '../mail-text';
 import { planOf } from '../limits';
+import { setComp } from '../billing/pro';
 import type { Env } from '../types';
 import { botId, botName, esc, isChatAdmin, MESSAGE_MAX, sendMessage } from './api';
 import type { TgMessage } from './bot';
@@ -91,11 +92,13 @@ async function userCard(env: Env, raw: string): Promise<string> {
 
 async function setPlan(env: Env, raw: string, plan: string): Promise<string> {
   if (plan !== 'free' && plan !== 'api') return 'Use: /plan email free|api';
-  const u = await env.DB.prepare('UPDATE users SET plan = ? WHERE email = ? RETURNING id, locale').bind(plan, emailOf(raw)).first<{ id: number; locale: string }>();
+  const u = await env.DB.prepare('SELECT id, locale FROM users WHERE email = ?').bind(emailOf(raw)).first<{ id: number; locale: string }>();
   if (!u) return `No account ${esc(raw)}.`;
+  // Given by hand: `plan_comp`, never charged; taken: the user is on what their Pro periods say (§18).
+  const now = await setComp(env, u.id, plan === 'api');
   const tg = await env.DB.prepare('SELECT tg_user_id FROM tg_identities WHERE user_id = ?').bind(u.id).first<number>('tg_user_id');
-  const told = tg ? await sendMessage(env, tg, BOT[localeOf(u.locale)].planChanged(planOf(plan))) : false;
-  return `${esc(emailOf(raw))}: plan ${plan}${tg ? (told ? ' — told in Telegram' : ' — the Telegram message did not go') : ' — no Telegram linked'}`;
+  const told = tg ? await sendMessage(env, tg, BOT[localeOf(u.locale)].planChanged(planOf(now))) : false;
+  return `${esc(emailOf(raw))}: plan ${now}${plan === 'api' ? ' (given, not charged)' : ''}${tg ? (told ? ' — told in Telegram' : ' — the Telegram message did not go') : ' — no Telegram linked'}`;
 }
 
 async function sources(env: Env, rawDays: string | undefined, now: number): Promise<string> {

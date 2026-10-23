@@ -40,6 +40,8 @@ export interface SiteRow {
   rotating: string | null;
   revision: number;
   error: string | null;
+  /** Beyond free's limits on free (§18): withdrawn from the worker, kept. */
+  paused_at: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -68,9 +70,15 @@ export function siteView(s: SiteRow, syncedRevision: number) {
     config: s.revision <= syncedRevision ? 'synced' : 'pending',
     retiring: (JSON.parse(s.retiring) as Retiring[]).map((r) => ({ path: namesFor(r.seed).path, until: new Date(r.until).toISOString() })),
     error: s.error ? JSON.parse(s.error) : null,
+    paused_at: s.paused_at ? new Date(s.paused_at).toISOString() : null,
     created_at: new Date(s.created_at).toISOString(),
   };
 }
+
+/** A paused object can be read and deleted, not changed (§18). */
+export const refusePaused = (o: { paused_at: number | null }, what: string) => {
+  if (o.paused_at) fail(409, 'paused', `This ${what} is paused: it is beyond the free plan's limits. Switch Pro on to use it again.`);
+};
 
 /** The site as the worker reads it (edge/contract.ts). */
 function configOf(s: SiteRow): SiteConfig {
@@ -203,6 +211,7 @@ async function makeRoute(env: Env, edge: EdgeAccount, site: SiteRow, principal: 
 
 /** Add a site: the zone is found in the account, the site recorded, the route made (§15). */
 export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: string, excluded: string[]): Promise<SiteRow> {
+  refusePaused(edge, 'Cloudflare account');
   if (!inService(edge)) fail(409, 'account_not_ready', 'clx-edge is not installed and confirmed in this account yet.', { state: edge.state });
   const token = await workingToken(env, edge);
   const zone = await zoneFor(token, edge.cf_account_id, host);
@@ -222,7 +231,7 @@ export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: s
     // The limit is part of the batch, so two adds at once cannot both pass it.
     rows = await db.batch([
       db
-        .prepare("UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?1 AND (SELECT count(*) FROM sites WHERE user_id = ?2 AND state != 'deleted') < ?3")
+        .prepare("UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?1 AND paused_at IS NULL AND (SELECT count(*) FROM sites WHERE user_id = ?2 AND state != 'deleted' AND paused_at IS NULL) < ?3")
         .bind(edge.id, p.userId, limit),
       db
         .prepare(
@@ -246,13 +255,18 @@ const changedMeanwhile = (): never => fail(409, 'operation_in_progress', 'The si
 
 export async function patchSite(env: Env, site: SiteRow, excluded: string[]): Promise<SiteRow> {
   if (site.state === 'deleted') fail(404, 'not_found', 'No such site.');
-  if (!(await revise(env.DB, site.account_id, site.id, 'excluded = ?', [JSON.stringify(excluded)], " AND state != 'deleted'"))) changedMeanwhile();
+  refusePaused(site, 'site');
+  if (!(await revise(env.DB, site.account_id, site.id, 'excluded = ?', [JSON.stringify(excluded)], " AND state != 'deleted' AND paused_at IS NULL"))) {
+    refusePaused((await siteById(env.DB, site.id)) ?? site, 'site');
+    changedMeanwhile();
+  }
   return (await siteById(env.DB, site.id))!;
 }
 
 /** A new seed: new path, names and snippet; the old path keeps counting for 30 days (§5). */
 export async function rotateSite(env: Env, principal: string, edge: EdgeAccount, site: SiteRow): Promise<SiteRow> {
   if (site.state !== 'active') fail(409, 'site_not_active', 'Only an active site can be rotated.', { state: site.state });
+  refusePaused(site, 'site');
   // Under the lease, as placeRoute.
   return (await leased(env.DB, edge.id, () => rotate(env, principal, edge, site))) ?? fail(409, 'operation_in_progress', 'Another operation on this Cloudflare account is running; retry shortly.');
 }
@@ -266,7 +280,7 @@ async function rotate(env: Env, principal: string, edge: EdgeAccount, site: Site
   let seed = site.rotating;
   if (!seed) {
     seed = newId();
-    const set = await env.DB.prepare("UPDATE sites SET rotating = ?, updated_at = ? WHERE id = ? AND state = 'active' AND seed = ? AND rotating IS NULL").bind(seed, Date.now(), site.id, site.seed).run();
+    const set = await env.DB.prepare("UPDATE sites SET rotating = ?, updated_at = ? WHERE id = ? AND state = 'active' AND seed = ? AND rotating IS NULL AND paused_at IS NULL").bind(seed, Date.now(), site.id, site.seed).run();
     if (!set.meta.changes) changedMeanwhile();
     site = { ...site, rotating: seed };
   }
@@ -399,8 +413,9 @@ export async function syncAccount(env: Env, accountId: string, principal = 'cron
       const sites = (await db.prepare('SELECT * FROM sites WHERE account_id = ? AND revision > ? AND revision <= ? ORDER BY revision').bind(edge.id, head, target).all<SiteRow>()).results;
       const syncId = newId();
       const now = Date.now();
-      // A deleted site, or one whose path another worker holds, is withdrawn from the worker.
-      const live = (s: SiteRow) => s.state === 'active' || s.state === 'route_pending';
+      // A deleted site, one whose path another worker holds, or a paused one (§18) is withdrawn
+      // from the worker.
+      const live = (s: SiteRow) => (s.state === 'active' || s.state === 'route_pending') && !s.paused_at;
       // One row per key: a host or code deleted and added again in this range has a withdrawn row
       // and a live one, and the live one wins.
       const rows = new Map<string, string | null>();

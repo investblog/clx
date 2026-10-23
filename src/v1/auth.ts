@@ -39,7 +39,7 @@ export async function principalOf(c: Context<{ Bindings: Env }>): Promise<Princi
     return { id: `u:${userId}`, userId, plan: user.plan, via: 'session', scopes: new Set(SCOPES), allowAccounts: null };
   }
   const key = await c.env.DB.prepare(
-    'SELECT k.id, k.user_id, k.scopes, k.allow_accounts, k.allow_ips, k.last_used_day, u.plan FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.key_hash = ? AND k.revoked_at IS NULL',
+    'SELECT k.id, k.user_id, k.scopes, k.allow_accounts, k.allow_ips, k.last_used_day, u.plan FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.key_hash = ? AND k.revoked_at IS NULL AND k.paused_at IS NULL',
   )
     .bind(await sha256(token))
     .first<KeyRow>();

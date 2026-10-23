@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // node scripts/user.mjs add <email>                — a new user
 // node scripts/user.mjs password <email>           — a new password for an existing user
-// node scripts/user.mjs plan <email> free|api      — switch the plan (§15: `api` is switched on by an admin)
+// (the plan is changed by /plan in the bot's support group, §17 — it pauses and resumes, §18)
 // node scripts/user.mjs admin <email> on|off       — admin commands (§4: rollout, bundle info)
 // node scripts/user.mjs list
 //
@@ -59,16 +59,9 @@ if (cmd === 'list') {
   process.exit(0);
 }
 const email = (rawEmail ?? '').trim().toLowerCase();
-if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) || !['add', 'password', 'plan', 'admin'].includes(cmd) || (cmd === 'plan' && !['free', 'api'].includes(planArg)) || (cmd === 'admin' && !['on', 'off'].includes(planArg))) {
-  console.error('usage: node scripts/user.mjs add <email> | password <email> | plan <email> free|api | admin <email> on|off | list  [--local]');
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) || !['add', 'password', 'admin'].includes(cmd) || (cmd === 'admin' && !['on', 'off'].includes(planArg))) {
+  console.error('usage: node scripts/user.mjs add <email> | password <email> | admin <email> on|off | list  [--local]');
   process.exit(2);
-}
-if (cmd === 'plan') {
-  wrangler([`--command=UPDATE users SET plan = ${sq(planArg)} WHERE email = ${sq(email)}`, '--yes']);
-  const [row] = query(`SELECT plan FROM users WHERE email = ${sq(email)}`);
-  if (row?.plan !== planArg) throw new Error(`no user ${email}, or the plan did not change`);
-  console.log(`${email}: plan ${planArg}`);
-  process.exit(0);
 }
 if (cmd === 'admin') {
   const flag = planArg === 'on' ? 1 : 0;

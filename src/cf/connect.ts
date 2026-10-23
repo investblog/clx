@@ -84,6 +84,8 @@ export interface EdgeAccount {
   edge_key_prev_until: number | null;
   deployment_id: string | null;
   installed_at: number | null;
+  /** Beyond free's limits on free (§18): every site and link of it withdrawn, kept. */
+  paused_at: number | null;
   // the config sync (§6, src/cf/sites.ts)
   config_revision: number;
   synced_revision: number;
@@ -124,6 +126,7 @@ export function accountView(a: EdgeAccount) {
     // When to move the Cloudflare account to Workers Paid (§8), recomputed daily; an account out of
     // service (revoked, no rights) is not measured any more, so its last advice is not shown.
     advice: a.advice && inService(a) ? JSON.parse(a.advice) : null,
+    paused_at: a.paused_at ? new Date(a.paused_at).toISOString() : null,
     created_at: new Date(a.created_at).toISOString(),
   };
 }
@@ -271,7 +274,7 @@ export async function connect(env: Env, p: Principal, cfAccountId: string, boots
         .prepare(
           `INSERT INTO edge_accounts (id, user_id, cf_account_id, state, operation_id, lease_until, lease_owner, created_at, updated_at)
            SELECT ?1, ?2, ?3, 'pending', ?4, ?5, ?9, ?6, ?6
-           WHERE (SELECT count(*) FROM edge_accounts WHERE user_id = ?2) < ?7
+           WHERE (SELECT count(*) FROM edge_accounts WHERE user_id = ?2 AND paused_at IS NULL) < ?7
              AND (?8 < 0 OR (SELECT count(*) FROM edge_accounts e JOIN users u ON u.id = e.user_id WHERE u.plan = 'free') < ?8)
            ON CONFLICT (cf_account_id) DO NOTHING`,
         )
@@ -282,7 +285,7 @@ export async function connect(env: Env, p: Principal, cfAccountId: string, boots
     ]);
     if (!rows[0]!.meta.changes) {
       if (await db.prepare('SELECT 1 FROM edge_accounts WHERE cf_account_id = ?').bind(cfAccountId).first()) fail(409, 'operation_in_progress', 'This Cloudflare account is being connected right now; retry shortly.');
-      const mine = await db.prepare('SELECT count(*) AS n FROM edge_accounts WHERE user_id = ?').bind(p.userId).first<{ n: number }>();
+      const mine = await db.prepare('SELECT count(*) AS n FROM edge_accounts WHERE user_id = ? AND paused_at IS NULL').bind(p.userId).first<{ n: number }>();
       if ((mine?.n ?? 0) >= LIMITS[plan].cfAccounts) fail(403, 'limit_reached', `The ${plan} plan connects at most ${LIMITS[plan].cfAccounts} Cloudflare account(s).`, { limit: LIMITS[plan].cfAccounts });
       fail(403, 'service_full', 'clx takes no more free accounts for now; you are welcome on the waiting list.');
     }

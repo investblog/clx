@@ -42,6 +42,12 @@ export interface MailText {
   /** A Telegram user linked to the account, with the link that unlinks it. */
   tgLinked(who: string, unlink: string): Mail;
   tgUnlinked(who: string): Mail;
+  /** Pro's balance covers fewer than `days` more days (§18). */
+  proLow(days: number, link: string): Mail;
+  /** Pro's balance did not cover a day (§18): the grace runs until `until`. */
+  proGrace(until: number, link: string): Mail;
+  /** The grace ran out: back on free, what is beyond it paused (§18). */
+  proEnded(link: string): Mail;
 }
 
 const date = (locale: Locale, at: number) => new Date(at).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-GB', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' });
@@ -66,6 +72,18 @@ const en: MailText = {
   renew: (name, until, link) => ({
     subject: `clx: renew the connection of "${name}"`,
     text: `Hello,\n\nThe token clx works with in the Cloudflare account "${name}" is valid until ${date('en', until)}. After that clx cannot update the worker, add sites and links or read report breakdowns.\nTo renew it, create a new bootstrap token and paste it on the account's page: ${link}\n`,
+  }),
+  proLow: (days, link) => ({
+    subject: 'clx: your balance is running low',
+    text: `Hello,\n\nYour clx balance covers fewer than ${days} more days of Pro ($0.30 a day, $9 per 30 days). Top it up before it runs out, and Pro goes on without a break.\nTop up: ${link}\n`,
+  }),
+  proGrace: (until, link) => ({
+    subject: 'clx: top up your balance to keep Pro',
+    text: `Hello,\n\nYour clx balance does not cover today's day of Pro ($0.30 a day, $9 per 30 days). Pro keeps working until ${date('en', until)}; if the balance is still short then, your account returns to the free plan and what is beyond its limits is paused (nothing is deleted).\nTop up: ${link}\n`,
+  }),
+  proEnded: (link) => ({
+    subject: 'clx: your account is back on the free plan',
+    text: `Hello,\n\nYour balance did not cover Pro, so your account is on the free plan now. Your oldest Cloudflare account with its 10 oldest sites and 200 oldest links, and your oldest API key, keep working; the rest is paused — nothing is deleted. Switch Pro on again and all of it works again.\nBalance and Pro: ${link}\n`,
   }),
   silence: (name, link) => ({
     subject: `clx: no word from the worker in "${name}"`,
@@ -121,6 +139,18 @@ const ru: MailText = {
   renew: (name, until, link) => ({
     subject: `clx: продлите подключение «${name}»`,
     text: `Здравствуйте!\n\nТокен, которым clx работает в аккаунте Cloudflare «${name}», действует до ${date('ru', until)}. После этого clx не сможет обновлять воркер, добавлять сайты и ссылки и читать разбивки отчётов.\nЧтобы продлить, создайте новый bootstrap-токен и вставьте его на странице аккаунта: ${link}\n`,
+  }),
+  proLow: (days, link) => ({
+    subject: 'clx: баланс заканчивается',
+    text: `Здравствуйте!\n\nБаланса clx хватит меньше чем на ${days} дней Pro ($0,30 в день, $9 за 30 дней). Пополните его заранее, и Pro продолжит работать без перерыва.\nПополнить: ${link}\n`,
+  }),
+  proGrace: (until, link) => ({
+    subject: 'clx: пополните баланс, чтобы сохранить Pro',
+    text: `Здравствуйте!\n\nБаланса clx не хватает на сегодняшний день Pro ($0,30 в день, $9 за 30 дней). Pro работает до ${date('ru', until)}; если баланса и тогда не хватит, аккаунт вернётся на бесплатный план, а всё сверх его лимитов встанет на паузу (ничего не удаляется).\nПополнить: ${link}\n`,
+  }),
+  proEnded: (link) => ({
+    subject: 'clx: аккаунт снова на бесплатном плане',
+    text: `Здравствуйте!\n\nБаланса не хватило на Pro, и аккаунт теперь на бесплатном плане. Работают самый старый аккаунт Cloudflare с 10 самыми старыми сайтами и 200 самыми старыми ссылками и самый старый API-ключ; остальное на паузе — ничего не удалено. Включите Pro снова, и всё заработает.\nБаланс и Pro: ${link}\n`,
   }),
   silence: (name, link) => ({
     subject: `clx: нет связи с воркером в «${name}»`,

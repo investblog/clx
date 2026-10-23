@@ -53,7 +53,9 @@ components:
                 cloudflare_error. Sites: zone_not_found, site_exists, route_conflict, site_not_active,
                 route_not_ours (a route clx made was changed outside clx and left in place).
                 Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
-                invalid_password (DELETE /v1/me).
+                invalid_password, balance_not_empty (DELETE /v1/me with money on the balance).
+                Billing (docs/spec.md §18): insufficient_balance (Pro needs $9 on the balance), paused (an
+                object beyond the free plan's limits: it can be read and deleted, not changed).
                 Links: link_exists (the code is taken on that link host), link_host_not_ready (links go
                 on an active host only), link_host_in_use
                 (DELETE /v1/link-hosts/{id} while live links are on it). In a link host's `error`:
@@ -66,11 +68,12 @@ components:
       properties:
         id: { type: string }
         prefix: { type: string }
-        scopes: { type: array, items: { type: string, enum: [accounts, sites, links, reports] } }
+        scopes: { type: array, items: { type: string, enum: [accounts, sites, links, reports, billing] } }
         allow_accounts: { type: [array, 'null'], items: { type: string } }
         allow_ips: { type: [array, 'null'], items: { type: string } }
         created_at: { type: string, format: date-time }
         last_used: { type: [string, 'null'], format: date }
+        paused_at: { type: [string, 'null'], format: date-time, description: 'set while the key is beyond the free plan''s limits (docs/spec.md §18): it is refused until Pro is on again' }
     Account:
       type: object
       properties:
@@ -138,6 +141,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/LinkHost' }
           description: The account's link hosts (GET /v1/accounts/{id} only)
+        paused_at: { type: [string, 'null'], format: date-time, description: 'set while the account is beyond the free plan''s limits (docs/spec.md §18): its sites and links are withdrawn from the worker, nothing new can be added' }
         created_at: { type: string, format: date-time }
     LinkHost:
       type: object
@@ -173,6 +177,7 @@ components:
         rules: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Rule' }, description: 'the first match wins' }
         state: { type: string, enum: [active, deleted] }
         config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the link yet' }
+        paused_at: { type: [string, 'null'], format: date-time, description: 'set while the link is beyond the free plan''s limits (docs/spec.md §18): it answers 404 and cannot be changed' }
         clicks_7d: { type: integer, description: 'clicks of the last 7 closed UTC days (GET /v1/links only, and only with the reports scope)' }
         created_at: { type: string, format: date-time }
     Site:
@@ -194,6 +199,7 @@ components:
             script_tag: { type: string, description: '<script src="/<path>/<s>.js"> with defer (the order of the attributes varies by site)' }
         excluded_paths: { type: array, items: { type: string } }
         config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the site yet' }
+        paused_at: { type: [string, 'null'], format: date-time, description: 'set while the site is beyond the free plan''s limits (docs/spec.md §18): it is not counted and cannot be changed' }
         retiring: { type: array, items: { type: object, properties: { path: { type: string }, until: { type: string, format: date-time } } }, description: 'old paths still counted after a rotation' }
         error: { type: [object, 'null'] }
         created_at: { type: string, format: date-time }
@@ -243,6 +249,33 @@ components:
           type: string
           enum: [not_installed, cloudflare, rate_limited]
           description: 'why breakdowns (and a link''s today) are not there: the worker is not installed or the token is gone; Cloudflare failed or took over 5 s; over 30 reads of the account databases a minute for this clx user (each cached 5 minutes)'
+    Billing:
+      type: object
+      properties:
+        balance_micro_usd: { type: integer }
+        pro:
+          type: object
+          properties:
+            'on': { type: boolean, description: 'Pro is on — paid, or given by an operator' }
+            given: { type: boolean, description: 'given by an operator: never charged' }
+            since: { type: [string, 'null'], format: date, description: 'the first day of the open period' }
+            paid_through: { type: [string, 'null'], format: date, description: 'the last day of the unbroken run of paid days' }
+            grace_until: { type: [string, 'null'], format: date-time, description: 'a day is unpaid: Pro works until then; still unpaid, the account returns to free' }
+            price_micro_usd: { type: integer, description: '9,000,000 — per 30 days' }
+            day_micro_usd: { type: integer, description: '300,000 — what a day costs' }
+        journal:
+          type: array
+          description: the last 50 rows, newest first
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              type: { type: string, enum: [deposit, charge, bonus, adjustment, refund, partner_transfer] }
+              amount_micro_usd: { type: integer, description: 'negative for a charge or a refund' }
+              day: { type: [string, 'null'], format: date, description: 'the day a charge pays' }
+              invoice_id: { type: [string, 'null'] }
+              note: { type: [string, 'null'] }
+              at: { type: string, format: date-time }
   responses:
     Error:
       description: An error
@@ -291,7 +324,8 @@ paths:
         Every connected Cloudflare account is disconnected first (clx-edge, its database and routes
         removed where the token still can — what could not be is listed in `left`, the working tokens
         to revoke in `revoke_tokens`); then the totals go at once, and the user with the keys, sites
-        and links.
+        and links. Refused with `balance_not_empty` while there is money on the balance (docs/spec.md
+        §18); the journal is kept for accounting without the address.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:
@@ -335,7 +369,7 @@ paths:
               type: object
               required: [scopes]
               properties:
-                scopes: { type: array, items: { type: string, enum: [accounts, sites, links, reports] } }
+                scopes: { type: array, items: { type: string, enum: [accounts, sites, links, reports, billing] } }
                 allow_accounts: { type: array, items: { type: string, pattern: '^[0-9a-f]{32}$' } }
                 allow_ips: { type: array, items: { type: string } }
       responses:
@@ -672,4 +706,29 @@ paths:
       parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses:
         '200': { description: Rotated, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/billing:
+    get:
+      summary: The balance, Pro and the last 50 journal rows (scope billing)
+      description: |
+        Money is integer micro-USD (1 USD = 1,000,000). Pro — the `api` plan — is $9 per 30 days,
+        charged by the UTC day from the balance (docs/spec.md §18).
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Billing' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/billing/pro:
+    post:
+      summary: Switch Pro on or off (scope billing)
+      description: |
+        On needs a confirmed e-mail and at least $9 on the balance (`insufficient_balance`), and
+        charges today; a day is charged once, however often Pro is switched. Off ends Pro after today
+        (or at its first unpaid day, which is then not owed); the account returns to free and what is
+        beyond its limits is paused, not deleted.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [on], properties: { on: { type: boolean } } }
+      responses:
+        '200': { description: Switched, content: { application/json: { schema: { $ref: '#/components/schemas/Billing' } } } }
         default: { $ref: '#/components/responses/Error' }

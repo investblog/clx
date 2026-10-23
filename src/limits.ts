@@ -20,5 +20,5 @@ export const CF_FREE = { requests: 100_000, writes: 100_000, reads: 5_000_000, s
 export const FREE_ACCOUNTS_CAP = 500;
 
 /** API key scopes (§15). */
-export const SCOPES = ['accounts', 'sites', 'links', 'reports'] as const;
+export const SCOPES = ['accounts', 'sites', 'links', 'reports', 'billing'] as const;
 export type Scope = (typeof SCOPES)[number];

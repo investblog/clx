@@ -43,6 +43,8 @@ export const TABLE: readonly ToolRow[] = [
   { name: 'delete_link', title: 'Delete a short link', method: 'DELETE', path: '/v1/links/{id}', destructive: true },
   { name: 'link_qr', title: 'A link’s QR code as SVG', method: 'GET', path: '/v1/links/{id}/qr.svg' },
   { name: 'link_report', title: 'A link’s report', method: 'GET', path: '/v1/links/{id}/report' },
+  { name: 'get_billing', title: 'The balance, Pro and the journal', method: 'GET', path: '/v1/billing' },
+  { name: 'set_pro', title: 'Switch Pro on or off', method: 'POST', path: '/v1/billing/pro', destructive: true },
 ];
 
 /** /v1 calls for a page session only (spec §15): not tools. */

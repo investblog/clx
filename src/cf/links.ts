@@ -14,7 +14,7 @@ import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
 import { cf, CfError, type CallLog } from './api';
 import { inService, leased, workingToken, type EdgeAccount } from './connect';
-import { validHost, zoneFor, type SiteRow } from './sites';
+import { refusePaused, validHost, zoneFor, type SiteRow } from './sites';
 
 export interface LinkHostRow {
   id: string;
@@ -43,6 +43,8 @@ export interface LinkRow {
   rules: string;
   state: string;
   revision: number;
+  /** Beyond free's limits on free (§18): withdrawn from the worker, kept. */
+  paused_at: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -78,6 +80,7 @@ export function linkView(l: LinkRow, host: string | null, syncedRevision: number
     rules: JSON.parse(l.rules) as Rule[],
     state: l.state,
     config: l.revision <= syncedRevision ? 'synced' : 'pending',
+    paused_at: l.paused_at ? new Date(l.paused_at).toISOString() : null,
     created_at: new Date(l.created_at).toISOString(),
   };
 }
@@ -264,12 +267,14 @@ async function dropDeleted(env: Env, edge: EdgeAccount, principal: string): Prom
  * first Cloudflare call, then made a custom domain under the account's lease.
  */
 export async function addLinkHost(env: Env, p: Principal, edge: EdgeAccount, input: { site?: SiteRow; host?: string }): Promise<LinkHostRow> {
+  refusePaused(edge, 'Cloudflare account');
   if (!inService(edge)) fail(409, 'account_not_ready', 'clx-edge is not installed and confirmed in this account yet.', { state: edge.state });
   const db = env.DB;
   let host: string;
   let zoneId: string;
   if (input.site) {
     if (input.site.state === 'deleted') fail(404, 'not_found', 'No such site.', { field: 'site_id' });
+    refusePaused(input.site, 'site');
     const drawn = await freeRandom(db, edge.id, input.site.host.replace(/^www\./u, ''));
     if (!drawn) fail(409, 'operation_in_progress', 'No free name was drawn for the host; retry.');
     host = drawn!;
@@ -298,16 +303,21 @@ export async function addLinkHost(env: Env, p: Principal, edge: EdgeAccount, inp
     const rows = await db.batch([
       db
         .prepare(
-          "UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?1 AND (SELECT count(*) FROM link_hosts h JOIN edge_accounts e ON e.id = h.account_id WHERE e.user_id = ?2 AND h.state != 'deleted') < ?3",
+          "UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?1 AND paused_at IS NULL AND (?4 IS NULL OR (SELECT paused_at FROM sites WHERE id = ?4) IS NULL) AND (SELECT count(*) FROM link_hosts h JOIN edge_accounts e ON e.id = h.account_id WHERE e.user_id = ?2 AND h.state != 'deleted') < ?3",
         )
-        .bind(edge.id, p.userId, limit),
+        .bind(edge.id, p.userId, limit, input.site?.id ?? null),
       db
         .prepare(
           `INSERT INTO link_hosts (id, account_id, site_id, host, zone_id, state, revision, created_at, updated_at) SELECT ?1, ?2, ?3, ?4, ?5, 'pending', (SELECT config_revision FROM edge_accounts WHERE id = ?2), ?6, ?6 WHERE changes() = 1 AND NOT EXISTS (SELECT 1 FROM sites WHERE host = ?4 AND state != 'deleted') AND NOT ${POINTED('?2', '?4')}`,
         )
         .bind(id, edge.id, input.site?.id ?? null, host, zoneId, now),
     ]);
-    if (!rows[0]!.meta.changes) fail(403, 'limit_reached', `The ${planOf(p.plan)} plan has at most ${limit} link hosts.`, { limit });
+    if (!rows[0]!.meta.changes) {
+      // Paused meanwhile (a downgrade during the zone lookup), or the limit.
+      refusePaused((await db.prepare('SELECT paused_at FROM edge_accounts WHERE id = ?').bind(edge.id).first<{ paused_at: number | null }>()) ?? { paused_at: null }, 'Cloudflare account');
+      if (input.site) refusePaused((await db.prepare('SELECT paused_at FROM sites WHERE id = ?').bind(input.site.id).first<{ paused_at: number | null }>()) ?? { paused_at: null }, 'site');
+      fail(403, 'limit_reached', `The ${planOf(p.plan)} plan has at most ${limit} link hosts.`, { limit });
+    }
     if (!rows[1]!.meta.changes) fail(409, 'invalid_request', `${host} became a site, or a link now leads to it; a link host must be a host of its own.`, { field: 'host' });
   } catch (e) {
     if (String(e).includes('UNIQUE')) fail(409, 'invalid_request', `${host} is already a link host.`, { field: 'host' });
@@ -345,6 +355,7 @@ export async function addLink(env: Env, p: Principal, host: LinkHostRow, input: 
   if (host.state === 'deleted') fail(404, 'not_found', 'No such link host.', { field: 'link_host_id' });
   // Links go on a working host only: until then its name may still change (makeDomain).
   if (host.state !== 'active') fail(409, 'link_host_not_ready', `${host.host} is ${host.state}; links can be added once it is active.`, { field: 'link_host_id', state: host.state });
+  refusePaused((await db.prepare('SELECT paused_at FROM edge_accounts WHERE id = ?').bind(host.account_id).first<{ paused_at: number | null }>()) ?? { paused_at: null }, 'Cloudflare account');
   if (input.code !== undefined && (typeof input.code !== 'string' || !CODE.test(input.code))) fail(400, 'invalid_request', '"code" must be 3–32 characters of A–Z, a–z, 0–9, "_" and "-".', { field: 'code' });
   const hosts = await liveHosts(db, host.account_id);
   const target = targetOf(input.url, 'url', hosts);
@@ -360,7 +371,9 @@ export async function addLink(env: Env, p: Principal, host: LinkHostRow, input: 
     try {
       // The limit is part of the batch, so two adds at once cannot both pass it.
       const rows = await db.batch([
-        db.prepare("UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?1 AND (SELECT count(*) FROM links WHERE user_id = ?2 AND state != 'deleted') < ?3").bind(host.account_id, p.userId, limit),
+        db
+          .prepare("UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?1 AND paused_at IS NULL AND (SELECT count(*) FROM links WHERE user_id = ?2 AND state != 'deleted' AND paused_at IS NULL) < ?3")
+          .bind(host.account_id, p.userId, limit),
         db
           .prepare(
             `INSERT INTO links (id, account_id, host_id, user_id, target, code, url, url_host, rules, state, revision, created_at, updated_at)
@@ -388,6 +401,7 @@ export async function addLink(env: Env, p: Principal, host: LinkHostRow, input: 
 /** Change a link's URL or rules; the code and the host stay (printed QR codes carry them). */
 export async function patchLink(env: Env, p: Principal, link: LinkRow, input: { url?: unknown; rules?: unknown }): Promise<LinkRow> {
   if (link.state === 'deleted') fail(404, 'not_found', 'No such link.');
+  refusePaused(link, 'link');
   const db = env.DB;
   const hosts = await liveHosts(db, link.account_id);
   const target = input.url === undefined ? { url: link.url, host: link.url_host } : targetOf(input.url, 'url', hosts);
@@ -400,12 +414,14 @@ export async function patchLink(env: Env, p: Principal, link: LinkRow, input: { 
     db.prepare('UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?').bind(link.account_id),
     db
       .prepare(
-        "UPDATE links SET url = ?1, url_host = ?2, rules = ?3, revision = (SELECT config_revision FROM edge_accounts WHERE id = ?4), updated_at = ?5 WHERE id = ?6 AND state != 'deleted' AND updated_at = ?7 AND NOT EXISTS (SELECT 1 FROM link_hosts WHERE account_id = ?4 AND host IN (SELECT value FROM json_each(?8)) AND (state != 'deleted' OR domain_id IS NOT NULL))",
+        "UPDATE links SET url = ?1, url_host = ?2, rules = ?3, revision = (SELECT config_revision FROM edge_accounts WHERE id = ?4), updated_at = ?5 WHERE id = ?6 AND state != 'deleted' AND paused_at IS NULL AND updated_at = ?7 AND NOT EXISTS (SELECT 1 FROM link_hosts WHERE account_id = ?4 AND host IN (SELECT value FROM json_each(?8)) AND (state != 'deleted' OR domain_id IS NOT NULL))",
       )
       .bind(target.url, target.host, rules, link.account_id, Date.now(), link.id, link.updated_at, leads),
   ]);
   if (!changed!.meta.changes) {
-    if ((await linkById(db, link.id))?.updated_at !== link.updated_at) fail(409, 'operation_in_progress', 'The link changed while this call ran; read it and retry.');
+    const now = await linkById(db, link.id);
+    if (now) refusePaused(now, 'link');
+    if (now?.updated_at !== link.updated_at) fail(409, 'operation_in_progress', 'The link changed while this call ran; read it and retry.');
     fail(400, 'invalid_request', 'The link may not lead to a link host of this account.', { field: 'url' });
   }
   return (await linkById(db, link.id))!;
@@ -432,7 +448,8 @@ export async function linkConfigRows(db: D1Database, accountId: string, head: nu
   const live = (s: string) => s === 'active';
   return [
     ...(hosts!.results as unknown as LinkHostRow[]).map((h): [string, string | null] => [linkHostKey(h.host), live(h.state) ? '{}' : null]),
-    ...(links!.results as unknown as (LinkRow & { host: string })[]).map((l): [string, string | null] => [linkKey(l.host, l.code), l.state === 'active' ? JSON.stringify(linkConfigOf(l)) : null]),
+    // A paused link (§18) is withdrawn as a deleted one: the worker answers 404.
+    ...(links!.results as unknown as (LinkRow & { host: string })[]).map((l): [string, string | null] => [linkKey(l.host, l.code), l.state === 'active' && !l.paused_at ? JSON.stringify(linkConfigOf(l)) : null]),
   ];
 }
 

@@ -366,7 +366,7 @@ async function linkUrl(turn: Turn, url: string): Promise<void> {
   // No link host yet: one is made on a working site.
   const s = await api(turn, 'GET', '/v1/sites');
   if (s.status !== 200) return void (await say(turn, refusal(turn, s)));
-  const sites = (s.body.sites as { id: string; host: string; state: string }[]).filter((x) => x.state === 'active');
+  const sites = (s.body.sites as { id: string; host: string; state: string; paused_at: string | null }[]).filter((x) => x.state === 'active' && !x.paused_at);
   if (!sites.length) return void (await say(turn, t.noSiteForHost));
   await choose(turn, t.pickSiteForHost, sites.map((x) => ({ id: x.id, label: x.host })), { kind: 'linkhost' });
 }
