@@ -1,6 +1,6 @@
 ---
 title: clx — spec of the open visit counter and short links
-updated: 2026-10-06
+updated: 2026-10-23
 ---
 
 # clx v2 spec: an open visit counter and short links on users' own workers
@@ -27,7 +27,8 @@ account, summary totals on clx.cx, details read from the user's database on dema
 Out of scope:
 - sites not on Cloudflare, and links without one's own domain (clx.cx carries no user traffic);
 - events, goals, funnels, raw visit logs, per-visitor exports;
-- billing — the `api` plan (§15) is switched on by an admin on request; prices and tiers come later ([ADR 0014](./decisions/0014-a-key-on-free.md)).
+- subscriptions renewed by a processor, cards, taxes: the paid plan is paid from a prepaid balance
+  topped up by crypto or Telegram Stars (§18, [ADR 0034](./decisions/0034-pro-for-a-balance.md)).
 
 Integrators — for example a site generator — work through the **management API** (§15): connect a
 customer's Cloudflare account, add a site, get a counter snippet that works on the site's own domain
@@ -567,9 +568,9 @@ $0.35 per 1,000 e-mails), so the budget is capped by D1 writes, not by items per
   worst case; sign-up, sessions, the API call log, upgrade advice and expiry deletions fit in the
   remaining 5M; beyond that — a waiting list until the operator decides to raise it (every +100
   accounts is at worst ≈ +9M writes ≈ up to $9/month extra);
-- **`api` accounts are on top of that**, switched on by an admin: one at full limits is at most
-  (3,000 + 500 × 110 + 10,000 × 3) × 30 ≈ 2.6M writes/month (≈ $2.6 billed); the admin sees the
-  projected D1 bill before switching one on;
+- **`api` (Pro) accounts are on top of that**, bought for $9 per 30 days (§18) or given by an
+  admin: one at full limits is at most (3,000 + 500 × 110 + 10,000 × 3) × 30 ≈ 2.6M writes/month
+  (≈ $2.6 billed), within its price;
 - the Cloudflare API call log (§13 item 1) records only mutating calls; breakdown reads are not
   logged;
 - requests: ≤ 24 pushes a day per connected Cloudflare account (more parts only for very large
@@ -686,7 +687,10 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
 
 **clx limits** (one place to change — `src/limits.ts`):
 
-| | `free` | `api` (§15) |
+Paused objects (§18 — beyond `free` when Pro ends) count against none of them; their totals rows
+were written before the pause, so the write budget counts only what is live.
+
+| | `free` | `api` — Pro (§15, §18) |
 |---|---|---|
 | Cloudflare accounts | 1 | 50 |
 | sites | 10 | 500 |
@@ -703,13 +707,15 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
   15-minute JWT (`src/auth/jwt.ts`), a 7-day refresh session in KV `SESSIONS`
   (`src/auth/routes.ts`).
 - New:
-  - `POST /auth/signup {email, password, turnstile, locale}` → a confirmation e-mail (24 h) with a
+  - `POST /auth/signup {email, password, turnstile, locale, code?}` (`code` — a partner or promo
+    code, §19; without it the `clx_ref` cookie) → a confirmation e-mail (24 h) with a
     link `/app#/confirm?t=<token>` (in the fragment, so the token reaches no server log or
     `Referer`; `/ru/app#/…` for a Russian account — the account keeps the sign-up page's language,
     and every e-mail speaks it, [ADR 0015](./decisions/0015-app-language.md));
     `POST /auth/confirm {token}`; a signed-in unconfirmed user can ask again
     (`POST /auth/confirm/resend`, the new link replaces the old one). Before confirming the user
-    can sign in but cannot connect a Cloudflare account (`email_unconfirmed`). Passwords: 10–256
+    can sign in but cannot connect a Cloudflare account, make an invoice, switch Pro on or move
+    partner money (`email_unconfirmed`). Passwords: 10–256
     characters. Users made by `scripts/user.mjs` are confirmed;
   - `POST /auth/reset {email, turnstile}` + `POST /auth/reset/confirm {token, password}` — password
     reset by e-mail (1 h, `/app#/reset?t=<token>`); a reset ends all sessions: every refresh session and
@@ -737,9 +743,11 @@ Cloudflare account once a day by the clx.cx cron, from measured use, not from ou
     apex MX, SPF and its DMARC record (`docs/cloudflare-facts.md`).
     New accounts start with a daily quota Cloudflare does not publish;
   - deleting an account (`DELETE /v1/me` with the password, page session only): first every session
-    and API key of the user ends (a fence — nothing of theirs can start a new connect meanwhile),
+    and API key of the user ends (a fence — nothing of theirs can start a new connect meanwhile;
+    refused before it with `balance_not_empty` while money or an open payment is left, §18),
     then every Cloudflare account is disconnected (§4), then its totals, call log, e-mail counters
-    and the user with keys, sites and links go at once. Refused while an operation runs on one of
+    and the user with keys, sites and links go at once, its money records to `billing_archive`
+    (§18). Refused while an operation runs on one of
     its accounts. Refresh sessions in KV are not indexed by user: they stop working at once and
     expire within 7 days;
 - Pages `/privacy`, `/terms`, `/abuse`.
@@ -770,6 +778,11 @@ Pages:
   token in Cloudflare (§4).
 - **API keys** (1 on `free`, 5 on `api`): issue with scopes and allow lists, the key shown once, change the allow lists, revoke — keys
   are issued only from a page session (§15), so without this page a user cannot get one.
+- **Balance** (§18): the balance and the journal, Pro on or off with the day it is paid through
+  and any grace, a top-up in crypto (amount, coin, then the address and the exact sum with a
+  countdown) and a pointer to `/pay` in the bot for Stars; what is paused, when it is.
+- **Partners** (§19): the code and the links (site and bot), referrals, the wallet with what is
+  held and what is available, move to the balance, ask for a payout.
 
 ## 11. Open source
 
@@ -887,10 +900,10 @@ that adds a site and embeds its counter at build time.
   endpoints with its session token, so the page and the API cannot drift apart. The contract is
   `docs/openapi.yaml`; a test checks that every route in the code is in it and back.
 - **Plans** ([ADR 0014](./decisions/0014-a-key-on-free.md)). `free` — what sign-up gives (limits
-  in §8), the page and one API key, so an agent can set clx up within those limits. `api` — the
-  higher limits of §8 and up to 5 keys; switched on by an admin on request (the bot's `/support`,
-  §17), free of charge for now
-  (billing is out of scope; a paid plan comes later). Neither
+  in §8), the page and one API key, so an agent can set clx up within those limits. `api` — sold
+  as **Pro**, $9 per 30 days from the balance (§18, [ADR 0034](./decisions/0034-pro-for-a-balance.md)):
+  the higher limits of §8 and up to 5 keys. The stored value stays `api`, the name integrators read
+  in `GET /v1/me`; an admin may also give it by hand, uncharged (`plan_comp`, §17). Neither
   plan requires Workers Paid in the user's Cloudflare accounts — the upgrade advice (§8) says when
   one should move.
 - **Keys.** `Authorization: Bearer <key>`; 32 random bytes with a readable prefix (`clx_`) so that
@@ -898,8 +911,9 @@ that adds a site and embeds its counter at build time.
   one. Checking a key writes **at most once a day per key** (`last_used_at`), never per call.
   - **scopes**, chosen at creation, least by default: `accounts` (connect, renew, disconnect —
     the only scope that takes bootstrap tokens), `sites` (add, change, rotate, delete sites),
-    `links` (links, rules, QR), `reports` (read totals and breakdowns); a build pipeline needs only
-    `sites` + `reports`;
+    `links` (links, rules, QR), `reports` (read totals and breakdowns), `billing` (the balance,
+    invoices, Pro, reading the partner wallet — never moving its money, §19); a build pipeline needs
+    only `sites` + `reports`;
   - **allow lists**: optionally the Cloudflare accounts a key may touch (so one customer's key
     cannot reach another's) and the client IPs. Without an account list a key touches every
     account of its user, those connected later too. `PATCH /v1/keys/{id}` changes both lists of a
@@ -939,7 +953,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_in_use`, `link_host_not_ready`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_in_use`, `link_host_not_ready`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`, `paused`, `insufficient_balance`, `invoice_limit`, `payments_unavailable`, `balance_not_empty`, `below_minimum`, `invalid_address`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.
@@ -956,20 +970,25 @@ that adds a site and embeds its counter at build time.
 | `DELETE /v1/me` `{password}` | delete the account (page session only, §9) |
 | `POST /v1/keys`, `GET /v1/keys`, `PATCH /v1/keys/{id}`, `DELETE /v1/keys/{id}` | API keys — page session only |
 | `POST /v1/accounts` `{cf_account_id, bootstrap_token}` | connect a Cloudflare account and install `clx-edge` (§3, §4) → `202` |
-| `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `bootstrap_lost`, `connected` — token ready, not yet installed, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), last push, versions, **upgrade advice** (§8) |
+| `GET /v1/accounts`, `GET /v1/accounts/{id}` | state (`pending`, `bootstrap_lost`, `connected` — token ready, not yet installed, `installing`, `ready`, `permission_error`, `revoked`, `resource_drift`, `no_connection`), `paused_at` (§18), last push, versions, **upgrade advice** (§8) |
 | `GET /v1/accounts/{id}/zones` | the account's zones, read live with the working token (Zone Read), up to 1,000 — the pages suggest a site's or link host's host from them |
 | `POST /v1/accounts/{id}/token` `{bootstrap_token}` | renew the working token |
 | `POST /v1/accounts/{id}/install` | install `clx-edge` again — after a failed install, or a reinstall (§4) → `202` |
 | `DELETE /v1/accounts/{id}` | disconnect (§4) |
 | `POST /v1/sites` `{account_id, host, excluded_paths?}` | add a site: the zone is found in the account, the route is created → the site with its snippet |
-| `GET /v1/sites?account_id=`, `GET /v1/sites/{id}` | state (`route_pending`, `active`, `route_conflict`), `snippet: {inline, script_tag}` |
+| `GET /v1/sites?account_id=`, `GET /v1/sites/{id}` | state (`route_pending`, `active`, `route_conflict`), `paused_at` (§18), `snippet: {inline, script_tag}` |
 | `PATCH /v1/sites/{id}` | excluded paths |
 | `POST /v1/sites/{id}/rotate` | a new seed → new `<path>`, names and snippet (§5); the old path counts for 30 more days |
 | `DELETE /v1/sites/{id}` | remove the route; totals stay until the account is disconnected |
 | `POST /v1/link-hosts` `{site_id}` or `{account_id, host}`, `GET /v1/link-hosts?account_id=`, `GET`/`DELETE /v1/link-hosts/{id}` | link hosts, one per site if wished (§6) → `202`, poll `GET` until `active` and `synced` |
-| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6) |
+| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6); `paused_at` (§18) |
 | `GET /v1/links/{id}/qr.svg` | the QR code |
 | `GET /v1/sites/{id}/report?period=`, `GET /v1/links/{id}/report?period=` | totals and series; `&breakdowns=1` adds the breakdowns (§7) |
+| `GET /v1/billing`, `POST /v1/billing/pro` `{on}` | balance, Pro, paid through, grace, the journal; Pro on or off (§18) |
+| `POST /v1/billing/invoices` `{usd, coin}` or `{stars}`, `GET /v1/billing/invoices/{id}` | a top-up invoice and its state — crypto with a page session or key, Stars from the bot only (§18) |
+| `GET /v1/partner` | code, links, referrals, wallet, payouts (§19) |
+| `POST /v1/billing/refunds` `{invoice_id, address?}` | ask for a refund of a deposit — page session only (§18) |
+| `POST /v1/partner/transfer` `{usd}`, `POST /v1/partner/payouts` `{usd, address}` | move partner money to the balance, ask for a payout — page session only (§19) |
 
 - **For a site generator** the whole path is three steps: `POST /v1/accounts` once per customer
   account (its bootstrap token comes from the customer — clx needs its own working token, with the
@@ -1134,7 +1153,9 @@ command menus in English and Russian).
   address confirmed) and linked. The same answer whether the account existed. One Telegram user ↔
   one account, unique on both sides. An account made in the bot has no password; the reset request
   sets one for the site. `t.me/clxcxbot?start=<source>` (1–32 of `A–Z a–z 0–9 _ -`, lower-cased)
-  is written to `users.source` of an account the bot makes, never to an existing one (ADR 0031).
+  is written to `users.source` of an account the bot makes, never to an existing one (ADR 0031);
+  `start=ref_<code>` is a partner's or promo code instead (§19), kept in the dialog and applied only
+  to an account the bot makes.
   Sign-up keeps the site's switches and limits; Turnstile has no place in a
   chat, so codes are limited per Telegram user (checked first), per address and by the site's daily
   mail budget.
@@ -1154,7 +1175,10 @@ command menus in English and Russian).
   three tries, bound to `connect`, the user, the link and the dialog — then a warning, the
   bootstrap token, the message deleted; unless the connection finished and clx confirmed the
   token deleted, the bot says it may still be valid and how to revoke it by hand — any failure
-  there is final, since the bot keeps no token to try again with), `/lang ru|en`,
+  there is final, since the bot keeps no token to try again with), `/pay` (the balance, Pro on or
+  off, and a top-up in Stars: a pack, then Telegram's invoice — §18; the bot says Stars are bought
+  through @PremiumBot where a store refuses), `/partner` (the code, the link, the wallet — moving
+  its money is page-only), `/lang ru|en`,
   `/unlink`, `/cancel`, `/help`; signed in or not, `/support` and `/terms` (below). Not in the bot: the password, API keys, disconnecting an account,
   deleting a site — page-only routes refuse the `telegram` principal as they refuse an API key.
 - **Notices.** What clx mails a user about an account — the upgrade advice (§8), the token about to
@@ -1181,6 +1205,148 @@ command menus in English and Russian).
   send and before the update is marked done. Admins are Telegram's answer (`getChatMember`: `creator`,
   `administrator`) on every reply and command; anyone else is not heard, nor is a command addressed
   to another bot (`/plan@other_bot`; the bot's own name from `getMe`). Operator commands there:
-  `/user <email>`, `/plan <email> free|api` (the person is told in Telegram), `/sources [days]`,
-  `/help`; their menu is set for the group's admins only (`tg-setup.mjs commands`). `/terms` — the
+  `/user <email>`, `/plan <email> free|api` (the person is told in Telegram; `api` sets
+  `plan_comp`, §18), `/sources [days]`, money (§18, §19 — each writes the operator's Telegram
+  user id and a snapshot of their name into its row): `/credit <invoice>`, `/adjust <email> <usd> <note>`,
+  `/refund <request> <usd>`, `/refunded <id> <txid>`, `/void <invoice>`, `/payouts`, `/paid <id> <txid>`, `/reject <id>`,
+  `/promo <code> <kind> <usd> [max uses] [until]`, and `/help`; their menu is set for the group's admins only (`tg-setup.mjs commands`). `/terms` — the
   terms in three lines and links to the full terms and privacy pages.
+
+## 18. Billing
+
+[ADR 0034](./decisions/0034-pro-for-a-balance.md), [ADR 0035](./decisions/0035-crypto-on-the-site-stars-in-the-bot.md).
+The model and its traps come from catchall.in, run by the same seller (301ST Ltd).
+
+- **Money** is integer micro-USD. The balance is the sum of an append-only journal, `ledger`
+  (`deposit`, `charge`, `bonus`, `adjustment`, `refund`, `partner_transfer`); no row is ever changed.
+  A mutable balance would lose a race silently; a journal shows it.
+- **Pro periods.** Pro is on while a row of `pro_periods` (user, start date, end date or none) is
+  open. `POST /v1/billing/pro {on: true}` needs a balance of at least $9: it opens a period (or
+  reopens one that ends tomorrow — off and on within a day) and charges today. `{on: false}` sets
+  the end to tomorrow: today is paid, nothing after it. `users.plan` follows: `api` while a period
+  is open or `plan_comp` is set, else `free`.
+- **Charges.** One day is 300,000 micro-USD ($9 / 30, exact). A charge is one conditional `INSERT`
+  — only if the balance covers it — under a unique index on `(user_id, charge_date)`, so a cron
+  delivered twice (`cloudflare-facts.md`), a switch racing the cron, or off-and-on in one day charges
+  once. The cron of clx.cx at 00:05 UTC charges every open period's unpaid days up to today, oldest
+  first, a whole day at a time; a deposit runs the same for its user at once.
+- **Grace.** The first day not covered sets `users.grace_since`: Pro keeps working, the user gets an
+  e-mail and a Telegram notice. When no unpaid day is left the grace ends. If one is still there 3
+  days later, the period is closed at its first unpaid day — the unpaid days fall outside it and are
+  owed by no one — the plan returns to `free` (below) and the user is told. Pro does not come back by
+  itself. "Paid through" is the last day of the unbroken run of paid days from the start.
+- **Pause on `free`** (ADR 0034). Moving to `free` keeps working, chosen top down so that what is
+  kept can work: the oldest Cloudflare account in service (else the oldest), then the 10 oldest
+  sites of that account, then the 200 oldest links on its link hosts, and the oldest API key; the
+  rest get `paused_at`. A paused site's
+  and a paused link's config rows are withdrawn by the next sync (§6, as for a deleted one; the route
+  and the link host stay), so the site's paths pass through to the origin and nothing counts, and
+  the link answers `404`; every site and link of a paused account is withdrawn, its worker stays.
+  A paused key is refused like a revoked one. Paused objects keep their host or code reserved, show
+  "paused" on the page and in `/v1`, can be deleted but not changed, and do not count against
+  limits. Pro again clears every `paused_at` and syncs them back.
+- **A plan given by hand** (`/plan <email> api`, §17) sets `plan_comp` and settles the paid period
+  as a grace that ran out would, but without the plan changing: closed at its first unpaid day, or
+  after today when all is paid, and `grace_since` cleared; no charges while `plan_comp` is set.
+  `/plan <email> free` clears it: the plan returns to `free` (and pauses) unless the user switches
+  Pro on again.
+- **Top-ups** make an invoice first; one deposit per invoice (unique index), whatever told us it was
+  paid. An invoice is `pending` → `paid`, `expired` or `review`; `expired` → `paid` (crypto that came
+  late, found by the reconcile run for 30 days after expiry) or `review`; `review` → `paid` (an
+  operator's `/credit`) or `void` (`/void <invoice>`, nothing came). `paid` and `void` are final.
+  At most 3 `pending` invoices per user (`invoice_limit`); `pending` and `review` are **open**. Invoices, Pro and the partner wallet need a confirmed e-mail
+  (`email_unconfirmed`).
+  - **Crypto (Trybit).** `POST /v1/billing/invoices {usd, coin}`: whole dollars, 9 to 1,000; `coin`
+    one of `USDT_TRC20`, `USDT_BSC`, `USDT_ERC20`, `USDC_ERC20`. The invoice carries our id as
+    `order_id` and expires in an hour; the answer and `GET /v1/billing/invoices/{id}` give the
+    address and the amount to send, fees included. `POST /hook/trybit` is only a signal and must
+    carry a valid token (else `401`); the status is read from Trybit with our key. What arrived
+    (`received_usd`, rounded down to the micro-USD) is credited; `partial`, paid-with-nothing and a
+    canceled invoice with money go to `review` and to the support group, where an operator credits
+    what arrived as that invoice's deposit (`/credit`). Every 15 minutes the cron asks Trybit about
+    `pending` invoices older than 20 minutes and `expired` ones up to 30 days old (20 a run, oldest
+    asked longest ago first, honouring `Retry-After`); a `pending` one a day past its expiry is
+    `expired`, unless Trybit reports money (`review`).
+  - **Stars** (§17). `/pay` in the bot: packs Telegram sells, 750★ → $9 and 2500★ → $30; the same
+    route makes the invoice (`{stars}`, Telegram principal only), its payload is the invoice id.
+    `pre_checkout_query` is answered from reads only. `successful_payment` credits only when the
+    invoice of the payload belongs to the user linked to the paying Telegram, the currency is `XTR`,
+    the stars are exactly the invoice's and the invoice may still be paid; anything else goes to
+    `review`. Idempotent on `telegram_payment_charge_id`.
+- **Refunds and corrections** — an operator in the support group, each one journal row with the
+  operator's Telegram user id and a snapshot of their name: `/credit <invoice>` (a `review`
+  invoice's deposit), `/adjust <email> <usd> <note>`, `/void <invoice>`, `/refund <request> <usd>`.
+  **A refund starts with the user**: `POST /v1/billing/refunds {invoice_id, address?}` (page
+  session only, a deposit under 90 days old) writes a `refunds` row `requested` — for crypto with the
+  address the user typed, checked for the invoice's network; nothing moves yet — and tells the
+  support group. The operator's `/refund <request> <usd>` takes at most what that deposit brought in
+  less what was refunded from it already, and never more than the balance — both checked in the
+  same `INSERT` that writes the journal row and moves the request to `pending`. Crypto, less the
+  network fee, goes to the request's address by the operator, who marks it done (`/refunded <id>
+  <txid>`). A Stars deposit is refunded whole only (Telegram returns the whole payment): the journal
+  row is written first, then `refundStarPayment` is called and the request marked done; a call that
+  failed is retried by `/refund` on the same request, and Telegram's "already refunded" counts as
+  done. A refund also takes
+  back what that deposit earned — the partner's clawback (§19) and a promo bonus granted on it, in
+  proportion to the refunded share — in the same batch.
+- **API** (scope `billing`; a page session has every scope): `GET /v1/billing` — balance, Pro on or
+  off, paid through, grace, the last 50 journal rows; `POST /v1/billing/pro`;
+  `POST /v1/billing/invoices`; `GET /v1/billing/invoices/{id}`; `POST /v1/billing/refunds` (page
+  session only).
+- **Deleting a clx account** (§9) is refused with `balance_not_empty` while the balance or the
+  partner wallet is not zero, a payout request or a refund is open, an invoice is open (`pending`,
+  `review`) or `expired` less than 30 days ago, or a referral's deposit is under 90 days old (a
+  refund would claw back its commission). The checks and `users.deleting_at` are one conditional
+  `UPDATE`; every money writer — a deposit, a charge, a commission, an operator's command — requires
+  `deleting_at IS NULL` in its own statement, so nothing lands between the check and the archive.
+  A deletion that fails afterwards clears `deleting_at`; one that died (the Worker stopped) leaves
+  it, and the cron clears a `deleting_at` older than 15 minutes of a user who is still there. The
+  same checks also refuse while a referral's deposit has no commission yet. When it goes, its
+  journal rows, invoices and partner rows are copied into `billing_archive` (one row per deleted
+  user, without the address) and then deleted with the user — never kept under a user id SQLite
+  gives to the next user (ADR 0010).
+- **Users on `api` before billing** get a $9 bonus and an open period, with a notice 14 days before
+  the bonus runs out.
+
+## 19. Partners
+
+[ADR 0036](./decisions/0036-partners.md). Every user is a partner: the app's "Partners" page shows
+the code, the links, the referrals' count and the wallet.
+
+- **Codes.** `users.ref_code` — 8 random lowercase letters and digits, made at sign-up; partner and
+  promo codes share one name space, looked up case-insensitively, partner codes first.
+- **Attribution.** `?ref=CODE` on any page of clx.cx answers `302` to the same page without it and
+  sets the cookie `clx_ref` for 30 days (last touch), only for a valid code and a document
+  navigation; the Russian pages pass the code on in their links to clx.cx. `POST /auth/signup` takes
+  `code?` (a partner or promo code); without one it reads the cookie. The bot takes `start=ref_CODE`
+  (other start parameters stay the source, §17) and keeps it in the dialog until the account is
+  made. `users.referred_by` is written once, when the account is made, never to oneself, and never
+  changes. A partner's account cannot be deleted while a referral's deposit is under 90 days old
+  (§18), so a refund always finds the wallet to claw back from; after that `referred_by` is cleared.
+- **Commission** — 30% of each credited deposit of a referral (`rate_bp` in the row), one level, for
+  life, rounded down; held 30 days. Always on the whole deposit: refunds never change it. Each refund
+  of the deposit writes a `clawback` — the rate times all that was refunded from it, rounded down,
+  less the clawbacks already written for it — after the hold too, whether the commission is written
+  yet or not, so commission + clawbacks always equals the rate times what the deposit kept. One
+  commission per deposit (unique index). It is written **in the same batch as the deposit**, and
+  only while the referrer exists and is not being deleted (`deleting_at`); a deposit that lands
+  while the partner deletes their account earns nothing. The cron every 15 minutes writes any
+  missing one — every credited deposit of a referral since the program started that has none, 50 a
+  run, oldest first — under the same condition.
+- **Wallet** — `partner_ledger` (`commission`, `clawback`, `transfer`, `payout`, `payout_return`).
+  Available is the sum without commissions still held; clawbacks may take it below zero, and then
+  nothing can leave it. `POST /v1/partner/transfer {usd}` moves money to one's clx balance — both
+  journals in one D1 batch; `POST /v1/partner/payouts {usd, address}` asks for a payout from $20 to
+  a USDT TRC20 address (Base58Check): the request and its `payout` row (the money reserved) are one
+  batch, so a transfer cannot spend it meanwhile. An operator pays it (`/payouts`, `/paid <id>
+  <txid>`, which writes nothing more) or refuses it (`/reject <id>`, the only path that writes
+  `payout_return`). Neither may take the available sum below zero; both
+  are page-session only and idempotent by `Idempotency-Key`. `GET /v1/partner` (scope `billing`) —
+  code, links, referrals, wallet, payouts.
+- **Promo codes** — `first_deposit`, `any_deposit` (with an end date), `signup_credit` (granted when
+  the e-mail is confirmed); a fixed bonus in dollars, granted **once per user and code** (a unique
+  index); a use is counted when its bonus is granted, in the same `INSERT`. A deposit bonus needs a
+  deposit of at least $9 and names it, so a refund of that deposit takes it back (§18). A start
+  credit names no deposit and is not taken back; it is spent only on Pro days, never refunded or
+  paid out.
+  Made by an operator (`/promo`).

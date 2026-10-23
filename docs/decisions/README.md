@@ -19,7 +19,7 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0011](./0011-zone-picker.md) | The host fields suggest the account's zones | 10.10.2026 | §10, §15 |
 | [0012](./0012-site-and-app.md) | A site at the root, the app at /app; English and Russian | 10.10.2026 | §9, §10, §16 |
 | [0013](./0013-docs-for-agents.md) | Docs for agents, with the API reference generated from the contract | 10.10.2026 | §15, §16 |
-| [0014](./0014-a-key-on-free.md) | The free plan has one API key; the api plan on request, unpaid for now | 10.10.2026 | §1, §8, §10, §15 |
+| [0014](./0014-a-key-on-free.md) | The free plan has one API key; the api plan on request, unpaid for now (pricing superseded by 0034) | 10.10.2026 | §1, §8, §10, §15 |
 | [0015](./0015-app-language.md) | The app's language comes from the address until sign-in, then from the account | 10.10.2026 | §9, §15, §16 |
 | [0016](./0016-brand-and-report-charts.md) | A violet brand with its own mark; the report is drawn by affiliate-charts | 10.10.2026 | §10, §16 |
 | [0017](./0017-app-in-the-site-frame.md) | The app sits in the site's frame; the sitemap has a view for people (its form superseded by 0020) | 11.10.2026 | §10, §16 |
@@ -39,3 +39,6 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0031](./0031-bot-support-group.md) | The bot's support group: answers by reply, operator commands, the start parameter | 19.10.2026 | §15, §17 |
 | [0032](./0032-edge-rollout-order.md) | A clx-edge rollout reaches one account first, then the rest, each update confirmed | 19.10.2026 | §4 |
 | [0033](./0033-qr-from-npm.md) | The QR code comes from `@spintax/qr-svg` on npm; the copy in the repository goes | 22.10.2026 | §6, §11, §14 |
+| [0034](./0034-pro-for-a-balance.md) | Pro is $9 for 30 days, paid from a prepaid balance charged by the day; what is beyond free is paused without it (supersedes 0014's pricing) | 23.10.2026 | §1, §8, §9, §15, §18 |
+| [0035](./0035-crypto-on-the-site-stars-in-the-bot.md) | Top-ups by crypto on the site (Trybit) and by Telegram Stars in the bot | 23.10.2026 | §15, §17, §18 |
+| [0036](./0036-partners.md) | Partners get 30% of their referrals' top-ups, for life, one level | 23.10.2026 | §9, §15, §17, §19 |
