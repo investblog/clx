@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # Backlog
@@ -93,7 +93,11 @@ Left as they are (owner, 19.10.2026) — not worth their cost now; reopened only
       dropped by `placeRoute` when the row was gone, but only if that call worked. Now a route is
       made and recorded under the account's lease, which disconnect takes too (sites, link hosts,
       rotation); a busy lease leaves the route to the cron, or refuses a rotation (07.10).
-- [ ] A new script's crons may not fire at all for an hour or more when `clx-edge` is re-created
+- [x] Checked on a stand (22–23.10, `scripts/probe-cron.mjs`, `docs/cloudflare-facts.md`): new
+      scripts, the same name re-created 1 and 10 min after a delete, and clx's two-crons-then-one
+      pattern all fired first within 4–10 min and then without a missed minute; the silences below
+      did not come back. Their cause is unknown; the heartbeat (26 h) stays. Original note:
+      A new script's crons may not fire at all for an hour or more when `clx-edge` is re-created
       within minutes of being deleted (the operations log 05–06.10: reinstalls 0.5–4.5 min after a
       disconnect got no `setup_ok` in 4 of 4, 6+ min after got one in 6 of 7; see
       `docs/cloudflare-facts.md`). Not a controlled test. To check: two installs, 1 and 10 min
