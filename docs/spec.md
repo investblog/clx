@@ -1207,7 +1207,7 @@ command menus in English and Russian).
   to another bot (`/plan@other_bot`; the bot's own name from `getMe`). Operator commands there:
   `/user <email>`, `/plan <email> free|api` (the person is told in Telegram; `api` sets
   `plan_comp`, §18), `/sources [days]`, money (§18, §19 — each writes the operator's Telegram
-  user id and a snapshot of their name into its row): `/credit <invoice>`, `/adjust <email> <usd> <note>`,
+  user id and a snapshot of their name into its row): `/credit <invoice> <usd>`, `/adjust <email> <usd> <note>`,
   `/refund <request> <usd>`, `/refunded <id> <txid>`, `/void <invoice>`, `/payouts`, `/paid <id> <txid>`, `/reject <id>`,
   `/promo <code> <kind> <usd> [max uses] [until]`, and `/help`; their menu is set for the group's admins only (`tg-setup.mjs commands`). `/terms` — the
   terms in three lines and links to the full terms and privacy pages.
@@ -1263,7 +1263,8 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   paid. An invoice is `pending` → `paid`, `expired` or `review`; `expired` → `paid` (crypto that came
   late, found by the reconcile run for 30 days after expiry) or `review`; `review` → `paid` (an
   operator's `/credit`) or `void` (`/void <invoice>`, nothing came). `paid` and `void` are final.
-  At most 3 `pending` invoices per user (`invoice_limit`); `pending` and `review` are **open**. Invoices, Pro and the partner wallet need a confirmed e-mail
+  At most 3 `pending` invoices whose hour has not run out, per user (`invoice_limit`); `pending` and
+  `review` are **open**. Invoices, Pro and the partner wallet need a confirmed e-mail
   (`email_unconfirmed`).
   - **Crypto (Trybit).** `POST /v1/billing/invoices {usd, coin}`: whole dollars, 9 to 1,000; `coin`
     one of `USDT_TRC20`, `USDT_BSC`, `USDT_ERC20`, `USDC_ERC20`. The invoice carries our id as
@@ -1272,10 +1273,15 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
     carry a valid token (else `401`); the status is read from Trybit with our key. What arrived
     (`received_usd`, rounded down to the micro-USD) is credited; `partial`, paid-with-nothing and a
     canceled invoice with money go to `review` and to the support group, where an operator credits
-    what arrived as that invoice's deposit (`/credit`). Every 15 minutes the cron asks Trybit about
+    what arrived as that invoice's deposit (`/credit <invoice> <usd>`) or voids it (`/void`); a
+    `review` invoice Trybit later reports paid in full (the payer added the rest) is credited by the
+    webhook. The token is required, unlike catchall.in's: the reconcile run finds what a refused
+    notification would have told. Every 15 minutes (minute :02, :17, …) the cron asks Trybit about
     `pending` invoices older than 20 minutes and `expired` ones up to 30 days old (20 a run, oldest
-    asked longest ago first, honouring `Retry-After`); a `pending` one a day past its expiry is
-    `expired`, unless Trybit reports money (`review`).
+    asked longest ago first, honouring `Retry-After`); a `pending` one a day past its expiry with
+    nothing arrived is `expired`. A Trybit answer about another invoice, or without what arrived,
+    is asked again, never guessed. `payments_unavailable` (503) when the four `PAYMENTS_*` settings
+    are not all there or Trybit did not make the invoice (it is then `void` at once).
   - **Stars** (§17). `/pay` in the bot: packs Telegram sells, 750★ → $9 and 2500★ → $30; the same
     route makes the invoice (`{stars}`, Telegram principal only), its payload is the invoice id.
     `pre_checkout_query` is answered from reads only. `successful_payment` credits only when the

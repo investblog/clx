@@ -54,7 +54,8 @@ components:
                 route_not_ours (a route clx made was changed outside clx and left in place).
                 Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
                 invalid_password, balance_not_empty (DELETE /v1/me with money on the balance).
-                Billing (docs/spec.md §18): insufficient_balance (Pro needs $9 on the balance), paused (an
+                Billing (docs/spec.md §18): insufficient_balance (Pro needs $9 on the balance), invoice_limit (3 pending top-ups),
+                payments_unavailable (crypto top-ups not set up or the processor down), paused (an
                 object beyond the free plan's limits: it can be read and deleted, not changed).
                 Links: link_exists (the code is taken on that link host), link_host_not_ready (links go
                 on an active host only), link_host_in_use
@@ -276,6 +277,23 @@ components:
               invoice_id: { type: [string, 'null'] }
               note: { type: [string, 'null'] }
               at: { type: string, format: date-time }
+        invoices: { type: array, items: { $ref: '#/components/schemas/Invoice' }, description: 'the last 10 top-ups, newest first' }
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        rail: { type: string, enum: [crypto, stars] }
+        usd_micro_usd: { type: integer, description: 'the nominal; what is credited is what arrived' }
+        coin: { type: string, description: 'USDT_TRC20, USDT_BSC, USDT_ERC20, USDC_ERC20; XTR for Stars' }
+        coin_label: { type: string }
+        stars: { type: [integer, 'null'] }
+        status: { type: string, enum: [pending, paid, expired, review, void], description: 'expired may still turn paid if crypto comes late (checked for 30 days); review waits for an operator' }
+        address: { type: [string, 'null'], description: 'where to send, while pending — null when the processor gave no whole quote: use pay_url' }
+        amount: { type: [string, 'null'], description: 'the exact amount of the coin to send, fees included, while pending' }
+        pay_url: { type: [string, 'null'], description: "the processor's own payment page, while pending" }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        paid_at: { type: [string, 'null'], format: date-time }
   responses:
     Error:
       description: An error
@@ -715,6 +733,35 @@ paths:
         charged by the UTC day from the balance (docs/spec.md §18).
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Billing' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/billing/invoices:
+    post:
+      summary: A crypto top-up (scope billing)
+      description: |
+        Whole dollars, 9 to 1,000, in one of four coins; at most 3 pending whose hour has not run out (`invoice_limit`).
+        The answer has the address and the exact amount to send, fees included, for an hour; what
+        arrives is credited, partial payments go to an operator. Needs a confirmed e-mail.
+        `payments_unavailable` when the processor is not set up or did not answer. Telegram Stars
+        are paid in the bot (/pay), not here.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usd, coin]
+              properties:
+                usd: { type: integer, minimum: 9, maximum: 1000 }
+                coin: { type: string, enum: [USDT_TRC20, USDT_BSC, USDT_ERC20, USDC_ERC20] }
+      responses:
+        '201': { description: Made, content: { application/json: { schema: { type: object, properties: { invoice: { $ref: '#/components/schemas/Invoice' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/billing/invoices/{id}:
+    get:
+      summary: A top-up and its state (scope billing)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { invoice: { $ref: '#/components/schemas/Invoice' } } } } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/billing/pro:
     post:

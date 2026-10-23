@@ -3,6 +3,7 @@
 // group, and every other group, gets silence.
 import { localeOf, type Locale } from '../mail-text';
 import { planOf } from '../limits';
+import { operatorCredit, operatorVoid } from '../billing/invoices';
 import { setComp } from '../billing/pro';
 import type { Env } from '../types';
 import { botId, botName, esc, isChatAdmin, MESSAGE_MAX, sendMessage } from './api';
@@ -37,6 +38,8 @@ const HELP = [
   '/user email — the account: plan, sites, Telegram, source',
   '/plan email free|api — switch the plan; the person is told in Telegram',
   '/sources [days] — sign-ups by start parameter, 30 days by default',
+  '/credit invoice usd — credit what arrived on a top-up in review',
+  '/void invoice — a top-up in review where nothing came',
 ].join('\n');
 
 /** A message in the support group. */
@@ -66,6 +69,10 @@ export async function operatorMessage(env: Env, msg: TgMessage, now: number): Pr
   if (command === 'user') return void (await say(await userCard(env, args[0] ?? '')));
   if (command === 'plan') return void (await say(await setPlan(env, args[0] ?? '', args[1] ?? '')));
   if (command === 'sources') return void (await say(await sources(env, args[0], now)));
+  // Money (§18): each row written names the operator — their Telegram id and their name now.
+  const by = { tg: from.id, name: from.username ? `@${from.username}` : (from.first_name ?? String(from.id)) };
+  if (command === 'credit') return void (await say(await operatorCredit(env, args[0] ?? '', args[1] ?? '', by)));
+  if (command === 'void') return void (await say(await operatorVoid(env, args[0] ?? '')));
   await say(HELP);
 }
 

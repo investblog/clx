@@ -3,6 +3,7 @@ import { admin } from './admin';
 import { runAdvice } from './advice';
 import { auth } from './auth/routes';
 import { signup } from './auth/signup';
+import { reconcile, RECONCILE_EVERY_MIN } from './billing/invoices';
 import { reconcilePlans } from './billing/pause';
 import { GRACE_MS, LOW_DAYS, lowBalances, markLowTold, runCharges } from './billing/pro';
 import { checkTokens } from './cf/connect';
@@ -103,6 +104,11 @@ export default {
         if (sites.synced + sites.routes + sites.retired) console.log(`sites: synced ${sites.synced}, routes ${sites.routes}, retired ${sites.retired}`);
         const linkHosts = await runLinkHosts(env, now);
         if (linkHosts) console.log(`link hosts: ${linkHosts}`);
+        // Crypto top-ups Trybit has not told us of (§18): every 15 minutes.
+        if (new Date(event.scheduledTime).getUTCMinutes() % RECONCILE_EVERY_MIN === 2) {
+          const r = await reconcile(env, now).catch((e: unknown) => (console.error('reconcile', e instanceof Error ? e.message : e), {}));
+          if (Object.keys(r).length) console.log(`invoices reconciled: ${JSON.stringify(r)}`);
+        }
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         const hour = Math.floor(now / 3_600_000);
         const day = Math.floor(now / 86_400_000);

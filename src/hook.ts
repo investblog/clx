@@ -3,6 +3,8 @@
 // reinstall); the body never names it. `setup_ok` (stage 3) and the pushes of totals (stage 4c).
 import { Hono, type Context } from 'hono';
 import { PUSH_BYTES } from '../edge/contract';
+import { settleCrypto, type InvoiceRow } from './billing/invoices';
+import { configured, statuses, tokenInvoice, withPrefix } from './billing/trybit';
 import { confirmSetup } from './cf/deploy';
 import type { EdgeAccount } from './cf/connect';
 import { sha256 } from './lib/crypto';
@@ -63,6 +65,38 @@ hook.post('/setup', async (c) => {
   const outcome = await confirmSetup(c.env, edge, report as { deployment_id: string; bundle: string; schema: number | null });
   // Not this deployment (an old or delayed report) or busy: the worker tries again next minute.
   return outcome === 'ok' ? c.json({ ok: true }) : c.json({ error: outcome }, outcome === 'busy' ? 503 : 409);
+});
+
+/**
+ * Trybit's notification (§18, ADR 0035): only a signal to look at an invoice. Its token must be
+ * valid — the reconcile run finds what a refused notification would have told; the status is read
+ * from Trybit with our key and settled as the reconcile run settles it. 503 asks Trybit to retry.
+ */
+hook.post('/trybit', async (c) => {
+  const env = c.env;
+  if (!configured(env)) return c.json({ error: 'payments_not_configured' }, 503);
+  // Each call may cost a request to Trybit: limited per address (429, not 200 — 200 is "done").
+  const { success } = await env.API_LIMIT.limit({ key: `trybit:${c.req.header('cf-connecting-ip') ?? ''}` });
+  if (!success) return c.json({ error: 'rate_limited' }, 429);
+  const raw = await bounded(c.req.raw, MAX_BODY);
+  let body: Record<string, unknown> = {};
+  try {
+    if (raw) body = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    // refused below
+  }
+  // The token signs the invoice it is about: a valid token replayed with another id is refused.
+  const signed = typeof body.token === 'string' ? await tokenInvoice(body.token, env.PAYMENTS_WEBHOOK_SECRET!) : null;
+  if (!signed || typeof body.invoice_id !== 'string' || withPrefix(body.invoice_id) !== signed) return c.json({ error: 'bad_token' }, 401);
+  // Our invoice first, by their id: an unknown one costs no request to Trybit.
+  const theirs = signed;
+  const invoice = await env.DB.prepare("SELECT * FROM invoices WHERE processor_id = ? AND rail = 'crypto'").bind(theirs).first<InvoiceRow>();
+  if (!invoice) return c.json({ ok: true, note: 'unknown_invoice' });
+  const answer = await statuses(env, [theirs]);
+  const s = answer.ok ? answer.rows.get(theirs) : undefined;
+  if (!s) return c.json({ error: 'status_unavailable' }, 503);
+  const out = await settleCrypto(env, invoice, s);
+  return out === 'unconfirmed' ? c.json({ error: 'status_unconfirmed' }, 503) : c.json({ ok: true, note: out });
 });
 
 hook.post('/push', async (c) => {

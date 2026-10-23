@@ -808,5 +808,63 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": [
       "on"
     ]
+  },
+  "top_up": {
+    "description": "A crypto top-up (scope billing)\n\nWhole dollars, 9 to 1,000, in one of four coins; at most 3 pending whose hour has not run out (`invoice_limit`).\nThe answer has the address and the exact amount to send, fees included, for an hour; what\narrives is credited, partial payments go to an operator. Needs a confirmed e-mail.\n`payments_unavailable` when the processor is not set up or did not answer. Telegram Stars\nare paid in the bot (/pay), not here.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "usd": {
+          "type": "integer",
+          "minimum": 9,
+          "maximum": 1000
+        },
+        "coin": {
+          "type": "string",
+          "enum": [
+            "USDT_TRC20",
+            "USDT_BSC",
+            "USDT_ERC20",
+            "USDC_ERC20"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[!-~]{1,200}$",
+          "description": "Sent as the Idempotency-Key: the same key and arguments within 24 hours return the first answer and change nothing again. Without one the server makes one, and a repeated call is not protected."
+        }
+      },
+      "required": [
+        "usd",
+        "coin"
+      ],
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": [
+      "usd",
+      "coin"
+    ]
+  },
+  "get_invoice": {
+    "description": "A top-up and its state (scope billing)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "description": "an id of clx: 22 characters of base64url"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": []
   }
 };

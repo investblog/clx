@@ -19,6 +19,7 @@ import { ApiError, errorBody, fail, newId } from './http';
 import { canonicalPath, IDEM_TTL, idempotent, type Answer } from './idempotency';
 import { balanceOf, DAY_PRICE, GRACE_MS, isoDay, openPeriod, paidThrough, PRO_PRICE, proOff, proOn } from '../billing/pro';
 import { markReplan, resumeNext } from '../billing/pause';
+import { createCrypto, invoiceView, type InvoiceRow } from '../billing/invoices';
 
 type C = Context<{ Bindings: Env }>;
 const MAX_BODY = 65_536;
@@ -136,12 +137,14 @@ v1.delete(
     // this and the archive; a mark left by a delete that died is cleared by the cron after 15 minutes.
     const now = Date.now();
     const marked = await db
-      .prepare('UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0')
-      .bind(now, p.userId, DELETING_TTL)
+      .prepare("UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0 AND NOT EXISTS (SELECT 1 FROM invoices WHERE user_id = ?2 AND (status IN ('pending', 'review') OR (status = 'expired' AND expires_at > ?1 - ?4)))")
+      .bind(now, p.userId, DELETING_TTL, 30 * 86_400_000)
       .run();
     if (!marked.meta.changes) {
       const balance = await balanceOf(db, p.userId);
       if (balance !== 0) fail(409, 'balance_not_empty', 'There is money on your balance; spend it or ask for a refund in /support before deleting the account.', { balance_micro_usd: balance });
+      if (await db.prepare("SELECT 1 FROM invoices WHERE user_id = ?1 AND (status IN ('pending', 'review') OR (status = 'expired' AND expires_at > ?2))").bind(p.userId, now - 30 * 86_400_000).first())
+        fail(409, 'balance_not_empty', 'A top-up of yours is still open (unpaid, in review, or expired less than 30 days ago, when late crypto may still arrive); delete the account once it is settled.');
       fail(409, 'operation_in_progress', 'The account is being deleted already; retry in a minute.');
     }
     try {
@@ -200,8 +203,9 @@ async function deleteUser(c: C, p: Principal, now: number): Promise<Answer> {
         `INSERT INTO billing_archive (user_created_at, deleted_at, data)
          SELECT created_at, ?2, json_object(
            'ledger', (SELECT json_group_array(json_object('id', id, 'type', type, 'amount', amount, 'op_key', op_key, 'day', day, 'invoice_id', invoice_id, 'note', note, 'by_tg', by_tg, 'by_name', by_name, 'at', created_at)) FROM ledger WHERE user_id = ?1),
-           'pro_periods', (SELECT json_group_array(json_object('start_day', start_day, 'end_day', end_day)) FROM pro_periods WHERE user_id = ?1))
-         FROM users WHERE id = ?1 AND (EXISTS (SELECT 1 FROM ledger WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM pro_periods WHERE user_id = ?1))`,
+           'pro_periods', (SELECT json_group_array(json_object('start_day', start_day, 'end_day', end_day)) FROM pro_periods WHERE user_id = ?1),
+             'invoices', (SELECT json_group_array(json_object('id', id, 'rail', rail, 'usd', usd, 'coin', coin, 'stars', stars, 'status', status, 'processor_id', processor_id, 'created_at', created_at, 'paid_at', paid_at)) FROM invoices WHERE user_id = ?1))
+         FROM users WHERE id = ?1 AND (EXISTS (SELECT 1 FROM ledger WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM pro_periods WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM invoices WHERE user_id = ?1))`,
       )
       .bind(p.userId, now),
     // The keys' idempotency records; the session's own go after this answer is stored, within 24 hours.
@@ -749,12 +753,32 @@ async function billingView(db: D1Database, userId: number) {
       day_micro_usd: DAY_PRICE,
     },
     journal: journal.map((r) => ({ id: r.id, type: r.type, amount_micro_usd: r.amount, day: r.day === null ? null : isoDay(r.day), invoice_id: r.invoice_id, note: r.note, at: new Date(r.created_at).toISOString() })),
+    invoices: (await db.prepare('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<InvoiceRow>()).results.map(invoiceView),
   };
 }
 
 v1.get(
   '/billing',
   handle({ scope: 'billing' }, async (c, p) => ({ status: 200, body: await billingView(c.env.DB, p.userId) })),
+);
+
+/** A crypto top-up (§18, ADR 0035): the invoice with the address and the exact amount to send. */
+v1.post(
+  '/billing/invoices',
+  handle({ scope: 'billing' }, async (c, p, body, idemRef) => {
+    if (body.stars !== undefined) fail(400, 'invalid_request', 'Stars are paid in the Telegram bot: send /pay to @clxcxbot.', { field: 'stars' });
+    const invoice = await createCrypto(c.env, p.userId, body, idemRef);
+    return { status: 201, body: { invoice: invoiceView(invoice) } };
+  }),
+);
+
+v1.get(
+  '/billing/invoices/:id',
+  handle({ scope: 'billing' }, async (c, p) => {
+    const invoice = await c.env.DB.prepare('SELECT * FROM invoices WHERE id = ? AND user_id = ?').bind(c.req.param('id'), p.userId).first<InvoiceRow>();
+    if (!invoice) fail(404, 'not_found', 'No such invoice.');
+    return { status: 200, body: { invoice: invoiceView(invoice!) } };
+  }),
 );
 
 /** Pro on or off (§18): on needs a confirmed e-mail and $9 on the balance; off ends it after today. */

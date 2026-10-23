@@ -29,6 +29,12 @@ export interface Env {
   /** The support group's chat id (§17), a var in wrangler.jsonc: /support lands there, its admins
    *  answer by reply and run the operator commands. Without it /support is off. */
   TELEGRAM_SUPPORT_CHAT?: string;
+  /** Crypto top-ups through Trybit (§18): the API key and the webhook's token secret are Worker
+   *  secrets, the shop and the API's address vars; without all four no invoice is made. */
+  PAYMENTS_API_KEY?: string;
+  PAYMENTS_WEBHOOK_SECRET?: string;
+  PAYMENTS_SHOP_ID?: string;
+  PAYMENTS_API_URL?: string;
   /** Workers Static Assets (public/): the pages with a markdown copy are served through the Worker (§16). */
   ASSETS: Fetcher;
 }
