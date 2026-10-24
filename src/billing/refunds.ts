@@ -7,6 +7,7 @@ import { fail, newId } from '../v1/http';
 import { invoiceById, MAX_USD, tellOperators, type InvoiceRow } from './invoices';
 import { settleUser } from './pro';
 import { toMicro, type Coin } from './trybit';
+import { clawbacks, CREDITS_SQL } from '../partners/accrue';
 
 const DAY = 86_400_000;
 /** How long after its deposit a top-up may be refunded. */
@@ -62,6 +63,11 @@ export async function isAddressFor(coin: Coin, s: string): Promise<boolean> {
   return coin === 'USDT_TRC20' ? isTron(s) : /^0x[0-9a-fA-F]{40}$/u.test(s);
 }
 
+/** What a refund may take: the balance less the credit no deposit brought (a start credit). */
+async function refundRoom(db: D1Database, userId: number): Promise<number> {
+  return (await db.prepare(`SELECT (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?1) - (${CREDITS_SQL}) AS room`).bind(userId).first<number>('room')) ?? 0;
+}
+
 /** What a deposit brought in, less what was refunded from it already (refund rows are negative). */
 const LEFT_SQL = "SELECT coalesce(sum(amount), 0) AS rest FROM ledger WHERE invoice_id = ?1 AND type IN ('deposit', 'refund')";
 
@@ -112,16 +118,16 @@ async function tellRefund(env: Env, id: string): Promise<boolean> {
       `SELECT r.id, r.invoice_id, r.rail, r.address, u.email, i.coin, (SELECT stars FROM star_payments WHERE charge_id = i.processor_id) AS stars,
          (SELECT amount FROM ledger WHERE invoice_id = r.invoice_id AND type = 'deposit') AS deposit,
          (${LEFT_SQL.replace('?1', 'r.invoice_id')}) AS rest,
-         (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = r.user_id) AS balance
+         (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = r.user_id) AS balance, (${CREDITS_SQL.replace('?1', 'r.user_id')}) AS credits
        FROM refunds r JOIN users u ON u.id = r.user_id JOIN invoices i ON i.id = r.invoice_id WHERE r.id = ? AND r.status = 'requested' AND r.told_at IS NULL`,
     )
     .bind(id)
-    .first<{ id: string; invoice_id: string; rail: string; address: string | null; email: string; coin: string; stars: number | null; deposit: number; rest: number; balance: number }>();
+    .first<{ id: string; invoice_id: string; rail: string; address: string | null; email: string; coin: string; stars: number | null; deposit: number; rest: number; balance: number; credits: number }>();
   if (!r) return true;
   const what = r.rail === 'stars' ? `${r.stars}★, whole only` : `to <code>${esc(r.address ?? '')}</code> (${esc(r.coin)}), less the network fee`;
   const told = await tellOperators(
     env,
-    `refund asked <code>${r.id}</code> · ${esc(r.email)} · invoice <code>${esc(r.invoice_id)}</code> · deposit ${usd(r.deposit)}, refundable ${usd(Math.min(r.rest, Math.max(r.balance, 0)))} (balance ${usd(r.balance)}) · ${what}. /refund ${r.id} ${r.rail === 'stars' ? '' : '&lt;usd&gt; '}or /decline ${r.id}`,
+    `refund asked <code>${r.id}</code> · ${esc(r.email)} · invoice <code>${esc(r.invoice_id)}</code> · deposit ${usd(r.deposit)}, refundable ${usd(Math.min(r.rest, Math.max(r.balance - r.credits, 0)))} (balance ${usd(r.balance)}) · ${what}. /refund ${r.id} ${r.rail === 'stars' ? '' : '&lt;usd&gt; '}or /decline ${r.id}`,
   );
   if (told) await db.prepare('UPDATE refunds SET told_at = ? WHERE id = ?').bind(Date.now(), r.id).run();
   return told;
@@ -180,28 +186,33 @@ export async function operatorRefund(env: Env, refundId: string, rawUsd: string 
     }
     const now = Date.now();
     const note = r.rail === 'stars' ? `Refund in Telegram Stars · ${paidStars}★` : `Refund in ${inv.coin} · ${usd(micro)} less the network fee`;
+    // What it takes back with it: the partner's clawback and the promo bonus of that deposit (§19).
+    const { stmts: back, bonusBack } = await clawbacks(db, r, micro, now);
     // Both caps and the move in one statement, the journal row only if it moved: a second /refund
-    // finds the request pending and writes nothing (and `ledger_op` holds the row to one).
+    // finds the request pending and writes nothing (and `ledger_op` holds the row to one). The
+    // balance must hold the refund and the bonus taken back, beside the credit no deposit brought.
     const [moved] = await db.batch([
       db
         .prepare(
           `UPDATE refunds SET status = 'pending', amount = ?2, by_tg = ?3, by_name = ?4 WHERE id = ?1 AND status = 'requested'
              AND ?2 <= (${LEFT_SQL.replace('?1', '?5')})
-             AND ?2 <= (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?6)
+             AND ?2 + ?7 <= (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?6) - (${CREDITS_SQL.replace('?1', '?6')})
              AND EXISTS (SELECT 1 FROM users WHERE id = ?6 AND deleting_at IS NULL)`,
         )
-        .bind(r.id, micro, by.tg, by.name, r.invoice_id, r.user_id),
+        .bind(r.id, micro, by.tg, by.name, r.invoice_id, r.user_id, bonusBack),
       db
         .prepare("INSERT INTO ledger (user_id, type, amount, invoice_id, op_key, note, by_tg, by_name, created_at) SELECT ?1, 'refund', ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE changes() = 1")
         .bind(r.user_id, -micro, r.invoice_id, `refund:${r.id}`, note, by.tg, by.name, now),
+      ...back,
     ]);
     if (!moved!.meta.changes) {
       const again = (await db.prepare('SELECT status FROM refunds WHERE id = ?').bind(r.id).first<string>('status'))!;
       if (again !== 'requested') return `Refund ${esc(refundId)} was settled meanwhile (${again}); nothing written.`;
       const left = (await db.prepare(LEFT_SQL).bind(r.invoice_id).first<number>('rest')) ?? 0;
-      const balance = (await db.prepare('SELECT coalesce(sum(amount), 0) AS b FROM ledger WHERE user_id = ?').bind(r.user_id).first<number>('b')) ?? 0;
+      const room = (await refundRoom(db, r.user_id)) - bonusBack;
       if (micro > left) return `Refund ${esc(refundId)}: at most ${usd(left)} is left of that deposit; nothing written.`;
-      if (micro > balance) return `Refund ${esc(refundId)}: the balance holds ${usd(balance)} only${r.rail === 'stars' ? ' — Stars are refunded whole, so not now' : ''}; nothing written.`;
+      if (micro > room)
+        return `Refund ${esc(refundId)}: the balance allows ${usd(Math.max(room, 0))} only${bonusBack ? ` (${usd(bonusBack)} of promo bonus goes back with it)` : ''}${r.rail === 'stars' ? ' — Stars are refunded whole, so not now' : ''}; nothing written.`;
       return `Refund ${esc(refundId)}: the account is being deleted; nothing written.`;
     }
     if (r.rail === 'crypto') return `Refund ${esc(refundId)}: ${usd(micro)} taken from the balance. Send it, less the network fee, to <code>${esc(r.address ?? '')}</code> (${esc(inv.coin)}), then /refunded ${esc(refundId)} txid`;

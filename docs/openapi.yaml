@@ -24,6 +24,12 @@ components:
       in: header
       required: false
       schema: { type: string, minLength: 1, maxLength: 200, pattern: '^[!-~]{1,200}$' }
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 'Partner money moves only with one: a retry with the same key never moves it twice.'
+      schema: { type: string, minLength: 1, maxLength: 200, pattern: '^[!-~]{1,200}$' }
     Id:
       name: id
       in: path
@@ -281,6 +287,51 @@ components:
               at: { type: string, format: date-time }
         invoices: { type: array, items: { $ref: '#/components/schemas/Invoice' }, description: 'the last 10 top-ups, newest first' }
         refunds: { type: array, items: { $ref: '#/components/schemas/Refund' }, description: 'the last 10 refund requests, newest first' }
+    Partner:
+      type: object
+      properties:
+        code: { type: string, description: 'your partner code' }
+        links:
+          type: object
+          properties:
+            site: { type: string, description: 'clx.cx with ?ref=' }
+            bot: { type: [string, 'null'], description: 'the Telegram bot with start=ref_' }
+        rate_bp: { type: integer, description: 'the commission, basis points (3000 = 30%)' }
+        hold_days: { type: integer }
+        payout_min_micro_usd: { type: integer }
+        referrals: { type: integer, description: 'accounts made with your code' }
+        wallet:
+          type: object
+          properties:
+            total_micro_usd: { type: integer }
+            available_micro_usd: { type: integer, description: 'may be below zero after a clawback' }
+            held_micro_usd: { type: integer }
+        journal:
+          type: array
+          description: 'the last 50 rows, newest first'
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              type: { type: string, enum: [commission, clawback, transfer, payout, payout_return] }
+              amount_micro_usd: { type: integer }
+              invoice_id: { type: [string, 'null'] }
+              available_at: { type: [string, 'null'], format: date-time, description: 'when a commission is no longer held' }
+              note: { type: [string, 'null'] }
+              at: { type: string, format: date-time }
+        payouts:
+          type: array
+          description: 'the last 10, newest first'
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              amount_micro_usd: { type: integer }
+              address: { type: string }
+              status: { type: string, enum: [requested, paid, rejected] }
+              txid: { type: [string, 'null'] }
+              created_at: { type: string, format: date-time }
+              settled_at: { type: [string, 'null'], format: date-time }
     Refund:
       type: object
       properties:
@@ -799,6 +850,54 @@ paths:
                 address: { type: string }
       responses:
         '201': { description: Asked, content: { application/json: { schema: { type: object, properties: { refund: { $ref: '#/components/schemas/Refund' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/partner:
+    get:
+      summary: The partner program — your code, links, referrals and wallet (scope billing)
+      description: |
+        Every user is a partner (docs/spec.md §19): 30% of each credited top-up of the people you
+        referred, for life, one level, held 30 days. Your links: `https://clx.cx/?ref=CODE` and the
+        bot's `start=ref_CODE`. Money is integer micro-USD; the wallet's available sum leaves out
+        commissions still held, and a refund of a referral's top-up takes its share back
+        (`clawback`), which may take the wallet below zero.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Partner' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/partner/transfer:
+    post:
+      summary: Move money from the partner wallet to your clx balance (page session only)
+      description: |
+        At most what is available; needs a confirmed e-mail and an Idempotency-Key
+        (`insufficient_balance` when the wallet does not have it).
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyRequired' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [usd], properties: { usd: { type: number, exclusiveMinimum: 0, maximum: 100000, multipleOf: 0.01, description: 'dollars, at most cents' } } }
+      responses:
+        '200': { description: Moved, content: { application/json: { schema: { $ref: '#/components/schemas/Partner' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/partner/payouts:
+    post:
+      summary: Ask for a payout in USDT TRC-20 (page session only)
+      description: |
+        From $20, to a Tron address, at most what is available; its money is reserved at once and
+        an operator sends it by hand, or refuses it and the money returns. Needs a confirmed e-mail
+        and an Idempotency-Key.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyRequired' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usd, address]
+              properties:
+                usd: { type: number, minimum: 20, maximum: 100000, multipleOf: 0.01, description: 'dollars, at most cents' }
+                address: { type: string, description: 'a USDT TRC-20 (Tron) address' }
+      responses:
+        '201':
+          description: Asked
+          content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/Partner' }, { type: object, properties: { payout_id: { type: integer } } }] } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/billing/pro:
     post:

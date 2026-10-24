@@ -22,6 +22,8 @@ import { markReplan, resumeNext } from '../billing/pause';
 import { createCrypto, invoiceView, type InvoiceRow } from '../billing/invoices';
 import { createStars } from '../billing/stars';
 import { refundView, requestRefund, type RefundRow } from '../billing/refunds';
+import { partnerView, requestPayout, transfer } from '../partners/wallet';
+import { RATE_BP } from '../partners/accrue';
 
 type C = Context<{ Bindings: Env }>;
 const MAX_BODY = 65_536;
@@ -140,9 +142,11 @@ v1.delete(
     const now = Date.now();
     const marked = await db
       .prepare(
-        "UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0 AND NOT EXISTS (SELECT 1 FROM invoices WHERE user_id = ?2 AND (status IN ('pending', 'review') OR (status = 'expired' AND rail = 'crypto' AND expires_at > ?1 - ?4))) AND NOT EXISTS (SELECT 1 FROM refunds WHERE user_id = ?2 AND status IN ('requested', 'pending'))",
+        "UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0 AND NOT EXISTS (SELECT 1 FROM invoices WHERE user_id = ?2 AND (status IN ('pending', 'review') OR (status = 'expired' AND rail = 'crypto' AND expires_at > ?1 - ?4))) AND NOT EXISTS (SELECT 1 FROM refunds WHERE user_id = ?2 AND status IN ('requested', 'pending')) AND NOT EXISTS (" +
+          PARTNER_HOLDS +
+          ')',
       )
-      .bind(now, p.userId, DELETING_TTL, 30 * 86_400_000)
+      .bind(now, p.userId, DELETING_TTL, 30 * 86_400_000, 90 * 86_400_000, RATE_BP)
       .run();
     if (!marked.meta.changes) {
       const balance = await balanceOf(db, p.userId);
@@ -151,6 +155,8 @@ v1.delete(
         fail(409, 'balance_not_empty', 'A top-up of yours is still open (unpaid, in review, or expired less than 30 days ago, when late crypto may still arrive); delete the account once it is settled.');
       if (await db.prepare("SELECT 1 FROM refunds WHERE user_id = ? AND status IN ('requested', 'pending')").bind(p.userId).first())
         fail(409, 'balance_not_empty', 'A refund of yours is still open; delete the account once it is done.');
+      if (await db.prepare(PARTNER_HOLDS).bind(now, p.userId, 0, 0, 90 * 86_400_000, RATE_BP).first())
+        fail(409, 'balance_not_empty', 'Your partner wallet is not empty, a payout is waiting, or a referral topped up less than 90 days ago (a refund would take its commission back); delete the account once that is over.');
       fail(409, 'operation_in_progress', 'The account is being deleted already; retry in a minute.');
     }
     try {
@@ -161,6 +167,15 @@ v1.delete(
     }
   }),
 );
+
+/** What a partner's account holds up its delete with (§18, §19): money in the wallet, a payout
+ *  waiting, a referral's deposit under 90 days old or without its commission yet, a referral's refund
+ *  open — so a clawback always finds the wallet. `?1` now, `?2` the user, `?5` 90 days, `?6` the rate. */
+const PARTNER_HOLDS = `SELECT 1 WHERE (SELECT coalesce(sum(amount), 0) FROM partner_ledger WHERE user_id = ?2) <> 0
+  OR EXISTS (SELECT 1 FROM partner_payouts WHERE user_id = ?2 AND status = 'requested')
+  OR EXISTS (SELECT 1 FROM ledger l JOIN users r ON r.id = l.user_id WHERE r.referred_by = ?2 AND l.type = 'deposit'
+    AND (l.created_at > ?1 - ?5 OR (l.amount * ?6 / 10000 > 0 AND NOT EXISTS (SELECT 1 FROM partner_ledger c WHERE c.type = 'commission' AND c.invoice_id = l.invoice_id))))
+  OR EXISTS (SELECT 1 FROM refunds f JOIN users r ON r.id = f.user_id WHERE r.referred_by = ?2 AND f.status IN ('requested', 'pending'))`;
 
 /** A user's account goes (§9) — after the money checks of DELETE /me. */
 async function deleteUser(c: C, p: Principal, now: number): Promise<Answer> {
@@ -211,8 +226,11 @@ async function deleteUser(c: C, p: Principal, now: number): Promise<Answer> {
            'ledger', (SELECT json_group_array(json_object('id', id, 'type', type, 'amount', amount, 'op_key', op_key, 'day', day, 'invoice_id', invoice_id, 'note', note, 'by_tg', by_tg, 'by_name', by_name, 'at', created_at)) FROM ledger WHERE user_id = ?1),
            'pro_periods', (SELECT json_group_array(json_object('start_day', start_day, 'end_day', end_day)) FROM pro_periods WHERE user_id = ?1),
              'invoices', (SELECT json_group_array(json_object('id', id, 'rail', rail, 'usd', usd, 'coin', coin, 'stars', stars, 'status', status, 'processor_id', processor_id, 'created_at', created_at, 'paid_at', paid_at)) FROM invoices WHERE user_id = ?1),
-             'refunds', (SELECT json_group_array(json_object('id', id, 'invoice_id', invoice_id, 'rail', rail, 'status', status, 'amount', amount, 'txid', txid, 'by_tg', by_tg, 'by_name', by_name, 'created_at', created_at, 'settled_at', settled_at)) FROM refunds WHERE user_id = ?1))
-         FROM users WHERE id = ?1 AND (EXISTS (SELECT 1 FROM ledger WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM pro_periods WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM invoices WHERE user_id = ?1))`,
+             'refunds', (SELECT json_group_array(json_object('id', id, 'invoice_id', invoice_id, 'rail', rail, 'status', status, 'amount', amount, 'txid', txid, 'by_tg', by_tg, 'by_name', by_name, 'created_at', created_at, 'settled_at', settled_at)) FROM refunds WHERE user_id = ?1),
+             'partner_ledger', (SELECT json_group_array(json_object('id', id, 'type', type, 'amount', amount, 'invoice_id', invoice_id, 'rate_bp', rate_bp, 'matures_at', matures_at, 'payout_id', payout_id, 'at', created_at)) FROM partner_ledger WHERE user_id = ?1),
+             'partner_payouts', (SELECT json_group_array(json_object('id', id, 'amount', amount, 'status', status, 'txid', txid, 'by_tg', by_tg, 'by_name', by_name, 'created_at', created_at, 'settled_at', settled_at)) FROM partner_payouts WHERE user_id = ?1),
+             'promo_redemptions', (SELECT json_group_array(json_object('promo_id', promo_id, 'invoice_id', invoice_id, 'amount', amount, 'at', created_at)) FROM promo_redemptions WHERE user_id = ?1))
+         FROM users WHERE id = ?1 AND (EXISTS (SELECT 1 FROM ledger WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM pro_periods WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM invoices WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM partner_ledger WHERE user_id = ?1))`,
       )
       .bind(p.userId, now),
     // The keys' idempotency records; the session's own go after this answer is stored, within 24 hours.
@@ -796,6 +814,36 @@ v1.get(
 v1.post(
   '/billing/refunds',
   handle({ session: true, scope: 'billing' }, async (c, p, body) => ({ status: 201, body: { refund: refundView(await requestRefund(c.env, p.userId, body)) } })),
+);
+
+/** The partner program (§19): the code, the links, the referrals, the wallet. */
+v1.get(
+  '/partner',
+  handle({ scope: 'billing' }, async (c, p) => ({ status: 200, body: await partnerView(c.env, p.userId) })),
+);
+
+/** Money out of the wallet (§19) — page actions only, and only with an Idempotency-Key: a retried
+ *  click must never move it twice. */
+const needKey = (idemRef: string | null) => {
+  if (!idemRef) fail(400, 'invalid_request', 'Money moves need an Idempotency-Key header.');
+};
+
+v1.post(
+  '/partner/transfer',
+  handle({ session: true, scope: 'billing' }, async (c, p, body, idemRef) => {
+    needKey(idemRef);
+    await transfer(c.env, p.userId, body, idemRef!);
+    return { status: 200, body: await partnerView(c.env, p.userId) };
+  }),
+);
+
+v1.post(
+  '/partner/payouts',
+  handle({ session: true, scope: 'billing' }, async (c, p, body, idemRef) => {
+    needKey(idemRef);
+    const id = await requestPayout(c.env, p.userId, body, idemRef!);
+    return { status: 201, body: { payout_id: id, ...(await partnerView(c.env, p.userId)) } };
+  }),
 );
 
 /** Pro on or off (§18): on needs a confirmed e-mail and $9 on the balance; off ends it after today. */

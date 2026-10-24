@@ -5,6 +5,7 @@ import { esc, sendMessage } from '../tg/api';
 import { supportChat } from '../tg/support';
 import type { Env } from '../types';
 import { fail, newId } from '../v1/http';
+import { commissionStmt, depositBonusStmts } from '../partners/accrue';
 import { settleUser } from './pro';
 import { COIN_LABEL, configured, createInvoice as trybitCreate, INFO_BATCH, isCoin, PAID_STATUSES, statuses, toMicro, type Coin, type Status } from './trybit';
 
@@ -126,6 +127,9 @@ export async function credit(env: Env, invoice: InvoiceRow, micro: number, note:
     db
       .prepare("UPDATE star_payments SET state = 'credited', settled_at = ?2 WHERE charge_id = (SELECT processor_id FROM invoices WHERE id = ?1 AND rail = 'stars') AND state = 'review' AND EXISTS (SELECT 1 FROM ledger WHERE invoice_id = ?1 AND type = 'deposit')")
       .bind(invoice.id, now),
+    // What the deposit earns (§19): the partner's commission and the promo code's bonus, each once.
+    commissionStmt(db, invoice.id, now),
+    ...depositBonusStmts(db, invoice.id, now),
   ]);
   if (!moved!.meta.changes) return false;
   await settleUser(env, invoice.user_id, now).catch((e: unknown) => console.error('settle after deposit', invoice.user_id, e instanceof Error ? e.message : e));

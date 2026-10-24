@@ -8,6 +8,8 @@ import { sha256 } from '../lib/crypto';
 import { deliverMail, reserveMail } from '../mail';
 import { appUrl, localeOf, MAIL, type Locale } from '../mail-text';
 import type { Env } from '../types';
+import { grantSignupCredit } from '../partners/accrue';
+import { bindingOf, newRefCode, refCookie, referrerSql, resolveCode } from '../partners/codes';
 import { hashPassword } from './password';
 import { userOf } from './routes';
 
@@ -120,8 +122,14 @@ signup.post('/signup', async (c) => {
   // and that user's sessions carry a small version, which then never matches.
   // The language is the sign-up page's (ADR 0015); the account keeps it.
   const locale = localeOf(body.locale);
-  const created = await c.env.DB.prepare('INSERT INTO users (email, password_hash, created_at, session_version, locale) VALUES (?1, ?2, ?3, ?3, ?4) ON CONFLICT (email) DO NOTHING RETURNING id')
-    .bind(email, await hashPassword(password), now, locale)
+  // A partner's or promo code (§19): typed at sign-up, else the `?ref=` cookie. A typed code that is
+  // no code is refused; a stale cookie is let go. It binds only an account made here.
+  const typed = body.code !== undefined && body.code !== null && body.code !== '';
+  const code = await resolveCode(c.env.DB, typed ? body.code : refCookie(c.req.header('cookie')), now);
+  if (typed && !code) return c.json({ error: 'invalid_code' }, 400);
+  const { partnerCode, promoId } = bindingOf(code);
+  const created = await c.env.DB.prepare(`INSERT INTO users (email, password_hash, created_at, session_version, locale, ref_code, referred_by, promo_id) VALUES (?1, ?2, ?3, ?3, ?4, ?5, ${referrerSql(6)}, ?7) ON CONFLICT (email) DO NOTHING RETURNING id`)
+    .bind(email, await hashPassword(password), now, locale, await newRefCode(c.env.DB), partnerCode, promoId)
     .first<{ id: number }>();
   const reserved = await reserveMail(c.env, email, now);
   if (created) later(c, mailToken(c.env, { id: created.id, email, locale }, 'confirm', reserved, now));
@@ -150,6 +158,8 @@ signup.post('/confirm', async (c) => {
     // Any other confirmation link still on its way has nothing left to do.
     c.env.DB.prepare("DELETE FROM email_tokens WHERE user_id = ? AND kind = 'confirm'").bind(userId),
   ]);
+  // A start credit is granted once the address is proven (§19); the cron writes one missed here.
+  await grantSignupCredit(c.env.DB, userId);
   return c.json({ ok: true });
 });
 

@@ -7,6 +7,8 @@ import { signBot } from '../auth/jwt';
 import { overLimit } from '../auth/ratelimit';
 import { unusableHash } from '../auth/password';
 import { issueToken } from '../auth/signup';
+import { grantSignupCredit } from '../partners/accrue';
+import { bindingOf, newRefCode, normalizeCode, referrerSql, resolveCode } from '../partners/codes';
 import { invoiceById } from '../billing/invoices';
 import { sendStarsInvoice, STAR_PACKS, starsPaid, type SuccessfulPayment } from '../billing/stars';
 import { deliverMail, reserveMail } from '../mail';
@@ -120,9 +122,11 @@ async function command_(turn: Turn, command: string, arg: string): Promise<void>
   }
   if (command === 'start') {
     if (turn.me) return void (await say(turn, t.help));
-    // t.me/<bot>?start=<source>: where the person came from, kept if the bot makes the account.
-    const source = SOURCE.test(arg) ? arg.toLowerCase() : null;
-    await startDialog(turn.env, turn.tg, 'email', source ? { source } : {}, turn.now);
+    // t.me/<bot>?start=ref_<code>: a partner's or promo code (§19); any other parameter is where the
+    // person came from. Either is kept if the bot makes the account.
+    const ref = arg.startsWith('ref_') ? normalizeCode(arg.slice(4)) : null;
+    const source = !ref && SOURCE.test(arg) ? arg.toLowerCase() : null;
+    await startDialog(turn.env, turn.tg, 'email', ref ? { ref } : source ? { source } : {}, turn.now);
     return void (await say(turn, t.hello));
   }
   if (!turn.me) return void (await say(turn, command === 'lang' || Object.hasOwn(COMMANDS, command) ? t.needLink : t.unknownCommand));
@@ -141,6 +145,7 @@ const COMMANDS: Record<string, (turn: Turn, arg: string) => Promise<void>> = {
   link: (turn, arg) => (arg ? linkUrl(turn, arg) : ask(turn, 'link_url', {}, turn.t.askUrl)),
   connect: connectStart,
   pay,
+  partner,
   unlink,
 };
 
@@ -210,15 +215,16 @@ async function emailStep(turn: Turn, d: Dialog, text: string): Promise<void> {
   const { env, t } = turn;
   const email = text.toLowerCase();
   const source = typeof d.data.source === 'string' ? d.data.source : null;
+  const ref = typeof d.data.ref === 'string' ? d.data.ref : null;
   if (!EMAIL.test(email) || new TextEncoder().encode(email).length > 254) return void (await say(turn, t.badEmail));
   // The Telegram user's own limit first: one who is over it cannot use up an address's.
   if (await overLimit(env, `tg:code:${turn.tg}`, CODES_A_DAY, turn.now)) return void (await say(turn, t.tooManyCodes));
   // Over the address's limit no e-mail goes, and the answer is the same: it tells nothing about the address.
   if (await reserveMail(env, email, turn.now)) {
-    const code = await issueCode(env, turn.tg, 'link', 'link_code', { email, lang: turn.lang, source }, turn.now);
+    const code = await issueCode(env, turn.tg, 'link', 'link_code', { email, lang: turn.lang, source, ref }, turn.now);
     const mail = MAIL[turn.lang].tgCode(code, 'link');
     await deliverMail(env, email, mail.subject, mail.text);
-  } else await startDialog(env, turn.tg, 'link_code', { email, purpose: 'link', source }, turn.now);
+  } else await startDialog(env, turn.tg, 'link_code', { email, purpose: 'link', source, ref }, turn.now);
   await say(turn, t.codeSent);
 }
 
@@ -234,6 +240,9 @@ async function linkCode(turn: Turn, d: Dialog, text: string): Promise<void> {
   const lang = localeOf(d.data.lang);
   const db = env.DB;
   const code = [turn.tg, d.nonce, d.code_hash];
+  // The code from `start=ref_…`, as it is now; it binds only an account made here.
+  const { partnerCode, promoId } = bindingOf(await resolveCode(db, d.data.ref, turn.now));
+  const refCode = await newRefCode(db);
   // One transaction, each statement only while the code is unspent, the code spent last: a failure
   // leaves everything as it was, and the redelivered code does it all. The code proved the mailbox:
   // the account is found or made, its address confirmed. An account made here has no password (an
@@ -242,9 +251,10 @@ async function linkCode(turn: Turn, d: Dialog, text: string): Promise<void> {
     db
       .prepare(
         // The source only for an account made here (ON CONFLICT leaves an old one's as it was).
-        `INSERT INTO users (email, password_hash, created_at, session_version, locale, email_confirmed_at, source) SELECT ?1, ?4, ?2, ?2, ?3, ?2, ?5 WHERE ${stillHolds} ON CONFLICT (email) DO UPDATE SET email_confirmed_at = coalesce(email_confirmed_at, ?2) RETURNING id, locale`,
+        `INSERT INTO users (email, password_hash, created_at, session_version, locale, email_confirmed_at, source, ref_code, referred_by, promo_id) SELECT ?1, ?4, ?2, ?2, ?3, ?2, ?5, ?9, ${referrerSql(10)}, ?11 WHERE ${stillHolds} ON CONFLICT (email) DO UPDATE SET email_confirmed_at = coalesce(email_confirmed_at, ?2) RETURNING id, locale`,
       )
-      .bind(email, turn.now, lang, unusableHash(), typeof d.data.source === 'string' ? d.data.source : null, ...code),
+      // `stillHolds`'s bare `?`s come after the highest number before them (?11): 12 to 14.
+      .bind(email, turn.now, lang, unusableHash(), typeof d.data.source === 'string' ? d.data.source : null, null, null, null, refCode, partnerCode, promoId, ...code),
     db
       .prepare(`INSERT INTO tg_identities (tg_user_id, user_id, username, linked_at) SELECT ?, id, ?, ? FROM users WHERE email = ? AND ${stillHolds} ON CONFLICT DO NOTHING`)
       .bind(turn.tg, turn.msg.from?.username ?? null, turn.now, email, ...code),
@@ -255,6 +265,8 @@ async function linkCode(turn: Turn, d: Dialog, text: string): Promise<void> {
   // From the same transaction: nothing after the commit can fail before the answer but the notice.
   const user = made!.results[0] as { id: number; locale: Locale };
   const locale = localeOf(user.locale);
+  // An account made here is confirmed at once: a promo code's start credit is due (§19).
+  await grantSignupCredit(db, user.id, turn.now);
   // The owner hears of every link, with a way to undo it from the mailbox — best effort: the link
   // is made, and a failure here must not make Telegram deliver the spent code again.
   try {
@@ -462,6 +474,15 @@ async function pay(turn: Turn): Promise<void> {
   // Pro given by support is not switched here: it is not charged, and taking it back is theirs.
   if (!pro.given) items.push(pro.on ? { id: 'pro:off', label: t.proSwitchOff } : { id: 'pro:on', label: t.proSwitchOn });
   await choose(turn, `${t.payHead(usd(r.body.balance_micro_usd as number), state)}\n\n${t.payPick}`, items, { kind: 'pay' });
+}
+
+/** /partner (§19): the code, the links, the referrals, the wallet; its money moves from the app. */
+async function partner(turn: Turn): Promise<void> {
+  const r = await api(turn, 'GET', '/v1/partner');
+  if (r.status !== 200) return void (await say(turn, refusal(turn, r)));
+  const w = r.body.wallet as { available_micro_usd: number; held_micro_usd: number };
+  const links = r.body.links as { site: string; bot: string | null };
+  await say(turn, turn.t.partner(esc(String(r.body.code)), esc(links.site), links.bot ? esc(links.bot) : null, Number(r.body.referrals), usd(w.available_micro_usd), usd(w.held_micro_usd), appUrl(turn.env, turn.lang, '#/partners')));
 }
 
 async function payPicked(turn: Turn, id: string): Promise<void> {

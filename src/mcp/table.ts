@@ -47,7 +47,8 @@ export const TABLE: readonly ToolRow[] = [
   { name: 'set_pro', title: 'Switch Pro on or off', method: 'POST', path: '/v1/billing/pro', destructive: true },
   { name: 'top_up', title: 'A crypto top-up: the address and amount to send', method: 'POST', path: '/v1/billing/invoices' },
   { name: 'get_invoice', title: 'A top-up and its state', method: 'GET', path: '/v1/billing/invoices/{id}' },
+  { name: 'get_partner', title: 'The partner program: code, links, referrals, wallet', method: 'GET', path: '/v1/partner' },
 ];
 
 /** /v1 calls for a page session only (spec §15): not tools. */
-export const SESSION_ONLY: readonly string[] = ['PATCH /v1/me', 'DELETE /v1/me', 'DELETE /v1/me/telegram', 'GET /v1/keys', 'POST /v1/keys', 'PATCH /v1/keys/{id}', 'DELETE /v1/keys/{id}', 'POST /v1/billing/refunds'];
+export const SESSION_ONLY: readonly string[] = ['PATCH /v1/me', 'DELETE /v1/me', 'DELETE /v1/me/telegram', 'GET /v1/keys', 'POST /v1/keys', 'PATCH /v1/keys/{id}', 'DELETE /v1/keys/{id}', 'POST /v1/billing/refunds', 'POST /v1/partner/transfer', 'POST /v1/partner/payouts'];

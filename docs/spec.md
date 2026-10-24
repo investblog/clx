@@ -1317,7 +1317,7 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   support group (a request the group did not hear of is told again by the cron every 15 minutes).
   A crypto request already made answers a second `/refund` with what was taken and by whom, never
   a second "send it". The operator's `/refund <request> <usd>` takes at most what that deposit brought in
-  less what was refunded from it already, and never more than the balance — both checked in the
+  less what was refunded from it already, and never more than the balance less the credit no deposit brought and the promo bonus it takes back (§19) — both checked in the
   statement that moves the request to `pending`, the journal row written in the same batch only if
   it moved. Crypto, less the
   network fee, goes to the request's address by the operator, who marks it done (`/refunded <id>
@@ -1341,8 +1341,8 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   partner wallet is not zero, a payout request or a refund is open, an invoice is open (`pending`,
   `review`), a crypto one `expired` less than 30 days ago (late crypto may still arrive; an expired
   Stars invoice is approved for no checkout, and a payment delivered late is kept apart from the
-  account, in `star_payments`), or a referral's deposit is under 90 days old (a
-  refund would claw back its commission). The checks and `users.deleting_at` are one conditional
+  account, in `star_payments`), a referral's deposit is under 90 days old (a
+  refund would claw back its commission), or a referral's refund is open. The checks and `users.deleting_at` are one conditional
   `UPDATE`; every money writer — a deposit, a charge, a commission, an operator's command — requires
   `deleting_at IS NULL` in its own statement, so nothing lands between the check and the archive.
   A deletion that fails afterwards clears `deleting_at`; one that died (the Worker stopped) leaves
@@ -1361,16 +1361,22 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
 [ADR 0036](./decisions/0036-partners.md). Every user is a partner: the app's "Partners" page shows
 the code, the links, the referrals' count and the wallet.
 
-- **Codes.** `users.ref_code` — 8 random lowercase letters and digits, made at sign-up; partner and
-  promo codes share one name space, looked up case-insensitively, partner codes first.
-- **Attribution.** `?ref=CODE` on any page of clx.cx answers `302` to the same page without it and
-  sets the cookie `clx_ref` for 30 days (last touch), only for a valid code and a document
-  navigation; the Russian pages pass the code on in their links to clx.cx. `POST /auth/signup` takes
-  `code?` (a partner or promo code); without one it reads the cookie. The bot takes `start=ref_CODE`
+- **Codes.** `users.ref_code` — 8 random lowercase letters and digits, made at sign-up (users from
+  before the program get theirs from the migration, an account made by a script when it first opens
+  the page); partner and promo codes share one name space, looked up case-insensitively, partner
+  codes first; `/promo` refuses a partner's code.
+- **Attribution.** `?ref=CODE` on a page the Worker serves — the home page, which the Partners page
+  links to (the other pages are static files that never reach it) — answers `302` to the same page
+  without it, never cached, and sets the cookie `clx_ref` for 30 days (last touch), only for a valid
+  code and a document navigation (no `Sec-Fetch-Dest`, or `document`), the lookups limited per
+  address; the Russian pages pass the code on in their links to clx.cx. `POST /auth/signup` takes
+  `code?` (a partner or promo code; one that is no code is refused, `invalid_code`); without one it
+  reads the cookie, and a cookie whose code is gone is let go. The bot takes `start=ref_CODE`
   (other start parameters stay the source, §17) and keeps it in the dialog until the account is
   made. `users.referred_by` is written once, when the account is made, never to oneself, and never
-  changes. A partner's account cannot be deleted while a referral's deposit is under 90 days old
-  (§18), so a refund always finds the wallet to claw back from; after that `referred_by` is cleared.
+  changes. A partner's account cannot be deleted while a referral's deposit is under 90 days old or
+  has no commission yet, or a referral's refund is open (§18), so a refund always finds the wallet to
+  claw back from; after that `referred_by` is cleared (a foreign key, `ON DELETE SET NULL`).
 - **Commission** — 30% of each credited deposit of a referral (`rate_bp` in the row), one level, for
   life, rounded down; held 30 days. Always on the whole deposit: refunds never change it. Each refund
   of the deposit writes a `clawback` — the rate times all that was refunded from it, rounded down,
@@ -1389,12 +1395,22 @@ the code, the links, the referrals' count and the wallet.
   batch, so a transfer cannot spend it meanwhile. An operator pays it (`/payouts`, `/paid <id>
   <txid>`, which writes nothing more) or refuses it (`/reject <id>`, the only path that writes
   `payout_return`). Neither may take the available sum below zero; both
-  are page-session only and idempotent by `Idempotency-Key`. `GET /v1/partner` (scope `billing`) —
-  code, links, referrals, wallet, payouts.
+  are page-session only, need a confirmed e-mail and an `Idempotency-Key` (refused without one), and
+  are idempotent by it — the key is also written with the move (the transfer's rows, the payout's
+  `idem_ref`), so a retry after a Worker that died before its answer was stored resumes it within
+  24 hours, and another request with that key is `idempotency_conflict`. A payout request the
+  support group did not hear of is told again by the cron every 15 minutes; `/paid` takes a Tron
+  transaction id (64 hex digits) only. `GET /v1/partner` (scope `billing`; also the bot's `/partner`, read only) —
+  code, links, referrals, wallet, the last 50 wallet rows, the last 10 payouts.
 - **Promo codes** — `first_deposit`, `any_deposit` (with an end date), `signup_credit` (granted when
   the e-mail is confirmed); a fixed bonus in dollars, granted **once per user and code** (a unique
-  index); a use is counted when its bonus is granted, in the same `INSERT`. A deposit bonus needs a
-  deposit of at least $9 and names it, so a refund of that deposit takes it back (§18). A start
-  credit names no deposit and is not taken back; it is spent only on Pro days, never refunded or
-  paid out.
-  Made by an operator (`/promo`).
+  index); a use is counted when its bonus is granted, in the same `INSERT`, and a code whose uses
+  are spent or whose end has passed binds no new account. A deposit bonus needs a
+  deposit of at least $9 not refunded from and names it, so a refund of that deposit takes it back
+  in proportion (§18); it is written in the deposit's batch, or by the cron. A start credit names no
+  deposit and is not taken back; it is granted when the e-mail is confirmed (the confirmation link,
+  or an account the bot makes) or by the cron, and it is spent only on Pro days, never refunded or
+  paid out: a refund leaves on the balance every credit no deposit brought (a start credit, the
+  migration's Pro bonus), and also the deposit bonus it takes back.
+  Made by an operator (`/promo <code> <kind> <usd> [max uses] [until YYYY-MM-DD]`; an
+  `any_deposit` code needs its end date).

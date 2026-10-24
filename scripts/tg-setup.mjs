@@ -63,6 +63,8 @@ const COMMANDS = {
     ['site', 'Add a site: /site example.com'],
     ['link', 'Make a short link: /link https://…'],
     ['connect', 'Connect a Cloudflare account'],
+    ['pay', 'The balance, Pro, a top-up in Stars'],
+    ['partner', 'Your partner code and wallet'],
     ['lang', 'Language: /lang ru or /lang en'],
     ['unlink', 'Unlink this Telegram'],
     ['cancel', 'Stop the current question'],
@@ -77,6 +79,8 @@ const COMMANDS = {
     ['site', 'Добавить сайт: /site example.com'],
     ['link', 'Короткая ссылка: /link https://…'],
     ['connect', 'Подключить аккаунт Cloudflare'],
+    ['pay', 'Баланс, Pro, пополнение звёздами'],
+    ['partner', 'Партнёрский код и кошелёк'],
     ['lang', 'Язык: /lang ru или /lang en'],
     ['unlink', 'Отвязать этот Telegram'],
     ['cancel', 'Прервать текущий вопрос'],
@@ -98,6 +102,10 @@ const OPERATOR = [
   ['decline', 'Close a refund request: /decline request'],
   ['refundstars', 'Give back a Stars payment in review: /refundstars charge_id'],
   ['adjust', 'Correct a balance: /adjust email usd note'],
+  ['payouts', 'Partner payouts waiting'],
+  ['paid', 'A payout was sent: /paid id txid'],
+  ['reject', 'Refuse a payout: /reject id'],
+  ['promo', 'A new promo code: /promo code kind usd [max] [until]'],
   ['help', 'Operator commands'],
 ];
 

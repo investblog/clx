@@ -71,6 +71,8 @@ const BOT_ROUTES: [string, RegExp][] = [
   // /pay (§17, §18): the balance, Pro on or off, a Stars invoice.
   ['GET', /^\/v1\/billing$/u],
   ['POST', /^\/v1\/billing\/(pro|invoices)$/u],
+  // /partner (§19): read only — its money moves from a page.
+  ['GET', /^\/v1\/partner$/u],
 ];
 
 /** The bot's call: the user's session version and the Telegram link it rests on must both still

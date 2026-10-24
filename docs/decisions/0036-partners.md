@@ -29,7 +29,9 @@ on the same terms the owner chose for clx on 23.10; its shape and its lessons ar
   one D1 batch writing both journals, or neither; a payout is a request from $20 in USDT (TRC20) that
   reserves its money in the same batch, paid by hand by an operator and marked in the support group (`/paid`, `/reject`). Both are page
   actions only — an API key cannot move money.
-- **Attribution.** `clx.cx/?ref=CODE` (any page) sets a 30-day cookie, last touch, only for a valid
+- **Attribution.** `clx.cx/?ref=CODE` (the home page: the other pages are static files the Worker
+  never sees, and running it before every one of them for a link nobody else shares is not worth
+  its cost) sets a 30-day cookie, last touch, only for a valid
   code; the bot takes `t.me/clxcxbot?start=ref_CODE`; a code typed at sign-up wins over the cookie.
   The referrer is written once, when the clx account is made, and never changes; one cannot refer
   oneself. The Russian pages on `ru.clx.cx` (GitHub Pages, §16) cannot set a cookie for clx.cx, so
@@ -37,7 +39,8 @@ on the same terms the owner chose for clx on 23.10; its shape and its lessons ar
 - **Promo codes** share one field and one name space with partner codes (a partner code is looked
   up first): a bonus to the first top-up, to any top-up for a period, or a start credit granted when
   the e-mail is confirmed. Once per user and code, on a deposit of at least $9; a refund of that
-  deposit takes the bonus back. A use is counted when the bonus is granted, not when the code is bound.
+  deposit takes the bonus back in proportion, and never takes a start credit — a refund leaves on
+  the balance every credit no deposit brought. A use is counted when the bonus is granted, not when the code is bound.
 - **Operators act from the support group** (§17), as for `/plan`: no separate admin page.
 
 **Known risk.** A second account referred by oneself turns the commission into a discount. Softened

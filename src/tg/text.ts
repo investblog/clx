@@ -91,11 +91,12 @@ export interface BotText {
   paidReview: string;
   proOn(day: string): string;
   proOff: string;
+  partner(code: string, site: string, bot: string | null, referrals: number, available: string, held: string, app: string): string;
 }
 
 const en: BotText = {
   help:
-    'Commands:\n/sites — sites with views of 7 days and today\n/links — short links with clicks of 7 days\n/accounts — Cloudflare accounts\n/site <code>host</code> — add a site, get its snippet\n/link <code>url</code> — make a short link\n/connect — connect a Cloudflare account\n/pay — the balance, Pro, a top-up in Stars\n/lang ru|en — the language\n/unlink — unlink this Telegram from the account\n/cancel — stop the current question\n/support — write to support\n/terms — the terms and privacy\n\nThe rest — deleting, keys, the password — is in the app at clx.cx.',
+    'Commands:\n/sites — sites with views of 7 days and today\n/links — short links with clicks of 7 days\n/accounts — Cloudflare accounts\n/site <code>host</code> — add a site, get its snippet\n/link <code>url</code> — make a short link\n/connect — connect a Cloudflare account\n/pay — the balance, Pro, a top-up in Stars\n/partner — your partner code and wallet\n/lang ru|en — the language\n/unlink — unlink this Telegram from the account\n/cancel — stop the current question\n/support — write to support\n/terms — the terms and privacy\n\nThe rest — deleting, keys, the password — is in the app at clx.cx.',
   hello: 'clx: a visit counter and short links in your own Cloudflare account. Send your e-mail address — I will send a code to it.',
   askEmail: 'Send your e-mail address: I will send a code to it. A new address gets a new account.',
   badEmail: 'That does not look like an e-mail address. Send it once more, or /cancel.',
@@ -185,13 +186,15 @@ const en: BotText = {
   paid: (usd, balance) => `Thank you: ${usd} is on the balance, ${balance} now.`,
   proHint: '\n\nPro is off: /pay switches it on.',
   paidReview: 'The stars arrived, but the payment did not match its invoice. Support will credit it or refund it; the answer comes here.',
+  partner: (code, site, bot, referrals, available, held, app) =>
+    `<b>Partners</b>: 30% of every top-up of the people you bring, for life; each is held 30 days.\nYour code: <code>${code}</code>\n${site}${bot ? `\n${bot}` : ''}\n\nReferrals: ${referrals}\nAvailable: ${available} · held: ${held}\n\nMove it to your balance or ask for a payout in the app: ${app}`,
   proOn: (day) => `Pro is on, paid through ${day}.`,
   proOff: 'Pro ends after today; the rest stays on the balance.',
 };
 
 const ru: BotText = {
   help:
-    'Команды:\n/sites — сайты: просмотры за 7 дней и сегодня\n/links — короткие ссылки: клики за 7 дней\n/accounts — аккаунты Cloudflare\n/site <code>хост</code> — добавить сайт и получить сниппет\n/link <code>адрес</code> — сделать короткую ссылку\n/connect — подключить аккаунт Cloudflare\n/pay — баланс, Pro, пополнение звёздами\n/lang ru|en — язык\n/unlink — отвязать этот Telegram от аккаунта\n/cancel — прервать текущий вопрос\n/support — написать в поддержку\n/terms — условия и конфиденциальность\n\nОстальное — удаление, ключи, пароль — в кабинете на clx.cx.',
+    'Команды:\n/sites — сайты: просмотры за 7 дней и сегодня\n/links — короткие ссылки: клики за 7 дней\n/accounts — аккаунты Cloudflare\n/site <code>хост</code> — добавить сайт и получить сниппет\n/link <code>адрес</code> — сделать короткую ссылку\n/connect — подключить аккаунт Cloudflare\n/pay — баланс, Pro, пополнение звёздами\n/partner — партнёрский код и кошелёк\n/lang ru|en — язык\n/unlink — отвязать этот Telegram от аккаунта\n/cancel — прервать текущий вопрос\n/support — написать в поддержку\n/terms — условия и конфиденциальность\n\nОстальное — удаление, ключи, пароль — в кабинете на clx.cx.',
   hello: 'clx: счётчик посещений и короткие ссылки в вашем собственном аккаунте Cloudflare. Пришлите адрес почты — я отправлю на него код.',
   askEmail: 'Пришлите адрес почты: я отправлю на него код. Для нового адреса заведу новый аккаунт.',
   badEmail: 'Это не похоже на адрес почты. Пришлите ещё раз или /cancel.',
@@ -281,6 +284,8 @@ const ru: BotText = {
   paid: (usd, balance) => `Спасибо: ${usd} на балансе, теперь там ${balance}.`,
   proHint: '\n\nPro выключен: включить — /pay.',
   paidReview: 'Звёзды пришли, но платёж не сошёлся со счётом. Поддержка зачислит его или вернёт; ответ придёт сюда.',
+  partner: (code, site, bot, referrals, available, held, app) =>
+    `<b>Партнёрам</b>: 30% с каждого пополнения тех, кого вы привели, пожизненно; каждое начисление ждёт 30 дней.\nВаш код: <code>${code}</code>\n${site}${bot ? `\n${bot}` : ''}\n\nРефералов: ${referrals}\nДоступно: ${available} · ждёт: ${held}\n\nПеревести на баланс или запросить выплату — в кабинете: ${app}`,
   proOn: (day) => `Pro включён, оплачен по ${day}.`,
   proOff: 'Pro выключится после сегодняшнего дня; остаток остаётся на балансе.',
 };

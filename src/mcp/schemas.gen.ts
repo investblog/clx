@@ -866,5 +866,15 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     },
     "query": [],
     "body": []
+  },
+  "get_partner": {
+    "description": "The partner program — your code, links, referrals and wallet (scope billing)\n\nEvery user is a partner (docs/spec.md §19): 30% of each credited top-up of the people you\nreferred, for life, one level, held 30 days. Your links: `https://clx.cx/?ref=CODE` and the\nbot's `start=ref_CODE`. Money is integer micro-USD; the wallet's available sum leaves out\ncommissions still held, and a refund of a referral's top-up takes its share back\n(`clawback`), which may take the wallet below zero.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "query": [],
+    "body": []
   }
 };

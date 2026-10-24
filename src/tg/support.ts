@@ -5,6 +5,7 @@ import { localeOf, type Locale } from '../mail-text';
 import { planOf } from '../limits';
 import { operatorCredit, operatorVoid } from '../billing/invoices';
 import { setComp } from '../billing/pro';
+import { operatorPaid, operatorPayouts, operatorPromo, operatorReject } from '../partners/wallet';
 import { operatorAdjust, operatorDecline, operatorRefund, operatorRefunded, operatorRefundStars } from '../billing/refunds';
 import type { Env } from '../types';
 import { botId, botName, esc, isChatAdmin, MESSAGE_MAX, sendMessage } from './api';
@@ -46,6 +47,10 @@ const HELP = [
   '/decline request — close a refund request; nothing moves',
   '/refundstars charge_id — give back a Stars payment in review that was never credited',
   '/adjust email usd note — a correction to the balance; usd may be negative',
+  '/payouts — partner payouts waiting',
+  '/paid id txid — a payout was sent',
+  '/reject id — refuse a payout; its money goes back to the wallet',
+  '/promo code first_deposit|any_deposit|signup_credit usd [max uses] [until YYYY-MM-DD] — a new promo code',
 ].join('\n');
 
 /** A message in the support group. */
@@ -83,6 +88,10 @@ export async function operatorMessage(env: Env, msg: TgMessage, now: number): Pr
   if (command === 'refunded') return void (await say(await operatorRefunded(env, args[0] ?? '', args[1] ?? '')));
   if (command === 'decline') return void (await say(await operatorDecline(env, args[0] ?? '')));
   if (command === 'refundstars') return void (await say(await operatorRefundStars(env, args[0] ?? '')));
+  if (command === 'payouts') return void (await say(await operatorPayouts(env)));
+  if (command === 'paid') return void (await say(await operatorPaid(env, args[0] ?? '', args[1] ?? '', by)));
+  if (command === 'reject') return void (await say(await operatorReject(env, args[0] ?? '', by)));
+  if (command === 'promo') return void (await say(await operatorPromo(env, args, by)));
   if (command === 'adjust') return void (await say(await operatorAdjust(env, args[0] ?? '', args[1] ?? '', args.slice(2).join(' '), by, `${msg.chat.id}:${msg.message_id}`)));
   await say(HELP);
 }

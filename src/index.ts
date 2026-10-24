@@ -6,6 +6,9 @@ import { signup } from './auth/signup';
 import { reconcile, RECONCILE_EVERY_MIN } from './billing/invoices';
 import { expireStars, tellStarsReviews } from './billing/stars';
 import { tellRefunds } from './billing/refunds';
+import { sweepAccruals } from './partners/accrue';
+import { refVisit } from './partners/codes';
+import { tellPayouts } from './partners/wallet';
 import { reconcilePlans } from './billing/pause';
 import { GRACE_MS, LOW_DAYS, lowBalances, markLowTold, runCharges } from './billing/pro';
 import { checkTokens } from './cf/connect';
@@ -78,6 +81,8 @@ for (const path of ['/auth/*', '/v1/*', '/admin/*', '/hook/*']) {
     c.header('cache-control', 'no-store');
   });
 }
+// `?ref=CODE` on the home page (§19): the cookie for a valid code, and the address without it.
+app.use('/', async (c, next) => (await refVisit(c)) ?? next());
 app.route('/auth', auth);
 app.route('/auth', signup);
 app.route('/v1', v1);
@@ -117,6 +122,10 @@ export default {
           if (told) console.log(`stars payments in review told again: ${told}`);
           const asked = await tellRefunds(env).catch((e: unknown) => (console.error('tell refunds', e instanceof Error ? e.message : e), 0));
           if (asked) console.log(`refund requests told again: ${asked}`);
+          const payouts = await tellPayouts(env).catch((e: unknown) => (console.error('tell payouts', e instanceof Error ? e.message : e), 0));
+          if (payouts) console.log(`payout requests told again: ${payouts}`);
+          const accrued = await sweepAccruals(env.DB, now).catch((e: unknown) => (console.error('accruals', e instanceof Error ? e.message : e), 0));
+          if (accrued) console.log(`commissions and promo bonuses written late: ${accrued}`);
         }
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         const hour = Math.floor(now / 3_600_000);

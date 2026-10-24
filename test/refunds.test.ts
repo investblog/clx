@@ -115,7 +115,7 @@ describe('a crypto refund', () => {
     const id = (await ask({ invoice_id: inv, address: TRON })).body.refund.id as string;
     // Spent on Pro meanwhile: the balance holds less than the deposit.
     await env.DB.prepare("INSERT INTO ledger (user_id, type, amount, day, created_at) VALUES (1, 'charge', -3000000, 1, 0)").run();
-    expect(await operatorRefund(env, id, '9', by)).toContain('the balance holds $7.00');
+    expect(await operatorRefund(env, id, '9', by)).toContain('the balance allows $7.00');
     expect(await operatorRefund(env, id, '11', by)).toContain('at most $10.00');
     expect(await operatorRefund(env, id, 'lots', by)).toContain('Use:');
     expect(await refundRows(inv)).toHaveLength(0);
@@ -131,7 +131,7 @@ describe('a crypto refund', () => {
     expect(await refundOf(id)).toMatchObject({ status: 'done', txid: 'a'.repeat(64) });
     expect(await operatorRefunded(env, id, 'b'.repeat(64))).toContain('nothing changed');
     // A second request on the same deposit: only what is left of it.
-    await env.DB.prepare("INSERT INTO ledger (user_id, type, amount, created_at) VALUES (1, 'bonus', 20000000, 0)").run();
+    await env.DB.prepare("INSERT INTO ledger (user_id, type, amount, created_at) VALUES (1, 'adjustment', 20000000, 0)").run();
     const second = (await ask({ invoice_id: inv, address: TRON })).body.refund.id as string;
     expect(await operatorRefund(env, second, '4', by)).toContain('at most $3.50');
     expect(await operatorRefund(env, second, '3.5', by)).toContain('taken from the balance');

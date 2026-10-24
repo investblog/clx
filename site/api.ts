@@ -108,8 +108,9 @@ const GROUPS: { title: string; id: string; match: (route: string) => boolean }[]
   { title: 'Sites', id: 'sites', match: (r) => r.startsWith('/v1/sites') },
   { title: 'Link hosts and links', id: 'links', match: (r) => r.startsWith('/v1/links') || r.startsWith('/v1/link-hosts') },
   { title: 'Balance and Pro', id: 'billing', match: (r) => r.startsWith('/v1/billing') },
+  { title: 'Partners', id: 'partner', match: (r) => r.startsWith('/v1/partner') },
 ];
-const ORDER = ['me', 'accounts', 'sites', 'links', 'reports', 'billing'];
+const ORDER = ['me', 'accounts', 'sites', 'links', 'reports', 'billing', 'partner'];
 
 export function apiBody(doc: Node): string {
   const groups = new Map<string, string[]>(ORDER.map((id) => [id, []]));
