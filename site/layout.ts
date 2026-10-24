@@ -153,6 +153,8 @@ export function layout(input: LayoutInput): string {
     `<title>${escapeHtml(title)}</title>`,
     // Search Console ownership (URL-prefix property); harmless on both hosts.
     '<meta name="google-site-verification" content="nnNTBc0aJDgV3xTwDc5bSiOmDh_I5edqGmbY_PqYSdM" />',
+    // Trybit ownership check for the crypto payments project.
+    '<meta name="trybit-verification" content="8sozdynn68phavi7bk8iry3vqvgu6vqj" />',
     description ? `<meta name="description" content="${escapeHtml(description)}" />` : '',
     indexed
       ? [`<link rel="canonical" href="${urlFor(page.slug, locale)}" />`, ...alternatesFor(page.slug, page.locales).map((a) => `<link rel="alternate" hreflang="${a.hreflang}" href="${a.href}" />`)].join('\n    ')
