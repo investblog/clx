@@ -69,9 +69,9 @@ async function token(id: string, secret = 'whsec', alg = 'HS256', exp = Math.flo
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return `${head}.${b64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(head))))}`;
 }
-const notify = async (invoiceId: string, given: string | null | 'signed' = 'signed') => {
+const notify = async (invoiceId: string, given: string | null | 'signed' = 'signed', extra: Record<string, unknown> = {}) => {
   const tok = given === 'signed' ? await token(invoiceId) : given;
-  const res = await app.request('https://clx.cx/hook/trybit', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.2.3.4' }, body: JSON.stringify({ invoice_id: invoiceId.replace('INV-', ''), status: 'paid', amount: 1000, token: tok ?? undefined }) }, env);
+  const res = await app.request('https://clx.cx/hook/trybit', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.2.3.4' }, body: JSON.stringify({ invoice_id: invoiceId.replace('INV-', ''), status: 'paid', amount: 1000, token: tok ?? undefined, ...extra }) }, env);
   return { status: res.status, body: (await res.json()) as Record<string, any> };
 };
 const balance = async (user = 1) => (await env.DB.prepare('SELECT coalesce(sum(amount), 0) AS b FROM ledger WHERE user_id = ?').bind(user).first<{ b: number }>())!.b;
@@ -122,6 +122,16 @@ describe('the webhook', () => {
     const row = await env.DB.prepare("SELECT note FROM ledger WHERE type = 'deposit'").first<{ note: string }>();
     expect(row!.note).toContain('$9.85 credited');
     expect(row!.note).toContain('fees $1.70');
+  });
+
+  it('takes a notification the size Trybit sends: its whole invoice inside, well past 2 KB', async () => {
+    // A test notification of 24.10 was 1.6 KB with no address, token or transactions.
+    await top(10);
+    const theirs = [...trybit.invoices.keys()][0]!;
+    Object.assign(trybit.invoices.get(theirs)!, { status: 'paid', received_usd: 10, amount_paid_usd: 11.4 });
+    const tx = { hash: 'f'.repeat(64), amount: 11.4, network: 'TRC20', confirmations: 20, status: 'confirmed' };
+    const invoice_info = { uuid: theirs, address: 'T'.repeat(34), tx_list: Array.from({ length: 8 }, () => tx), aml_checks: [], note: 'x'.repeat(1500) };
+    expect((await notify(theirs, 'signed', { invoice_info })).body.note).toBe('credited');
   });
 
   it('a deposit pays the days Pro owes at once', async () => {

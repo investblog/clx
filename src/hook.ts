@@ -14,6 +14,9 @@ import type { Env } from './types';
 export const hook = new Hono<{ Bindings: Env }>();
 
 const MAX_BODY = 2048;
+// Trybit puts the whole invoice in its notification: 1.6 KB in a test one with no address, token or
+// transactions (24.10), more with them.
+const TRYBIT_BODY = 32 * 1024;
 
 hook.onError((e, c) => {
   console.error('hook', e instanceof Error ? e.message : e);
@@ -78,7 +81,7 @@ hook.post('/trybit', async (c) => {
   // Each call may cost a request to Trybit: limited per address (429, not 200 — 200 is "done").
   const { success } = await env.API_LIMIT.limit({ key: `trybit:${c.req.header('cf-connecting-ip') ?? ''}` });
   if (!success) return c.json({ error: 'rate_limited' }, 429);
-  const raw = await bounded(c.req.raw, MAX_BODY);
+  const raw = await bounded(c.req.raw, TRYBIT_BODY);
   let body: Record<string, unknown> = {};
   try {
     if (raw) body = JSON.parse(raw) as Record<string, unknown>;
