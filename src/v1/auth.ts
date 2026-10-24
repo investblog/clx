@@ -68,6 +68,9 @@ const BOT_ROUTES: [string, RegExp][] = [
   ['GET', /^\/v1\/(sites|links)\/[\w-]+\/report$/u],
   ['PATCH', /^\/v1\/me$/u],
   ['POST', /^\/v1\/(accounts|sites|links|link-hosts)$/u],
+  // /pay (§17, §18): the balance, Pro on or off, a Stars invoice.
+  ['GET', /^\/v1\/billing$/u],
+  ['POST', /^\/v1\/billing\/(pro|invoices)$/u],
 ];
 
 /** The bot's call: the user's session version and the Telegram link it rests on must both still

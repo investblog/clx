@@ -7,6 +7,8 @@ import { signBot } from '../auth/jwt';
 import { overLimit } from '../auth/ratelimit';
 import { unusableHash } from '../auth/password';
 import { issueToken } from '../auth/signup';
+import { invoiceById } from '../billing/invoices';
+import { sendStarsInvoice, STAR_PACKS, starsPaid, type SuccessfulPayment } from '../billing/stars';
 import { deliverMail, reserveMail } from '../mail';
 import { appUrl, localeOf, MAIL, type Locale } from '../mail-text';
 import type { Env } from '../types';
@@ -25,6 +27,8 @@ export interface TgMessage {
   text?: string;
   /** In the support group: the message an admin answers. */
   reply_to_message?: { from?: { id: number }; text?: string };
+  /** Stars paid for one of our invoices (§18). */
+  successful_payment?: SuccessfulPayment;
 }
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/u;
@@ -77,7 +81,7 @@ export async function handleMessage(env: Env, exec: Ctx, fetcher: Fetcher, updat
   // Otherwise private chats only: answers carry snippets and codes, and a group would read them.
   if (msg.chat.type !== 'private') return;
   // A photo, a sticker, a file: nothing the bot asked for. It changes no question and spends no try.
-  if (typeof msg.text !== 'string') return;
+  if (typeof msg.text !== 'string' && !msg.successful_payment) return;
   const now = Date.now();
   const id = await identityOf(env, from.id);
   const user = id ? await env.DB.prepare('SELECT email, locale, session_version FROM users WHERE id = ?').bind(id.user_id).first<{ email: string; locale: Locale; session_version: number }>() : null;
@@ -87,6 +91,8 @@ export async function handleMessage(env: Env, exec: Ctx, fetcher: Fetcher, updat
   const turn: Turn = { env, exec, fetcher, updateId, msg, tg: from.id, who, lang, t: BOT[lang], me, now };
   // A username changed since the link: kept current for the e-mails and the app.
   if (me && (from.username ?? null) !== me.username) await env.DB.prepare('UPDATE tg_identities SET username = ? WHERE tg_user_id = ?').bind(from.username ?? null, from.id).run();
+  // Stars paid: credited or put before an operator, whatever dialog is open.
+  if (msg.successful_payment) return paid(turn, msg.successful_payment);
 
   const text = (msg.text ?? '').trim();
   if (text.startsWith('/')) {
@@ -134,6 +140,7 @@ const COMMANDS: Record<string, (turn: Turn, arg: string) => Promise<void>> = {
   site: (turn, arg) => (arg ? siteHost(turn, arg) : ask(turn, 'site_host', {}, turn.t.askHost)),
   link: (turn, arg) => (arg ? linkUrl(turn, arg) : ask(turn, 'link_url', {}, turn.t.askUrl)),
   connect: connectStart,
+  pay,
   unlink,
 };
 
@@ -317,7 +324,7 @@ async function listAccounts(turn: Turn): Promise<void> {
 
 // ---- adding a site, a link ----
 
-type Pick = { kind: 'site'; host: string } | { kind: 'link'; url: string } | { kind: 'linkhost' };
+type Pick = { kind: 'site'; host: string } | { kind: 'link'; url: string } | { kind: 'linkhost' } | { kind: 'pay' };
 
 /** Several to choose from: a numbered list, the choice in the next message. */
 async function choose(turn: Turn, question: string, items: { id: string; label: string }[], data: Pick): Promise<void> {
@@ -329,6 +336,7 @@ async function picked(turn: Turn, data: Record<string, unknown>, id: string): Pr
   if (data.kind === 'site') return addSite(turn, String(data.host), id);
   if (data.kind === 'link') return addLink(turn, String(data.url), id);
   if (data.kind === 'linkhost') return addLinkHost(turn, id);
+  if (data.kind === 'pay') return payPicked(turn, id);
 }
 
 const usable = (a: { state: string }) => a.state === 'ready' || a.state === 'no_connection';
@@ -437,4 +445,51 @@ async function connectToken(turn: Turn, d: Dialog, text: string): Promise<void> 
   const a = r.body.account as { name: string | null; cf_account_id: string; state: string; error: { warnings?: string[] } | null };
   const lost = a.error?.warnings?.includes('bootstrap_not_deleted');
   await say(turn, `${t.connected(esc(a.name ?? a.cf_account_id), stateOf(turn, a.state))}\n\n${lost ? t.tokenMayLive(account) : t.tokenDeleted}`);
+}
+
+// ---- the balance, Pro and Stars (§18) ----
+
+const usd = (micro: number) => `$${(micro / 1e6).toFixed(2)}`;
+
+/** /pay: the balance and Pro, then a numbered choice — a Stars pack, or Pro on or off. */
+async function pay(turn: Turn): Promise<void> {
+  const { t } = turn;
+  const r = await api(turn, 'GET', '/v1/billing');
+  if (r.status !== 200) return void (await say(turn, refusal(turn, r)));
+  const pro = r.body.pro as { on: boolean; given: boolean; paid_through: string | null; grace_until: string | null };
+  const state = pro.given ? t.proGiven : !pro.on ? t.proOffState : pro.grace_until ? t.proGrace(pro.grace_until.slice(0, 10)) : t.proOnUntil(pro.paid_through ?? '—');
+  const items = STAR_PACKS.map((p) => ({ id: `stars:${p.stars}`, label: t.pack(p.stars, usd(p.usd)) }));
+  // Pro given by support is not switched here: it is not charged, and taking it back is theirs.
+  if (!pro.given) items.push(pro.on ? { id: 'pro:off', label: t.proSwitchOff } : { id: 'pro:on', label: t.proSwitchOn });
+  await choose(turn, `${t.payHead(usd(r.body.balance_micro_usd as number), state)}\n\n${t.payPick}`, items, { kind: 'pay' });
+}
+
+async function payPicked(turn: Turn, id: string): Promise<void> {
+  const { t } = turn;
+  if (id === 'pro:on' || id === 'pro:off') {
+    const r = await api(turn, 'POST', '/v1/billing/pro', { on: id === 'pro:on' });
+    if (r.status !== 200) return void (await say(turn, refusal(turn, r)));
+    return void (await say(turn, id === 'pro:on' ? t.proOn(String(r.body.pro?.paid_through ?? '—')) : t.proOff));
+  }
+  const r = await api(turn, 'POST', '/v1/billing/invoices', { stars: Number(id.slice('stars:'.length)) });
+  if (r.status !== 201) return void (await say(turn, refusal(turn, r)));
+  // Read again, not taken from the answer: a repeated update gets the stored answer, and the
+  // invoice may have been voided since (its sending failed) or paid.
+  const invoice = await invoiceById(turn.env.DB, String(r.body.invoice?.id));
+  if (invoice?.status !== 'pending' || invoice.user_id !== turn.me!.user_id) return void (await say(turn, t.invoiceGone));
+  const sum = usd(invoice.usd);
+  if (!(await sendStarsInvoice(turn.env, turn.msg.chat.id, invoice, { title: t.invoiceTitle(sum), description: t.invoiceDescription(sum) }))) return void (await say(turn, t.payFailed));
+  await say(turn, t.paySent);
+}
+
+/** Stars paid (§18). Nothing here throws once the money is written: a redelivery would only find
+ *  the charge id and say nothing. */
+async function paid(turn: Turn, payment: SuccessfulPayment): Promise<void> {
+  const { t } = turn;
+  const r = await starsPaid(turn.env, turn.tg, payment);
+  if (r === 'repeat') return;
+  if (r === 'review') return void (await say(turn, t.paidReview));
+  const b = turn.me ? await api(turn, 'GET', '/v1/billing').catch(() => null) : null;
+  const balance = b?.status === 200 ? usd(b.body.balance_micro_usd as number) : '—';
+  await say(turn, t.paid(usd(r.credited.usd), balance) + (b?.status === 200 && !b.body.pro?.on ? t.proHint : ''));
 }

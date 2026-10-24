@@ -70,11 +70,32 @@ export interface BotText {
   supportFailed: string;
   supportReply(text: string): string;
   planChanged(plan: string): string;
+  // the balance and Pro (§18)
+  payHead(balance: string, pro: string): string;
+  proOnUntil(day: string): string;
+  proGrace(until: string): string;
+  proGiven: string;
+  proOffState: string;
+  pack(stars: number, usd: string): string;
+  proSwitchOn: string;
+  proSwitchOff: string;
+  payPick: string;
+  invoiceTitle(usd: string): string;
+  invoiceDescription(usd: string): string;
+  paySent: string;
+  payFailed: string;
+  invoiceGone: string;
+  payRefused: string;
+  paid(usd: string, balance: string): string;
+  proHint: string;
+  paidReview: string;
+  proOn(day: string): string;
+  proOff: string;
 }
 
 const en: BotText = {
   help:
-    'Commands:\n/sites — sites with views of 7 days and today\n/links — short links with clicks of 7 days\n/accounts — Cloudflare accounts\n/site <code>host</code> — add a site, get its snippet\n/link <code>url</code> — make a short link\n/connect — connect a Cloudflare account\n/lang ru|en — the language\n/unlink — unlink this Telegram from the account\n/cancel — stop the current question\n/support — write to support (ask for the api plan here too)\n/terms — the terms and privacy\n\nThe rest — deleting, keys, the password — is in the app at clx.cx.',
+    'Commands:\n/sites — sites with views of 7 days and today\n/links — short links with clicks of 7 days\n/accounts — Cloudflare accounts\n/site <code>host</code> — add a site, get its snippet\n/link <code>url</code> — make a short link\n/connect — connect a Cloudflare account\n/pay — the balance, Pro, a top-up in Stars\n/lang ru|en — the language\n/unlink — unlink this Telegram from the account\n/cancel — stop the current question\n/support — write to support\n/terms — the terms and privacy\n\nThe rest — deleting, keys, the password — is in the app at clx.cx.',
   hello: 'clx: a visit counter and short links in your own Cloudflare account. Send your e-mail address — I will send a code to it.',
   askEmail: 'Send your e-mail address: I will send a code to it. A new address gets a new account.',
   badEmail: 'That does not look like an e-mail address. Send it once more, or /cancel.',
@@ -140,17 +161,37 @@ const en: BotText = {
   tokenMayLive: (account) => `<b>The bootstrap token may still be valid.</b> Revoke it by hand: https://dash.cloudflare.com/${account}/api-tokens`,
   terms:
     'In short: clx is free; the counter and the links run in your own Cloudflare account, on its quotas; the counter sets no cookies and keeps no IP addresses; clx.cx keeps only the totals.\n\nThe terms: https://clx.cx/terms\nPrivacy: https://clx.cx/privacy',
-  askSupport: 'Write your question in one message: what you did and what went wrong. For the api plan, say how many sites and Cloudflare accounts you need. /cancel to stop.',
+  askSupport: 'Write your question in one message: what you did and what went wrong. /cancel to stop.',
   supportSent: 'Sent to support. The answer comes here, in this chat.',
   supportOff: 'Support in the bot is not set up yet. Try again later.',
   supportFailed: 'The question did not reach support. Try /support again in a few minutes.',
   supportReply: (text) => `<b>Support:</b>\n${text}`,
   planChanged: (plan) => (plan === 'api' ? `Your plan is now <b>api</b>: up to ${API.cfAccounts} Cloudflare accounts, ${API.sites} sites and ${API.apiKeys} API keys.` : 'Your plan is now <b>free</b>.'),
+  payHead: (balance, pro) => `<b>Balance:</b> ${balance}\n<b>Pro:</b> ${pro}`,
+  proOnUntil: (day) => `on, paid through ${day}`,
+  proGrace: (until) => `on, but the balance ran out — it ends ${until} unless you top up`,
+  proGiven: 'on, given by support',
+  proOffState: 'off — $9 for 30 days, charged from the balance day by day',
+  pack: (stars, usd) => `${stars}★ → ${usd} on the balance`,
+  proSwitchOn: 'Switch Pro on',
+  proSwitchOff: 'Switch Pro off (after today)',
+  payPick: 'Send the number:',
+  invoiceTitle: (usd) => `clx balance +${usd}`,
+  invoiceDescription: (usd) => `${usd} on your clx balance. Pro takes $9 for 30 days from it, day by day; what is left stays yours.`,
+  paySent: 'Pay the invoice above. If your app does not sell Stars, buy them in @PremiumBot and come back.',
+  payFailed: 'Telegram did not take the invoice. Try /pay again in a minute.',
+  invoiceGone: 'That invoice is no longer open. /pay makes a new one.',
+  payRefused: 'This invoice can no longer be paid. /pay makes a new one.',
+  paid: (usd, balance) => `Thank you: ${usd} is on the balance, ${balance} now.`,
+  proHint: '\n\nPro is off: /pay switches it on.',
+  paidReview: 'The stars arrived, but the payment did not match its invoice. Support will credit it or refund it; the answer comes here.',
+  proOn: (day) => `Pro is on, paid through ${day}.`,
+  proOff: 'Pro ends after today; the rest stays on the balance.',
 };
 
 const ru: BotText = {
   help:
-    'Команды:\n/sites — сайты: просмотры за 7 дней и сегодня\n/links — короткие ссылки: клики за 7 дней\n/accounts — аккаунты Cloudflare\n/site <code>хост</code> — добавить сайт и получить сниппет\n/link <code>адрес</code> — сделать короткую ссылку\n/connect — подключить аккаунт Cloudflare\n/lang ru|en — язык\n/unlink — отвязать этот Telegram от аккаунта\n/cancel — прервать текущий вопрос\n/support — написать в поддержку (план api просят тоже здесь)\n/terms — условия и конфиденциальность\n\nОстальное — удаление, ключи, пароль — в кабинете на clx.cx.',
+    'Команды:\n/sites — сайты: просмотры за 7 дней и сегодня\n/links — короткие ссылки: клики за 7 дней\n/accounts — аккаунты Cloudflare\n/site <code>хост</code> — добавить сайт и получить сниппет\n/link <code>адрес</code> — сделать короткую ссылку\n/connect — подключить аккаунт Cloudflare\n/pay — баланс, Pro, пополнение звёздами\n/lang ru|en — язык\n/unlink — отвязать этот Telegram от аккаунта\n/cancel — прервать текущий вопрос\n/support — написать в поддержку\n/terms — условия и конфиденциальность\n\nОстальное — удаление, ключи, пароль — в кабинете на clx.cx.',
   hello: 'clx: счётчик посещений и короткие ссылки в вашем собственном аккаунте Cloudflare. Пришлите адрес почты — я отправлю на него код.',
   askEmail: 'Пришлите адрес почты: я отправлю на него код. Для нового адреса заведу новый аккаунт.',
   badEmail: 'Это не похоже на адрес почты. Пришлите ещё раз или /cancel.',
@@ -216,12 +257,32 @@ const ru: BotText = {
   tokenMayLive: (account) => `<b>Bootstrap-токен, возможно, ещё действует.</b> Отзовите его вручную: https://dash.cloudflare.com/${account}/api-tokens`,
   terms:
     'Коротко: clx бесплатный; счётчик и ссылки работают в вашем собственном аккаунте Cloudflare, в его квотах; счётчик не ставит кук и не хранит IP-адресов; на clx.cx хранятся только итоги.\n\nУсловия: https://ru.clx.cx/terms\nКонфиденциальность: https://ru.clx.cx/privacy',
-  askSupport: 'Напишите вопрос одним сообщением: что делали и что пошло не так. Для плана api — сколько нужно сайтов и аккаунтов Cloudflare. Прервать — /cancel.',
+  askSupport: 'Напишите вопрос одним сообщением: что делали и что пошло не так. Прервать — /cancel.',
   supportSent: 'Отправил в поддержку. Ответ придёт сюда, в этот чат.',
   supportOff: 'Поддержка в боте ещё не настроена. Попробуйте позже.',
   supportFailed: 'Вопрос не дошёл до поддержки. Повторите /support через несколько минут.',
   supportReply: (text) => `<b>Поддержка:</b>\n${text}`,
   planChanged: (plan) => (plan === 'api' ? `Ваш план теперь <b>api</b>: до ${API.cfAccounts} аккаунтов Cloudflare, ${API.sites} сайтов и ${API.apiKeys} ключей API.` : 'Ваш план теперь <b>free</b>.'),
+  payHead: (balance, pro) => `<b>Баланс:</b> ${balance}\n<b>Pro:</b> ${pro}`,
+  proOnUntil: (day) => `включён, оплачен по ${day}`,
+  proGrace: (until) => `включён, но баланс кончился — выключится ${until}, если не пополнить`,
+  proGiven: 'включён поддержкой',
+  proOffState: 'выключен — $9 за 30 дней, списываются с баланса по дням',
+  pack: (stars, usd) => `${stars}★ → ${usd} на баланс`,
+  proSwitchOn: 'Включить Pro',
+  proSwitchOff: 'Выключить Pro (после сегодняшнего дня)',
+  payPick: 'Пришлите номер:',
+  invoiceTitle: (usd) => `Баланс clx +${usd}`,
+  invoiceDescription: (usd) => `${usd} на ваш баланс clx. Pro берёт с него $9 за 30 дней, по дням; остаток остаётся вашим.`,
+  paySent: 'Оплатите счёт выше. Если приложение не продаёт звёзды, купите их в @PremiumBot и возвращайтесь.',
+  payFailed: 'Telegram не принял счёт. Повторите /pay через минуту.',
+  invoiceGone: 'Этот счёт уже закрыт. /pay выставит новый.',
+  payRefused: 'Этот счёт уже нельзя оплатить. /pay выставит новый.',
+  paid: (usd, balance) => `Спасибо: ${usd} на балансе, теперь там ${balance}.`,
+  proHint: '\n\nPro выключен: включить — /pay.',
+  paidReview: 'Звёзды пришли, но платёж не сошёлся со счётом. Поддержка зачислит его или вернёт; ответ придёт сюда.',
+  proOn: (day) => `Pro включён, оплачен по ${day}.`,
+  proOff: 'Pro выключится после сегодняшнего дня; остаток остаётся на балансе.',
 };
 
 export const BOT: Record<Locale, BotText> = { en, ru };

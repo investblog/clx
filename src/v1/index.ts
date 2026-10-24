@@ -20,6 +20,7 @@ import { canonicalPath, IDEM_TTL, idempotent, type Answer } from './idempotency'
 import { balanceOf, DAY_PRICE, GRACE_MS, isoDay, openPeriod, paidThrough, PRO_PRICE, proOff, proOn } from '../billing/pro';
 import { markReplan, resumeNext } from '../billing/pause';
 import { createCrypto, invoiceView, type InvoiceRow } from '../billing/invoices';
+import { createStars } from '../billing/stars';
 
 type C = Context<{ Bindings: Env }>;
 const MAX_BODY = 65_536;
@@ -137,13 +138,13 @@ v1.delete(
     // this and the archive; a mark left by a delete that died is cleared by the cron after 15 minutes.
     const now = Date.now();
     const marked = await db
-      .prepare("UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0 AND NOT EXISTS (SELECT 1 FROM invoices WHERE user_id = ?2 AND (status IN ('pending', 'review') OR (status = 'expired' AND expires_at > ?1 - ?4)))")
+      .prepare("UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0 AND NOT EXISTS (SELECT 1 FROM invoices WHERE user_id = ?2 AND (status IN ('pending', 'review') OR (status = 'expired' AND rail = 'crypto' AND expires_at > ?1 - ?4)))")
       .bind(now, p.userId, DELETING_TTL, 30 * 86_400_000)
       .run();
     if (!marked.meta.changes) {
       const balance = await balanceOf(db, p.userId);
       if (balance !== 0) fail(409, 'balance_not_empty', 'There is money on your balance; spend it or ask for a refund in /support before deleting the account.', { balance_micro_usd: balance });
-      if (await db.prepare("SELECT 1 FROM invoices WHERE user_id = ?1 AND (status IN ('pending', 'review') OR (status = 'expired' AND expires_at > ?2))").bind(p.userId, now - 30 * 86_400_000).first())
+      if (await db.prepare("SELECT 1 FROM invoices WHERE user_id = ?1 AND (status IN ('pending', 'review') OR (status = 'expired' AND rail = 'crypto' AND expires_at > ?2))").bind(p.userId, now - 30 * 86_400_000).first())
         fail(409, 'balance_not_empty', 'A top-up of yours is still open (unpaid, in review, or expired less than 30 days ago, when late crypto may still arrive); delete the account once it is settled.');
       fail(409, 'operation_in_progress', 'The account is being deleted already; retry in a minute.');
     }
@@ -762,10 +763,12 @@ v1.get(
   handle({ scope: 'billing' }, async (c, p) => ({ status: 200, body: await billingView(c.env.DB, p.userId) })),
 );
 
-/** A crypto top-up (§18, ADR 0035): the invoice with the address and the exact amount to send. */
+/** A top-up (§18, ADR 0035): crypto with the address and the exact amount to send; Stars from the
+ *  bot only, which sends Telegram's invoice itself. */
 v1.post(
   '/billing/invoices',
   handle({ scope: 'billing' }, async (c, p, body, idemRef) => {
+    if (p.via === 'telegram') return { status: 201, body: { invoice: invoiceView(await createStars(c.env, p.userId, body, idemRef)) } };
     if (body.stars !== undefined) fail(400, 'invalid_request', 'Stars are paid in the Telegram bot: send /pay to @clxcxbot.', { field: 'stars' });
     const invoice = await createCrypto(c.env, p.userId, body, idemRef);
     return { status: 201, body: { invoice: invoiceView(invoice) } };

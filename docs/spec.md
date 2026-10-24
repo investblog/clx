@@ -1284,10 +1284,26 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
     are not all there or Trybit did not make the invoice (it is then `void` at once).
   - **Stars** (§17). `/pay` in the bot: packs Telegram sells, 750★ → $9 and 2500★ → $30; the same
     route makes the invoice (`{stars}`, Telegram principal only), its payload is the invoice id.
-    `pre_checkout_query` is answered from reads only. `successful_payment` credits only when the
-    invoice of the payload belongs to the user linked to the paying Telegram, the currency is `XTR`,
-    the stars are exactly the invoice's and the invoice may still be paid; anything else goes to
-    `review`. Idempotent on `telegram_payment_charge_id`.
+    A Stars invoice lives an hour and shares the three pending places with crypto ones; one whose
+    `sendInvoice` failed stays `pending` (a lost answer looks like a refusal, and Telegram may have
+    sent it). `pre_checkout_query` is
+    answered from reads only, with no claim and no per-user limit, and refused once the hour is
+    out. `successful_payment` is never dropped by the per-user limit and credits the invoice's own
+    sum only when the invoice of the payload belongs to the user linked to the paying Telegram, the
+    currency is `XTR`, the stars are exactly the invoice's and it is `pending`, up to 15 minutes
+    past its hour (a payment approved just before). Anything else — the stars are taken all the
+    same — goes to the support group with the charge id; the invoice, when it is the payer's and
+    still `pending` or `expired`, moves to `review` holding that id (an operator credits it with
+    `/credit` or refunds the stars). Every payment is first written to `star_payments` by its
+    `telegram_payment_charge_id` (`received` → `credited` | `review`, with the Telegram user, the
+    payload, the stars), tied to no user or invoice, so neither a lost support message nor a
+    deleted account nor a late delivery loses it. One delivery handles a charge at a time (a
+    claim; another is answered 500 and comes back), a charge already settled is a repeat, and one
+    whose claim is a minute old (its handling died) is handled again. The operators' message of a
+    payment in review is kept with it until it has gone; the cron sends again, every 15 minutes,
+    what did not. The charge id of a credited invoice is also its `processor_id`. Every 15 minutes
+    the cron makes a `pending` Stars invoice past those 15 minutes `expired`: no checkout is
+    approved for it any more, and a payment delivered later still lands in `star_payments`.
 - **Refunds and corrections** — an operator in the support group, each one journal row with the
   operator's Telegram user id and a snapshot of their name: `/credit <invoice>` (a `review`
   invoice's deposit), `/adjust <email> <usd> <note>`, `/void <invoice>`, `/refund <request> <usd>`.
@@ -1310,7 +1326,9 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   session only).
 - **Deleting a clx account** (§9) is refused with `balance_not_empty` while the balance or the
   partner wallet is not zero, a payout request or a refund is open, an invoice is open (`pending`,
-  `review`) or `expired` less than 30 days ago, or a referral's deposit is under 90 days old (a
+  `review`), a crypto one `expired` less than 30 days ago (late crypto may still arrive; an expired
+  Stars invoice is approved for no checkout, and a payment delivered late is kept apart from the
+  account, in `star_payments`), or a referral's deposit is under 90 days old (a
   refund would claw back its commission). The checks and `users.deleting_at` are one conditional
   `UPDATE`; every money writer — a deposit, a charge, a commission, an operator's command — requires
   `deleting_at IS NULL` in its own statement, so nothing lands between the check and the archive.

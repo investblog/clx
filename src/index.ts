@@ -4,6 +4,7 @@ import { runAdvice } from './advice';
 import { auth } from './auth/routes';
 import { signup } from './auth/signup';
 import { reconcile, RECONCILE_EVERY_MIN } from './billing/invoices';
+import { expireStars, tellStarsReviews } from './billing/stars';
 import { reconcilePlans } from './billing/pause';
 import { GRACE_MS, LOW_DAYS, lowBalances, markLowTold, runCharges } from './billing/pro';
 import { checkTokens } from './cf/connect';
@@ -104,10 +105,15 @@ export default {
         if (sites.synced + sites.routes + sites.retired) console.log(`sites: synced ${sites.synced}, routes ${sites.routes}, retired ${sites.retired}`);
         const linkHosts = await runLinkHosts(env, now);
         if (linkHosts) console.log(`link hosts: ${linkHosts}`);
-        // Crypto top-ups Trybit has not told us of (§18): every 15 minutes.
+        // Crypto top-ups Trybit has not told us of, and Stars invoices that can no longer be paid
+        // (§18): every 15 minutes.
         if (new Date(event.scheduledTime).getUTCMinutes() % RECONCILE_EVERY_MIN === 2) {
           const r = await reconcile(env, now).catch((e: unknown) => (console.error('reconcile', e instanceof Error ? e.message : e), {}));
           if (Object.keys(r).length) console.log(`invoices reconciled: ${JSON.stringify(r)}`);
+          const stars = await expireStars(env, now).catch((e: unknown) => (console.error('expire stars', e instanceof Error ? e.message : e), 0));
+          if (stars) console.log(`stars invoices expired: ${stars}`);
+          const told = await tellStarsReviews(env).catch((e: unknown) => (console.error('tell stars reviews', e instanceof Error ? e.message : e), 0));
+          if (told) console.log(`stars payments in review told again: ${told}`);
         }
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         const hour = Math.floor(now / 3_600_000);

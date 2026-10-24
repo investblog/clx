@@ -6,9 +6,11 @@
 // failure gives the claim back and answers 500. Everything final answers 200.
 import { Hono } from 'hono';
 import { sameBytes } from '../auth/password';
+import { answerPreCheckout, type PreCheckout } from '../billing/stars';
 import type { Env } from '../types';
 import { handleMessage, type Fetcher, type TgMessage } from './bot';
 import { supportChat } from './support';
+import { BOT } from './text';
 
 /** Handled updates are kept two days: Telegram gives up redelivering long before. */
 export const UPDATES_TTL = 2 * 86_400_000;
@@ -22,7 +24,14 @@ export function telegram(fetcher: Fetcher) {
     if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET || !env.TELEGRAM_CODE_KEY) return c.json({ error: { code: 'telegram_not_configured', message: 'The Telegram bot is not set up.' } }, 503);
     const enc = new TextEncoder();
     if (!sameBytes(enc.encode(c.req.header('x-telegram-bot-api-secret-token') ?? ''), enc.encode(env.TELEGRAM_WEBHOOK_SECRET))) return c.json({ error: { code: 'unauthorized', message: 'Wrong secret.' } }, 401);
-    const update = (await c.req.json().catch(() => null)) as { update_id?: unknown; message?: TgMessage } | null;
+    const update = (await c.req.json().catch(() => null)) as { update_id?: unknown; message?: TgMessage; pre_checkout_query?: PreCheckout } | null;
+    // A pre-checkout (§18) is answered at once, from reads only: Telegram waits ten seconds, and an
+    // answer given twice changes nothing — no claim, no limit.
+    const q = update?.pre_checkout_query;
+    if (q && typeof q.id === 'string' && typeof q.from?.id === 'number') {
+      await answerPreCheckout(env, q, BOT[q.from.language_code === 'ru' ? 'ru' : 'en'].payRefused);
+      return c.json({ ok: true });
+    }
     const msg = update?.message;
     // Only a person's private message, or one in the support group, is anything to the bot; the rest
     // is answered 200 unrecorded, and Telegram does not send it again.
@@ -37,8 +46,8 @@ export function telegram(fetcher: Fetcher) {
     if (seen?.done) return c.json({ ok: true });
     if (seen && now - seen.at < STALE_CLAIM) return running();
     // A new update meets the per-user limit before anything is written: past it, silence and no
-    // cost. A redelivery does not count again.
-    if (!seen && !(await env.TG_LIMIT.limit({ key: String(msg.from.id) })).success) return c.json({ ok: true });
+    // cost. A redelivery does not count again. A payment is never dropped: its stars are taken.
+    if (!seen && !msg.successful_payment && !(await env.TG_LIMIT.limit({ key: String(msg.from.id) })).success) return c.json({ ok: true });
     // Claimed with a mark of its own; a claim a minute old is taken over.
     const claim = crypto.randomUUID();
     const claimed = await env.DB.prepare('INSERT INTO tg_updates (update_id, at, claim) VALUES (?1, ?2, ?3) ON CONFLICT (update_id) DO UPDATE SET at = ?2, claim = ?3 WHERE done = 0 AND at < ?2 - ?4 RETURNING claim')

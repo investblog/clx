@@ -39,8 +39,12 @@ met the traps of both live. Telegram allows digital goods inside a bot to be pai
   release). The invoice is made by the same route with `{stars}`; its payload is our invoice id.
   `pre_checkout_query` is answered from reads only. `successful_payment` is checked again before
   money moves: the invoice of the payload, the Telegram user linked to its owner, currency `XTR`,
-  the exact number of stars of that invoice, and a state that may still be paid; anything else goes
-  to `review` with a notice. Credited once per `telegram_payment_charge_id`.
+  the exact number of stars of that invoice, and a state that may still be paid (an hour, plus 15
+  minutes for a payment approved just before its end); anything else goes to `review` with a
+  notice. Credited once per `telegram_payment_charge_id`; every payment is first kept by that id in
+  a table of its own, tied to no user or invoice, so a lost notice, a deleted account or a delivery
+  held up cannot lose stars already taken. Past those 15 minutes no checkout is approved, so an
+  unpaid Stars invoice expires and, unlike a crypto one, does not hold up deleting the account.
 - **One way to credit** for both rails: one deposit per invoice, held by a unique index, so a
   webhook, a reconcile run and a repeated Telegram update cannot credit twice.
 - **Refunds** are asked for by the user in the app (`POST /v1/billing/refunds`, with the address

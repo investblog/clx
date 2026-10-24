@@ -400,9 +400,17 @@ export const fakeTg = {
   admins: new Set<string>(),
   /** chats a message to fails (the bot blocked) */
   blocked: new Set<number>(),
+  /** Stars invoices sent, and the answers to pre-checkouts */
+  invoices: [] as Record<string, unknown>[],
+  preCheckouts: [] as { pre_checkout_query_id: string; ok: boolean; error_message?: string }[],
+  /** while true, sendInvoice fails */
+  invoiceDown: false,
   reset() {
     this.sent = [];
     this.deleted = [];
+    this.invoices = [];
+    this.preCheckouts = [];
+    this.invoiceDown = false;
     this.down = false;
     this.admins = new Set();
     this.blocked = new Set();
@@ -422,6 +430,10 @@ function telegram(url: URL, init: RequestInit): Response {
   else if (method === 'getMe') return Response.json({ ok: true, result: { id: 123, is_bot: true, username: 'clxcxbot' } });
   else if (method === 'getChatMember') return Response.json({ ok: true, result: { status: fakeTg.admins.has(`${body.chat_id}:${body.user_id}`) ? 'administrator' : 'member' } });
   else if (method === 'deleteMessage') fakeTg.deleted.push({ chat_id: Number(body.chat_id), message_id: Number(body.message_id) });
+  else if (method === 'sendInvoice') {
+    if (fakeTg.invoiceDown) return Response.json({ ok: false, description: 'Bad Request' }, { status: 400 });
+    fakeTg.invoices.push(body);
+  } else if (method === 'answerPreCheckoutQuery') fakeTg.preCheckouts.push(body as (typeof fakeTg.preCheckouts)[number]);
   else return Response.json({ ok: false, description: 'unknown method' }, { status: 404 });
   return Response.json({ ok: true, result: true });
 }

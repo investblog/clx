@@ -54,10 +54,10 @@ export function invoiceView(i: InvoiceRow) {
   };
 }
 
-/** Tell the support group (§17), best effort: a failed message changes no money. */
-export async function tellOperators(env: Env, text: string): Promise<void> {
+/** Tell the support group (§17), best effort: a failed message changes no money. Whether it went. */
+export async function tellOperators(env: Env, text: string): Promise<boolean> {
   const chat = supportChat(env);
-  if (chat !== null && env.TELEGRAM_BOT_TOKEN) await sendMessage(env, chat, `💸 ${text}`).catch(() => false);
+  return chat !== null && !!env.TELEGRAM_BOT_TOKEN && (await sendMessage(env, chat, `💸 ${text}`).catch(() => false));
 }
 
 /** A crypto invoice (§18): whole dollars, 9 to 1,000, a coin Trybit takes; three pending at most. */
@@ -106,17 +106,18 @@ export async function createCrypto(env: Env, userId: number, body: { usd?: unkno
 /**
  * Credit an invoice — the only way a deposit is written. The invoice moves to `paid` from one of
  * `from` and the deposit is inserted in the same batch, both only while the user is not being
- * deleted; a second credit finds the invoice paid and writes nothing. Then Pro's unpaid days are
+ * deleted; a second credit finds the invoice paid and writes nothing. A Stars payment's charge id
+ * lands on the invoice in the same statement. Then Pro's unpaid days are
  * charged at once (§18). Returns whether this call credited it.
  */
-export async function credit(env: Env, invoice: InvoiceRow, micro: number, note: string, from: InvoiceRow['status'][], by?: { tg: number; name: string }): Promise<boolean> {
+export async function credit(env: Env, invoice: InvoiceRow, micro: number, note: string, from: InvoiceRow['status'][], by?: { tg: number; name: string }, processorId?: string): Promise<boolean> {
   if (!Number.isSafeInteger(micro) || micro <= 0) throw new Error(`credit ${invoice.id}: ${micro} is not a positive amount`);
   const db = env.DB;
   const now = Date.now();
   const [moved] = await db.batch([
     db
-      .prepare("UPDATE invoices SET status = 'paid', paid_at = ?1 WHERE id = ?2 AND status IN (SELECT value FROM json_each(?3)) AND EXISTS (SELECT 1 FROM users WHERE id = ?4 AND deleting_at IS NULL)")
-      .bind(now, invoice.id, JSON.stringify(from), invoice.user_id),
+      .prepare("UPDATE invoices SET status = 'paid', paid_at = ?1, processor_id = coalesce(?5, processor_id) WHERE id = ?2 AND status IN (SELECT value FROM json_each(?3)) AND EXISTS (SELECT 1 FROM users WHERE id = ?4 AND deleting_at IS NULL)")
+      .bind(now, invoice.id, JSON.stringify(from), invoice.user_id, processorId ?? null),
     db
       .prepare("INSERT INTO ledger (user_id, type, amount, invoice_id, note, by_tg, by_name, created_at) SELECT ?1, 'deposit', ?2, ?3, ?4, ?5, ?6, ?7 WHERE changes() = 1")
       .bind(invoice.user_id, micro, invoice.id, note, by?.tg ?? null, by?.name ?? null, now),
