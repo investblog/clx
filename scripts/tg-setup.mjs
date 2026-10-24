@@ -91,6 +91,13 @@ const OPERATOR = [
   ['user', 'The account: /user email'],
   ['plan', 'Switch the plan: /plan email free|api'],
   ['sources', 'Sign-ups by start parameter: /sources [days]'],
+  ['credit', 'Credit a top-up in review: /credit invoice usd'],
+  ['void', 'A top-up in review where nothing came: /void invoice'],
+  ['refund', 'Make a refund asked for: /refund request [usd]'],
+  ['refunded', 'The crypto of a refund was sent: /refunded request txid'],
+  ['decline', 'Close a refund request: /decline request'],
+  ['refundstars', 'Give back a Stars payment in review: /refundstars charge_id'],
+  ['adjust', 'Correct a balance: /adjust email usd note'],
   ['help', 'Operator commands'],
 ];
 

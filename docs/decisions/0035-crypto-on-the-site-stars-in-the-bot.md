@@ -54,7 +54,8 @@ met the traps of both live. Telegram allows digital goods inside a bot to be pai
   the same `INSERT`, and recorded (`refunds`, `pending`) before any money leaves. Within 90 days,
   less the network fee, to an address the user confirms; Stars are refunded in Stars, the whole
   payment only (`refundStarPayment` returns no part), retried from the recorded row if the call
-  fails. A refund takes back the partner's commission and a promo bonus earned by that deposit. No tax handling: the seller is
+  fails; a Stars payment in review that was never credited goes back by its charge id
+  (`/refundstars`), its held invoice made `void` first. A refund takes back the partner's commission and a promo bonus earned by that deposit. No tax handling: the seller is
   301ST Ltd, as for catchall.in.
 
 **Rejected.** Cards through a merchant of record (Paddle, Lemon Squeezy): a new contract and a

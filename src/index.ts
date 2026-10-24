@@ -5,6 +5,7 @@ import { auth } from './auth/routes';
 import { signup } from './auth/signup';
 import { reconcile, RECONCILE_EVERY_MIN } from './billing/invoices';
 import { expireStars, tellStarsReviews } from './billing/stars';
+import { tellRefunds } from './billing/refunds';
 import { reconcilePlans } from './billing/pause';
 import { GRACE_MS, LOW_DAYS, lowBalances, markLowTold, runCharges } from './billing/pro';
 import { checkTokens } from './cf/connect';
@@ -114,6 +115,8 @@ export default {
           if (stars) console.log(`stars invoices expired: ${stars}`);
           const told = await tellStarsReviews(env).catch((e: unknown) => (console.error('tell stars reviews', e instanceof Error ? e.message : e), 0));
           if (told) console.log(`stars payments in review told again: ${told}`);
+          const asked = await tellRefunds(env).catch((e: unknown) => (console.error('tell refunds', e instanceof Error ? e.message : e), 0));
+          if (asked) console.log(`refund requests told again: ${asked}`);
         }
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         const hour = Math.floor(now / 3_600_000);

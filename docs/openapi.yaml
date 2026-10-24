@@ -55,7 +55,9 @@ components:
                 Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
                 invalid_password, balance_not_empty (DELETE /v1/me with money on the balance).
                 Billing (docs/spec.md §18): insufficient_balance (Pro needs $9 on the balance), invoice_limit (3 pending top-ups),
-                payments_unavailable (crypto top-ups not set up or the processor down), paused (an
+                payments_unavailable (crypto top-ups not set up or the processor down),
+                refund_unavailable (a top-up never credited, older than 90 days or refunded
+                already), refund_open (a refund of that top-up is asked for already), paused (an
                 object beyond the free plan's limits: it can be read and deleted, not changed).
                 Links: link_exists (the code is taken on that link host), link_host_not_ready (links go
                 on an active host only), link_host_in_use
@@ -278,6 +280,19 @@ components:
               note: { type: [string, 'null'] }
               at: { type: string, format: date-time }
         invoices: { type: array, items: { $ref: '#/components/schemas/Invoice' }, description: 'the last 10 top-ups, newest first' }
+        refunds: { type: array, items: { $ref: '#/components/schemas/Refund' }, description: 'the last 10 refund requests, newest first' }
+    Refund:
+      type: object
+      properties:
+        id: { type: string }
+        invoice_id: { type: string, description: 'the top-up refunded' }
+        rail: { type: string, enum: [crypto, stars] }
+        address: { type: [string, 'null'], description: 'where crypto goes; null for Stars' }
+        status: { type: string, enum: [requested, pending, done, declined], description: 'pending: taken from the balance, on its way' }
+        amount_micro_usd: { type: [integer, 'null'], description: 'taken from the balance, once an operator made it; crypto is sent less the network fee' }
+        txid: { type: [string, 'null'], description: 'the crypto transfer, once sent' }
+        created_at: { type: string, format: date-time }
+        settled_at: { type: [string, 'null'], format: date-time }
     Invoice:
       type: object
       properties:
@@ -762,6 +777,28 @@ paths:
       parameters: [{ $ref: '#/components/parameters/Id' }]
       responses:
         '200': { description: OK, content: { application/json: { schema: { type: object, properties: { invoice: { $ref: '#/components/schemas/Invoice' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/billing/refunds:
+    post:
+      summary: Ask for a refund of a top-up (page session only)
+      description: |
+        A credited top-up under 90 days old, one open request per top-up (`refund_open`). An
+        operator makes it: at most what that top-up brought in less what was refunded from it, and
+        never more than the balance. Crypto goes, less the network fee, to `address` — yours, on the
+        network the top-up came by (Tron for USDT_TRC20, an 0x address for the others); Stars go back
+        whole, in Telegram, with no address.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoice_id]
+              properties:
+                invoice_id: { type: string }
+                address: { type: string }
+      responses:
+        '201': { description: Asked, content: { application/json: { schema: { type: object, properties: { refund: { $ref: '#/components/schemas/Refund' } } } } } }
         default: { $ref: '#/components/responses/Error' }
   /v1/billing/pro:
     post:

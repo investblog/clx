@@ -405,7 +405,13 @@ export const fakeTg = {
   preCheckouts: [] as { pre_checkout_query_id: string; ok: boolean; error_message?: string }[],
   /** while true, sendInvoice fails */
   invoiceDown: false,
+  /** Stars refunded, by charge id; a second refund of one is refused as Telegram refuses it */
+  refunded: [] as { user_id: number; telegram_payment_charge_id: string }[],
+  /** while true, refundStarPayment fails */
+  refundDown: false,
   reset() {
+    this.refunded = [];
+    this.refundDown = false;
     this.sent = [];
     this.deleted = [];
     this.invoices = [];
@@ -433,6 +439,10 @@ function telegram(url: URL, init: RequestInit): Response {
   else if (method === 'sendInvoice') {
     if (fakeTg.invoiceDown) return Response.json({ ok: false, description: 'Bad Request' }, { status: 400 });
     fakeTg.invoices.push(body);
+  } else if (method === 'refundStarPayment') {
+    if (fakeTg.refundDown) return Response.json({ ok: false, description: 'Internal Server Error' }, { status: 500 });
+    if (fakeTg.refunded.some((r) => r.telegram_payment_charge_id === body.telegram_payment_charge_id)) return Response.json({ ok: false, description: 'Bad Request: CHARGE_ALREADY_REFUNDED' }, { status: 400 });
+    fakeTg.refunded.push(body as (typeof fakeTg.refunded)[number]);
   } else if (method === 'answerPreCheckoutQuery') fakeTg.preCheckouts.push(body as (typeof fakeTg.preCheckouts)[number]);
   else return Response.json({ ok: false, description: 'unknown method' }, { status: 404 });
   return Response.json({ ok: true, result: true });

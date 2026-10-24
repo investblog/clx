@@ -5,6 +5,7 @@ import { localeOf, type Locale } from '../mail-text';
 import { planOf } from '../limits';
 import { operatorCredit, operatorVoid } from '../billing/invoices';
 import { setComp } from '../billing/pro';
+import { operatorAdjust, operatorDecline, operatorRefund, operatorRefunded, operatorRefundStars } from '../billing/refunds';
 import type { Env } from '../types';
 import { botId, botName, esc, isChatAdmin, MESSAGE_MAX, sendMessage } from './api';
 import type { TgMessage } from './bot';
@@ -40,6 +41,11 @@ const HELP = [
   '/sources [days] — sign-ups by start parameter, 30 days by default',
   '/credit invoice usd — credit what arrived on a top-up in review',
   '/void invoice — a top-up in review where nothing came',
+  '/refund request [usd] — make a refund the user asked for: crypto takes usd from the balance, Stars go back whole',
+  '/refunded request txid — the crypto of a refund was sent',
+  '/decline request — close a refund request; nothing moves',
+  '/refundstars charge_id — give back a Stars payment in review that was never credited',
+  '/adjust email usd note — a correction to the balance; usd may be negative',
 ].join('\n');
 
 /** A message in the support group. */
@@ -73,6 +79,11 @@ export async function operatorMessage(env: Env, msg: TgMessage, now: number): Pr
   const by = { tg: from.id, name: from.username ? `@${from.username}` : (from.first_name ?? String(from.id)) };
   if (command === 'credit') return void (await say(await operatorCredit(env, args[0] ?? '', args[1] ?? '', by)));
   if (command === 'void') return void (await say(await operatorVoid(env, args[0] ?? '')));
+  if (command === 'refund') return void (await say(await operatorRefund(env, args[0] ?? '', args[1], by)));
+  if (command === 'refunded') return void (await say(await operatorRefunded(env, args[0] ?? '', args[1] ?? '')));
+  if (command === 'decline') return void (await say(await operatorDecline(env, args[0] ?? '')));
+  if (command === 'refundstars') return void (await say(await operatorRefundStars(env, args[0] ?? '')));
+  if (command === 'adjust') return void (await say(await operatorAdjust(env, args[0] ?? '', args[1] ?? '', args.slice(2).join(' '), by, `${msg.chat.id}:${msg.message_id}`)));
   await say(HELP);
 }
 

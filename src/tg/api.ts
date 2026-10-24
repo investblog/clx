@@ -9,7 +9,14 @@ export const esc = (s: string) => s.replace(/&/gu, '&amp;').replace(/</gu, '&lt;
 
 /** One Bot API call: its result, or null when Telegram refused it or did not answer. */
 export async function tgCall<T>(env: Env, method: string, payload: Record<string, unknown>): Promise<T | null> {
-  if (!env.TELEGRAM_BOT_TOKEN) return null;
+  const r = await tgAsk<T>(env, method, payload);
+  return r.ok ? r.result : null;
+}
+
+/** One Bot API call with Telegram's reason when it refused (`description`; empty when it did not
+ *  answer at all). */
+export async function tgAsk<T>(env: Env, method: string, payload: Record<string, unknown>): Promise<{ ok: true; result: T } | { ok: false; description: string }> {
+  if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, description: '' };
   try {
     const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
       method: 'POST',
@@ -18,12 +25,12 @@ export async function tgCall<T>(env: Env, method: string, payload: Record<string
       signal: AbortSignal.timeout(10_000),
     });
     const body = (await res.json().catch(() => null)) as { ok?: boolean; result?: T; description?: string } | null;
-    if (body?.ok) return (body.result ?? true) as T;
+    if (body?.ok) return { ok: true, result: (body.result ?? true) as T };
     console.error('telegram', method, res.status, body?.description ?? '');
-    return null;
+    return { ok: false, description: body?.description ?? '' };
   } catch (e) {
     console.error('telegram', method, e instanceof Error ? e.message : e);
-    return null;
+    return { ok: false, description: '' };
   }
 }
 

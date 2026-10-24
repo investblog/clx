@@ -1208,7 +1208,7 @@ command menus in English and Russian).
   `/user <email>`, `/plan <email> free|api` (the person is told in Telegram; `api` sets
   `plan_comp`, §18), `/sources [days]`, money (§18, §19 — each writes the operator's Telegram
   user id and a snapshot of their name into its row): `/credit <invoice> <usd>`, `/adjust <email> <usd> <note>`,
-  `/refund <request> <usd>`, `/refunded <id> <txid>`, `/void <invoice>`, `/payouts`, `/paid <id> <txid>`, `/reject <id>`,
+  `/refund <request> [usd]`, `/refunded <id> <txid>`, `/decline <request>`, `/refundstars <charge id>`, `/void <invoice>`, `/payouts`, `/paid <id> <txid>`, `/reject <id>`,
   `/promo <code> <kind> <usd> [max uses] [until]`, and `/help`; their menu is set for the group's admins only (`tg-setup.mjs commands`). `/terms` — the
   terms in three lines and links to the full terms and privacy pages.
 
@@ -1306,22 +1306,35 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
     approved for it any more, and a payment delivered later still lands in `star_payments`.
 - **Refunds and corrections** — an operator in the support group, each one journal row with the
   operator's Telegram user id and a snapshot of their name: `/credit <invoice>` (a `review`
-  invoice's deposit), `/adjust <email> <usd> <note>`, `/void <invoice>`, `/refund <request> <usd>`.
+  invoice's deposit), `/adjust <email> <usd> <note>` (either way, never below a zero balance; keyed
+  by the command's message, so an update Telegram delivers twice writes once), `/void <invoice>`,
+  `/refund <request> [usd]`, `/decline <request>`.
   **A refund starts with the user**: `POST /v1/billing/refunds {invoice_id, address?}` (page
-  session only, a deposit under 90 days old) writes a `refunds` row `requested` — for crypto with the
-  address the user typed, checked for the invoice's network; nothing moves yet — and tells the
-  support group. The operator's `/refund <request> <usd>` takes at most what that deposit brought in
+  session only, a deposit under 90 days old, something of it not yet refunded, one open request per
+  deposit — `refund_open`) writes a `refunds` row `requested` — for crypto with the
+  address the user typed, checked for the invoice's network (Base58Check for Tron, `0x` and 40 hex
+  digits for the others); nothing moves yet — and tells the
+  support group (a request the group did not hear of is told again by the cron every 15 minutes).
+  A crypto request already made answers a second `/refund` with what was taken and by whom, never
+  a second "send it". The operator's `/refund <request> <usd>` takes at most what that deposit brought in
   less what was refunded from it already, and never more than the balance — both checked in the
-  same `INSERT` that writes the journal row and moves the request to `pending`. Crypto, less the
+  statement that moves the request to `pending`, the journal row written in the same batch only if
+  it moved. Crypto, less the
   network fee, goes to the request's address by the operator, who marks it done (`/refunded <id>
-  <txid>`). A Stars deposit is refunded whole only (Telegram returns the whole payment): the journal
+  <txid>`). A Stars deposit is refunded whole only (Telegram returns the whole payment; `/refund
+  <request>` with no sum): the journal
   row is written first, then `refundStarPayment` is called and the request marked done; a call that
   failed is retried by `/refund` on the same request, and Telegram's "already refunded" counts as
-  done. A refund also takes
+  done. `/decline` closes a request not yet made (`declined`), so it no longer holds up deleting the
+  account. A Stars payment in review that was never credited goes back whole by `/refundstars
+  <charge id>`, no journal row: its invoice, if one is held in review by it, is made `void` first, so
+  a `/credit` racing it cannot credit it, and one credited meanwhile is not refunded (a `/credit` of
+  a Stars invoice marks its payment `credited` in the same batch, so this holds after the account
+  and its invoices are gone); the payment is `refunding` while Telegram is asked, then `refunded`. A refund also takes
   back what that deposit earned — the partner's clawback (§19) and a promo bonus granted on it, in
   proportion to the refunded share — in the same batch.
 - **API** (scope `billing`; a page session has every scope): `GET /v1/billing` — balance, Pro on or
-  off, paid through, grace, the last 50 journal rows; `POST /v1/billing/pro`;
+  off, paid through, grace, the last 50 journal rows, the last 10 top-ups and refund requests; `POST /v1/billing/pro`;
   `POST /v1/billing/invoices`; `GET /v1/billing/invoices/{id}`; `POST /v1/billing/refunds` (page
   session only).
 - **Deleting a clx account** (§9) is refused with `balance_not_empty` while the balance or the
@@ -1335,7 +1348,7 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   A deletion that fails afterwards clears `deleting_at`; one that died (the Worker stopped) leaves
   it, and the cron clears a `deleting_at` older than 15 minutes of a user who is still there. The
   same checks also refuse while a referral's deposit has no commission yet. When it goes, its
-  journal rows, invoices and partner rows are copied into `billing_archive` (one row per deleted
+  journal rows, invoices, refunds (without their address) and partner rows are copied into `billing_archive` (one row per deleted
   user, without the address) and then deleted with the user — never kept under a user id SQLite
   gives to the next user (ADR 0010).
 - **Low balance.** A user with Pro on whose balance covers fewer than 14 days is told once (e-mail

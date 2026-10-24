@@ -21,6 +21,7 @@ import { balanceOf, DAY_PRICE, GRACE_MS, isoDay, openPeriod, paidThrough, PRO_PR
 import { markReplan, resumeNext } from '../billing/pause';
 import { createCrypto, invoiceView, type InvoiceRow } from '../billing/invoices';
 import { createStars } from '../billing/stars';
+import { refundView, requestRefund, type RefundRow } from '../billing/refunds';
 
 type C = Context<{ Bindings: Env }>;
 const MAX_BODY = 65_536;
@@ -138,7 +139,9 @@ v1.delete(
     // this and the archive; a mark left by a delete that died is cleared by the cron after 15 minutes.
     const now = Date.now();
     const marked = await db
-      .prepare("UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0 AND NOT EXISTS (SELECT 1 FROM invoices WHERE user_id = ?2 AND (status IN ('pending', 'review') OR (status = 'expired' AND rail = 'crypto' AND expires_at > ?1 - ?4)))")
+      .prepare(
+        "UPDATE users SET deleting_at = ?1 WHERE id = ?2 AND (deleting_at IS NULL OR deleting_at < ?1 - ?3) AND (SELECT coalesce(sum(amount), 0) FROM ledger WHERE user_id = ?2) = 0 AND NOT EXISTS (SELECT 1 FROM invoices WHERE user_id = ?2 AND (status IN ('pending', 'review') OR (status = 'expired' AND rail = 'crypto' AND expires_at > ?1 - ?4))) AND NOT EXISTS (SELECT 1 FROM refunds WHERE user_id = ?2 AND status IN ('requested', 'pending'))",
+      )
       .bind(now, p.userId, DELETING_TTL, 30 * 86_400_000)
       .run();
     if (!marked.meta.changes) {
@@ -146,6 +149,8 @@ v1.delete(
       if (balance !== 0) fail(409, 'balance_not_empty', 'There is money on your balance; spend it or ask for a refund in /support before deleting the account.', { balance_micro_usd: balance });
       if (await db.prepare("SELECT 1 FROM invoices WHERE user_id = ?1 AND (status IN ('pending', 'review') OR (status = 'expired' AND rail = 'crypto' AND expires_at > ?2))").bind(p.userId, now - 30 * 86_400_000).first())
         fail(409, 'balance_not_empty', 'A top-up of yours is still open (unpaid, in review, or expired less than 30 days ago, when late crypto may still arrive); delete the account once it is settled.');
+      if (await db.prepare("SELECT 1 FROM refunds WHERE user_id = ? AND status IN ('requested', 'pending')").bind(p.userId).first())
+        fail(409, 'balance_not_empty', 'A refund of yours is still open; delete the account once it is done.');
       fail(409, 'operation_in_progress', 'The account is being deleted already; retry in a minute.');
     }
     try {
@@ -205,7 +210,8 @@ async function deleteUser(c: C, p: Principal, now: number): Promise<Answer> {
          SELECT created_at, ?2, json_object(
            'ledger', (SELECT json_group_array(json_object('id', id, 'type', type, 'amount', amount, 'op_key', op_key, 'day', day, 'invoice_id', invoice_id, 'note', note, 'by_tg', by_tg, 'by_name', by_name, 'at', created_at)) FROM ledger WHERE user_id = ?1),
            'pro_periods', (SELECT json_group_array(json_object('start_day', start_day, 'end_day', end_day)) FROM pro_periods WHERE user_id = ?1),
-             'invoices', (SELECT json_group_array(json_object('id', id, 'rail', rail, 'usd', usd, 'coin', coin, 'stars', stars, 'status', status, 'processor_id', processor_id, 'created_at', created_at, 'paid_at', paid_at)) FROM invoices WHERE user_id = ?1))
+             'invoices', (SELECT json_group_array(json_object('id', id, 'rail', rail, 'usd', usd, 'coin', coin, 'stars', stars, 'status', status, 'processor_id', processor_id, 'created_at', created_at, 'paid_at', paid_at)) FROM invoices WHERE user_id = ?1),
+             'refunds', (SELECT json_group_array(json_object('id', id, 'invoice_id', invoice_id, 'rail', rail, 'status', status, 'amount', amount, 'txid', txid, 'by_tg', by_tg, 'by_name', by_name, 'created_at', created_at, 'settled_at', settled_at)) FROM refunds WHERE user_id = ?1))
          FROM users WHERE id = ?1 AND (EXISTS (SELECT 1 FROM ledger WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM pro_periods WHERE user_id = ?1) OR EXISTS (SELECT 1 FROM invoices WHERE user_id = ?1))`,
       )
       .bind(p.userId, now),
@@ -755,6 +761,7 @@ async function billingView(db: D1Database, userId: number) {
     },
     journal: journal.map((r) => ({ id: r.id, type: r.type, amount_micro_usd: r.amount, day: r.day === null ? null : isoDay(r.day), invoice_id: r.invoice_id, note: r.note, at: new Date(r.created_at).toISOString() })),
     invoices: (await db.prepare('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<InvoiceRow>()).results.map(invoiceView),
+    refunds: (await db.prepare('SELECT * FROM refunds WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<RefundRow>()).results.map(refundView),
   };
 }
 
@@ -782,6 +789,13 @@ v1.get(
     if (!invoice) fail(404, 'not_found', 'No such invoice.');
     return { status: 200, body: { invoice: invoiceView(invoice!) } };
   }),
+);
+
+/** A refund of a top-up (§18): asked for here, made by an operator. A page session only — the
+ *  address the money goes to is typed by the user, never by a key or the bot. */
+v1.post(
+  '/billing/refunds',
+  handle({ session: true, scope: 'billing' }, async (c, p, body) => ({ status: 201, body: { refund: refundView(await requestRefund(c.env, p.userId, body)) } })),
 );
 
 /** Pro on or off (§18): on needs a confirmed e-mail and $9 on the balance; off ends it after today. */

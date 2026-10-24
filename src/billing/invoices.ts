@@ -121,6 +121,11 @@ export async function credit(env: Env, invoice: InvoiceRow, micro: number, note:
     db
       .prepare("INSERT INTO ledger (user_id, type, amount, invoice_id, note, by_tg, by_name, created_at) SELECT ?1, 'deposit', ?2, ?3, ?4, ?5, ?6, ?7 WHERE changes() = 1")
       .bind(invoice.user_id, micro, invoice.id, note, by?.tg ?? null, by?.name ?? null, now),
+    // A Stars payment in review credited by hand is credited in its own record too, at once: that
+    // record outlives the invoice, and /refundstars must never give back stars already credited.
+    db
+      .prepare("UPDATE star_payments SET state = 'credited', settled_at = ?2 WHERE charge_id = (SELECT processor_id FROM invoices WHERE id = ?1 AND rail = 'stars') AND state = 'review' AND EXISTS (SELECT 1 FROM ledger WHERE invoice_id = ?1 AND type = 'deposit')")
+      .bind(invoice.id, now),
   ]);
   if (!moved!.meta.changes) return false;
   await settleUser(env, invoice.user_id, now).catch((e: unknown) => console.error('settle after deposit', invoice.user_id, e instanceof Error ? e.message : e));
