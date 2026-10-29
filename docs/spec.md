@@ -279,7 +279,7 @@ Why:
     POST of the referrer on every page view answered with an empty `204` — and Cloudflare's own
     headers and timing are the same as on any Cloudflare site. Hiding from Cloudflare or from whoever
     has access to the account is out of scope.
-- **Snippet** — an inline script under 600 bytes that sends `document.referrer` to `/<path>/<c>` on
+- **Snippet** — an inline script under 600 bytes (a zone site's; an external site's names its collector host, §5 below) that sends `document.referrer` to `/<path>/<c>` on
   load and on SPA address changes (`pushState`/`popstate`). Alternative — `<script defer
   src="/<path>/<s>.js">` (the same code, served by the worker, cached for a day). Both forms come from
   the API (§15) for embedding at build time.
@@ -1035,8 +1035,8 @@ that adds a site and embeds its counter at build time.
 | `POST /v1/accounts/{id}/token` `{bootstrap_token}` | renew the working token |
 | `POST /v1/accounts/{id}/install` | install `clx-edge` again — after a failed install, or a reinstall (§4) → `202` |
 | `DELETE /v1/accounts/{id}` | disconnect (§4) |
-| `POST /v1/sites` `{account_id, host, excluded_paths?, collector_host?}` | add a site: the zone is found in the account, the route is created → the site with its snippet. With `collector_host` it is an external site (§5, Pro; stage 8 — in `docs/openapi.yaml` with its code): the zone is the collector host's (`zone_not_found` names the field `collector_host`); a `host` in a zone of the account, or a `collector_host` that is a link host, is `400 invalid_request`; `403 limit_reached` on `free`, `409 update_required` on an older bundle |
-| `GET /v1/sites?account_id=`, `GET /v1/sites/{id}` | `kind` (`zone`, `external`) and `collector_host` (null for `zone`) from stage 8, state (`route_pending`, `active`, `route_conflict`), `paused_at` (§18), `snippet: {inline, script_tag}` |
+| `POST /v1/sites` `{account_id, host, excluded_paths?, collector_host?}` | add a site: the zone is found in the account, the route is created → the site with its snippet. With `collector_host` it is an external site (§5, Pro): the zone is the collector host's (`zone_not_found` names the field `collector_host`); a `host` in a zone of the account is `400 invalid_request`, a `collector_host` that is a link host `409 invalid_request`; `403 limit_reached` on `free`, `409 update_required` on an older bundle, `409 operation_in_progress` while another operation holds the account |
+| `GET /v1/sites?account_id=`, `GET /v1/sites/{id}` | `kind` (`zone`, `external`), `collector_host` (null for `zone`), state (`route_pending`, `active`, `route_conflict`), `paused_at` (§18), `snippet: {inline, script_tag}` |
 | `PATCH /v1/sites/{id}` | excluded paths |
 | `POST /v1/sites/{id}/rotate` | a new seed → new `<path>`, names and snippet (§5); the old path counts for 30 more days. An external site is not rotated (`400 invalid_request`) |
 | `DELETE /v1/sites/{id}` | remove the route; totals stay until the account is disconnected |

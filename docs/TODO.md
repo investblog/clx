@@ -66,8 +66,9 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] A deleted user's sessions opened a new user who got the same id (SQLite reuses the highest
       freed rowid; both started at session version 0; Codex 07.10). New users now start at the
       sign-up time as their session version.
-- [ ] A counter for a site not on Cloudflare — not a proxy: an external site counted by the user's
-      own clx-edge on a host of their zone, Pro only (ADR 0037, 30.10; spec §14 stage 8).
+- [x] A counter for a site not on Cloudflare — not a proxy: an external site counted by the user's
+      own clx-edge on a host of their zone, Pro only (ADR 0037; built 30.10, spec §14 stage 8). Its
+      live check comes after the billing release.
 Left as they are (owner, 19.10.2026) — not worth their cost now; reopened only if a real case needs one:
 - `over` from "pushes reporting write failures" (§8): the heartbeat carries the worker's error
   text only, with no clean sign of a failed D1 write. `over` already comes from writes at the
