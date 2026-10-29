@@ -1,4 +1,5 @@
 // The per-site snippet (docs/spec.md §5) and the footprint check of §13 item 10.
+import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { FORBIDDEN, namesFor, scriptFor, snippetFor } from '../src/snippet';
@@ -9,7 +10,12 @@ const seeds = Array.from({ length: 1000 }, (_, i) => `seed-${i}-${(i * 265443576
 function runIn(code: string, start = 'https://example.com/a', referrer = 'https://google.com/') {
   const sent: { url: string; body: string; via: string }[] = [];
   const listeners: Record<string, (() => void)[]> = {};
-  const location = { href: start };
+  const location = {
+    href: start,
+    get pathname() {
+      return new URL(this.href).pathname;
+    },
+  };
   const history = {
     pushState(_state: unknown, _title: string, url: string) {
       location.href = new URL(url, location.href).href;
@@ -56,6 +62,28 @@ describe('snippet', () => {
   it('uses both ways to send', () => {
     const via = new Set(seeds.slice(0, 50).map((s) => runIn(scriptFor(s, namesFor(s))).sent[0]!.via));
     expect(via).toEqual(new Set(['beacon', 'fetch']));
+  });
+
+  it("an external site's (§5) sends to its collector host by fetch: the path and the referrer on load, the path on a change", () => {
+    for (const s of seeds.slice(0, 100)) {
+      const names = namesFor(s);
+      const b = runIn(scriptFor(s, names, 'collect.example.com'));
+      const url = `https://collect.example.com${names.path}/${names.c}`;
+      expect(b.sent).toEqual([{ url, body: '/a\nhttps://google.com/', via: 'fetch' }]);
+      b.history.pushState(null, '', '/b?x=1');
+      b.history.pushState(null, '', '/b?x=1');
+      expect(b.sent.map((x) => x.body)).toEqual(['/a\nhttps://google.com/', '/b']);
+      expect(snippetFor(s, names, 'collect.example.com').script_tag).toContain(`src="https://collect.example.com${names.path}/${names.s}.js"`);
+    }
+  });
+
+  it("a zone site's bytes are what they were before external sites came (embedded snippets keep working)", () => {
+    const all = Array.from({ length: 1000 }, (_, i) => {
+      const s = `seed-${i}`;
+      const n = namesFor(s);
+      return JSON.stringify(snippetFor(s, n)) + scriptFor(s, n);
+    }).join('|');
+    expect(createHash('sha256').update(all).digest('hex')).toBe('54fa63432321db6798b54635504892d1050db50bd5fd33399444fd77037c6123');
   });
 });
 

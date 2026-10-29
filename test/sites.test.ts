@@ -8,6 +8,7 @@ import { edgeById } from '../src/cf/connect';
 import { runSites, undoRotation } from '../src/cf/sites';
 import { app } from '../src/index';
 import { namesFor, scriptFor } from '../src/snippet';
+import RELEASED from '../edge/released.json';
 import type { Env } from '../src/types';
 import { d1 } from './d1';
 import { fakeCtx, testEnv } from './env';
@@ -21,7 +22,7 @@ useFakeCloudflare();
 
 let accountId = '';
 beforeEach(async () => {
-  for (const t of ['sites', 'cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
+  for (const t of ['link_hosts', 'sites', 'cf_calls', 'edge_accounts', 'operations', 'idempotency', 'api_keys', 'users']) await env.DB.prepare(`DELETE FROM ${t}`).run();
   await env.DB.prepare("INSERT INTO users (id, email, password_hash, created_at, email_confirmed_at, plan) VALUES (1, 'free@example.com', 'x', 0, 0, 'free'), (2, 'api@example.com', 'x', 0, 0, 'api')").run();
   fakeCf.reset();
   accountId = await ready();
@@ -64,7 +65,7 @@ const userDb = (): DatabaseSync => {
 
 /** A request through the worker, with a fresh isolate (no cached config) and a fake origin; its
  *  counting has finished when this returns. */
-async function viaWorker(url: string, init: RequestInit = {}): Promise<{ status: number; body: string; headers: Headers; origin: boolean }> {
+async function viaWorker(url: string, init: RequestInit = {}, db?: D1Database): Promise<{ status: number; body: string; headers: Headers; origin: boolean }> {
   vi.resetModules();
   const worker = (await import('../edge/worker')).default;
   let origin = false;
@@ -72,7 +73,7 @@ async function viaWorker(url: string, init: RequestInit = {}): Promise<{ status:
   vi.stubGlobal('fetch', async () => ((origin = true), new Response('the site itself', { status: 404 })));
   try {
     const { ctx, settle } = fakeCtx();
-    const res = await worker.fetch(new Request(url, init), { DB: d1(userDb()) } as never, ctx);
+    const res = await worker.fetch(new Request(url, init), { DB: db ?? d1(userDb()) } as never, ctx);
     await settle();
     return { status: res.status, body: await res.text(), headers: res.headers, origin };
   } finally {
@@ -448,6 +449,153 @@ describe('review fixes (4a)', () => {
     expect(acc).toEqual({ config_revision: 1000, synced_revision: 1000 });
     const data = userDb().prepare("SELECT c.data FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = 'site:example.com' ORDER BY c.revision DESC LIMIT 1").get() as { data: string };
     expect(JSON.parse(data.data).excluded).toEqual(['/y']);
+  });
+});
+
+describe('external sites (§5, ADR 0037)', () => {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+  const pro = () => env.DB.prepare("UPDATE users SET plan = 'api' WHERE id = 1").run();
+  const addExternal = (host = 'othersite.net', collector = 'example.com') => addSite(host, { collector_host: collector });
+  const extNames = async (id: string) => namesFor((await env.DB.prepare('SELECT seed FROM sites WHERE id = ?').bind(id).first<{ seed: string }>())!.seed);
+  const beacon = (names: { path: string; c: string }, origin: string | null, body: string) =>
+    viaWorker(`https://example.com${names.path}/${names.c}`, { method: 'POST', body, headers: { 'content-type': 'text/plain;charset=UTF-8', 'user-agent': UA, ...(origin ? { origin } : {}) } });
+
+  it('are Pro only; on Pro the route is on the collector host and the snippet sends there', async () => {
+    expect((await addExternal()).body.error).toMatchObject({ code: 'limit_reached', details: { limit: 0 } });
+    await pro();
+    const r = await addExternal();
+    expect(r.status).toBe(202);
+    const site = r.body.site;
+    expect(site).toMatchObject({ host: 'othersite.net', kind: 'external', collector_host: 'example.com', state: 'active' });
+    expect(routes()).toEqual([expect.objectContaining({ pattern: `example.com${site.path}/*`, script: 'clx-edge' })]);
+    const names = await extNames(site.id);
+    expect(site.snippet.inline).toContain(`https://example.com${names.path}/${names.c}`);
+    expect(site.snippet.script_tag).toContain(`src="https://example.com${names.path}/${names.s}.js"`);
+    const js = await viaWorker(`https://example.com${names.path}/${names.s}.js`);
+    expect(js).toMatchObject({ status: 200, origin: false });
+    expect(js.body).toContain('https://example.com');
+    // Anything else on the collector host is its own.
+    expect(await viaWorker(`https://example.com${names.path}/nope`)).toMatchObject({ origin: true });
+    expect(await viaWorker('https://example.com/pricing')).toMatchObject({ origin: true });
+  });
+
+  it("counts a beacon from its own origin, the page and the source from the body; another origin, none, null or a port is dropped", async () => {
+    await pro();
+    const names = await extNames((await addExternal()).body.site.id);
+    const a = await beacon(names, 'https://www.othersite.net', '/pricing\nhttps://ref.example/x');
+    expect(a).toMatchObject({ status: 204, origin: false });
+    expect(a.headers.get('access-control-allow-origin')).toBe('https://www.othersite.net');
+    expect(a.headers.get('cache-control')).toBe('no-store');
+    await beacon(names, 'http://othersite.net', '/about\nhttps://www.othersite.net/pricing');
+    await beacon(names, 'https://othersite.net', '/about/42f0c9d0e1a2b3c4d5e6f7a8\nhttps://other.ref/');
+    for (const origin of ['https://evil.example', null, 'null', 'https://othersite.net:8443', 'ftp://othersite.net']) {
+      const dropped = await beacon(names, origin, '/x\n');
+      expect(dropped.status).toBe(204);
+      expect(dropped.headers.get('access-control-allow-origin')).toBeNull();
+    }
+    expect(userDb().prepare('SELECT views FROM totals').all()).toEqual([{ views: 3 }]);
+    // Two pages and two sources apart (the lesson of 06.10); the own site is no source, an id is `:id`.
+    const rows = userDb().prepare('SELECT page, source, views FROM views_hourly ORDER BY page, source').all();
+    expect(rows).toEqual([
+      { page: '/about', source: '', views: 1 },
+      { page: '/about/:id', source: 'other.ref', views: 1 },
+      { page: '/pricing', source: 'ref.example', views: 1 },
+    ]);
+  });
+
+  it('a host in a zone, a collector in none, a link host as collector or an old bundle is refused', async () => {
+    await pro();
+    expect((await addExternal('blog.example.com')).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'host' } });
+    expect((await addExternal('othersite.net', 'nowhere.net')).body.error).toMatchObject({ code: 'zone_not_found', details: { field: 'collector_host' } });
+    expect((await addExternal('othersite.net', 'othersite.net')).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'collector_host' } });
+    await env.DB.prepare("INSERT INTO link_hosts (id, account_id, host, zone_id, state, revision, created_at, updated_at) VALUES ('lh1', ?, 'go.example.com', 'zone1', 'active', 0, 0, 0)").bind(accountId).run();
+    expect((await addExternal('othersite.net', 'go.example.com')).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'collector_host' } });
+    await env.DB.prepare("UPDATE edge_accounts SET bundle = ?").bind(RELEASED[10]).run();
+    expect((await addExternal()).body.error.code).toBe('update_required');
+  });
+
+  it('keeps its path for life: no rotation, no link host of its own; a host once per user', async () => {
+    await pro();
+    const { site } = (await addExternal()).body;
+    expect((await call('POST', `/v1/sites/${site.id}/rotate`)).body.error.code).toBe('invalid_request');
+    expect((await call('POST', '/v1/link-hosts', { body: { site_id: site.id } })).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'site_id' } });
+    expect((await addExternal()).body.error.code).toBe('site_exists');
+    // Its collector host is a site's route host: no link host there.
+    expect((await call('POST', '/v1/link-hosts', { body: { account_id: accountId, host: 'example.com' } })).body.error.code).toBe('invalid_request');
+  });
+
+  it("an external site is added under the account's lease; a zone site that meets its path is drawn again", async () => {
+    await pro();
+    await env.DB.prepare("UPDATE edge_accounts SET lease_until = ?, lease_owner = 'other'").bind(Date.now() + 60_000).run();
+    expect((await addExternal()).body.error.code).toBe('operation_in_progress');
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM sites').first('n')).toBe(0);
+    await env.DB.prepare('UPDATE edge_accounts SET lease_until = NULL, lease_owner = NULL').run();
+    const ext = (await addExternal()).body.site;
+    const zone = (await addSite('example.com')).body.site;
+    // As if the zone site had been added while the lease was held, on the external site's path.
+    await env.DB.prepare("UPDATE sites SET seed = (SELECT seed FROM sites WHERE id = ?1), state = 'route_pending', route_id = NULL, updated_at = 0 WHERE id = ?2").bind(ext.id, zone.id).run();
+    fakeCf.routes.set('zone1', routes().filter((r) => r.pattern === `example.com${ext.path}/*`));
+    await runSites(env);
+    await runSites(env);
+    const after = (await call('GET', `/v1/sites/${zone.id}`)).body.site;
+    expect(after).toMatchObject({ state: 'active', config: 'synced' });
+    expect(after.path).not.toBe(ext.path);
+    expect((await call('GET', `/v1/sites/${ext.id}`)).body.site.path).toBe(ext.path);
+    expect(routes().map((r) => r.pattern).sort()).toEqual([`example.com${after.path}/*`, `example.com${ext.path}/*`].sort());
+    // Both count, each into its own target.
+    const z = namesFor((await env.DB.prepare('SELECT seed FROM sites WHERE id = ?').bind(zone.id).first<{ seed: string }>())!.seed);
+    await viaWorker(`https://example.com${z.path}/${z.c}`, { method: 'POST', body: '', headers: { 'content-type': 'text/plain', 'user-agent': UA } });
+    await beacon(await extNames(ext.id), 'https://othersite.net', '/\n');
+    expect(userDb().prepare('SELECT count(DISTINCT target) AS n, sum(views) AS v FROM totals').get()).toEqual({ n: 2, v: 2 });
+  });
+
+  it('a link host is never a collector: an ext: key left on its host answers nothing', async () => {
+    const config = { t: 'sx', paths: [{ path: '/abc', c: 'def', s: 'ghi', script: '' }], excluded: [], origins: ['othersite.net'] };
+    userDb().prepare("INSERT INTO commits (revision, sync_id, at) VALUES (900, 'x', 0)").run();
+    const put = userDb().prepare("INSERT INTO cfg (key, revision, sync_id, deleted, data, at) VALUES (?, 900, 'x', 0, ?, 0)");
+    put.run('ext:go.example.com/abc', JSON.stringify(config));
+    put.run('linkhost:go.example.com', '{}');
+    const r = await viaWorker('https://go.example.com/abc/def', { method: 'POST', body: '/\n', headers: { 'content-type': 'text/plain', origin: 'https://othersite.net', 'user-agent': UA } });
+    expect(r).toMatchObject({ status: 404, origin: false });
+    expect(userDb().prepare('SELECT count(*) AS n FROM totals').get()).toEqual({ n: 0 });
+    // The same key on a host that is no link host counts — but not while that cannot be read.
+    put.run('ext:example.com/abc', JSON.stringify(config));
+    const post = (db?: D1Database) => viaWorker('https://example.com/abc/def', { method: 'POST', body: '/\n', headers: { 'content-type': 'text/plain', origin: 'https://othersite.net', 'user-agent': UA } }, db);
+    const base = d1(userDb());
+    const noLinkHosts = {
+      ...base,
+      prepare: (sql: string) => {
+        const s = base.prepare(sql);
+        return { ...s, bind: (...args: unknown[]) => (String(args[0]).startsWith('linkhost:') ? { ...s.bind(...args), first: () => Promise.reject(new Error('D1 down')) } : s.bind(...args)) };
+      },
+    } as D1Database;
+    expect(await post(noLinkHosts)).toMatchObject({ origin: true });
+    expect((await post()).headers.get('access-control-allow-origin')).toBe('https://othersite.net');
+  });
+
+  it('delete removes its route and withdraws its key; free pauses it, Pro brings it back', async () => {
+    await pro();
+    const zone = (await addSite('example.com')).body.site;
+    const ext = (await addExternal()).body.site;
+    const names = await extNames(ext.id);
+    const key = `ext:example.com${names.path}`;
+    const latest = () => userDb().prepare('SELECT c.deleted FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = ? ORDER BY c.revision DESC LIMIT 1').get(key) as { deleted: number };
+    await runSites(env);
+    expect(latest().deleted).toBe(0);
+    await env.DB.prepare("UPDATE users SET plan = 'free' WHERE id = 1").run();
+    await applyPlan(env, 1);
+    expect((await call('GET', `/v1/sites/${ext.id}`)).body.site.paused_at).not.toBeNull();
+    expect((await call('GET', `/v1/sites/${zone.id}`)).body.site.paused_at).toBeNull();
+    await runSites(env);
+    expect(latest().deleted).toBe(1);
+    expect(await beacon(names, 'https://othersite.net', '/\n')).toMatchObject({ origin: true });
+    await env.DB.prepare('UPDATE users SET plan_comp = 1 WHERE id = 1').run();
+    await applyPlan(env, 1);
+    await runSites(env);
+    expect(latest().deleted).toBe(0);
+    await call('DELETE', `/v1/sites/${ext.id}`);
+    expect(routes().map((r) => r.pattern)).toEqual([`example.com${zone.path}/*`]);
+    expect(latest().deleted).toBe(1);
   });
 });
 

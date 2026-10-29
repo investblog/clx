@@ -11,9 +11,13 @@ export interface SiteConfig {
   paths: { path: string; c: string; s: string; script: string; until?: number }[];
   /** path prefixes that are not counted */
   excluded: string[];
+  /** an external site's (§5, ADR 0037): the host names its pages may send from */
+  origins?: string[];
 }
 
 export const siteKey = (host: string) => `site:${host}`;
+/** An external site, by its collector host and its one path: it is never rotated (§5, ADR 0037). */
+export const extKey = (host: string, path: string) => `ext:${host}${path}`;
 
 /** A link host (§6, ADR 0024): a custom domain of the worker, so all of it is the worker's and
  *  nothing there passes through — an unknown path is a plain 404. Its data is `{}`. An account has

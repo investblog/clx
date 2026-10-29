@@ -57,6 +57,7 @@ components:
                 name_taken, resource_drift, cron_limit, permission_error, revoked, self_check_timeout,
                 credentials_missing, credentials_unreadable (clx cannot open the stored token),
                 cloudflare_error. Sites: zone_not_found, site_exists, route_conflict, site_not_active,
+                update_required (external sites need a newer clx-edge),
                 route_not_ours (a route clx made was changed outside clx and left in place).
                 Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
                 invalid_password, balance_not_empty (DELETE /v1/me with money on the balance).
@@ -195,6 +196,8 @@ components:
         id: { type: string }
         account_id: { type: string }
         host: { type: string }
+        kind: { type: string, enum: [zone, external], description: 'zone — the host is in a zone of the account and the counter answers on it; external — a site not on Cloudflare (Pro), counted on collector_host (docs/spec.md §5)' }
+        collector_host: { type: [string, 'null'], description: "an external site's: the host of the account's zones its beacons go to; null for zone" }
         state:
           type: string
           enum: [route_pending, active, route_conflict, deleted]
@@ -202,10 +205,10 @@ components:
         path: { type: string, description: 'the per-site path the counter answers under, e.g. /lumora or /kavi/tesomu' }
         snippet:
           type: [object, 'null']
-          description: Embed one of the two at build time; stable until rotate
+          description: Embed one of the two at build time; stable until rotate (an external site is never rotated)
           properties:
             inline: { type: string, description: '<script>…</script>, under 600 bytes' }
-            script_tag: { type: string, description: '<script src="/<path>/<s>.js"> with defer (the order of the attributes varies by site)' }
+            script_tag: { type: string, description: '<script src="/<path>/<s>.js"> with defer (the order of the attributes varies by site); an external site''s src is https://<collector_host>/<path>/<s>.js' }
         excluded_paths: { type: array, items: { type: string } }
         config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the site yet' }
         paused_at: { type: [string, 'null'], format: date-time, description: 'set while the site is beyond the free plan''s limits (docs/spec.md §18): it is not counted and cannot be changed' }
@@ -384,7 +387,7 @@ paths:
                 properties:
                   user: { type: object, properties: { id: { type: integer }, email: { type: string }, email_confirmed: { type: boolean }, locale: { type: string, enum: [en, ru], description: "The language of the app after sign-in and of clx's e-mails" } } }
                   plan: { type: string, enum: [free, api] }
-                  limits: { type: object, description: "the plan's limits", properties: { cf_accounts: { type: integer }, sites: { type: integer }, links: { type: integer }, rules_per_link: { type: integer }, api_keys: { type: integer } } }
+                  limits: { type: object, description: "the plan's limits", properties: { cf_accounts: { type: integer }, sites: { type: integer }, external_sites: { type: integer, description: 'of the sites, those not on Cloudflare: 0 on free' }, links: { type: integer }, rules_per_link: { type: integer }, api_keys: { type: integer } } }
                   use: { type: object, description: "what is in use now", properties: { cf_accounts: { type: integer }, api_keys: { type: integer } } }
                   via: { type: string, enum: [session, key, telegram] }
                   telegram: { type: [object, 'null'], description: 'the Telegram user linked to the account (docs/spec.md §17)', properties: { id: { type: integer, description: 'the Telegram user id' }, username: { type: [string, 'null'] }, linked_at: { type: string, format: date-time } } }
@@ -602,6 +605,15 @@ paths:
       description: |
         The account must be `ready`. The answer carries the snippet at once; `config` turns
         `synced` once the worker has the site (seconds), and the counter answers from then on.
+
+        With `collector_host` it is an external site — one not on Cloudflare (Pro only,
+        docs/spec.md §5): its `host` must be in no zone of the account (`invalid_request`), the
+        route is made on `collector_host`, a host of the account's zones that already answers
+        through Cloudflare (clx makes no DNS record) and is no link host. Its snippet sends a CORS
+        request to that host, so a page whose CSP limits `connect-src` (or `script-src`, for the
+        tag) must allow it. `limit_reached` (limit 0) on free; `update_required` while the
+        account's clx-edge predates external sites; `operation_in_progress` while another
+        operation holds the account.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:
@@ -611,7 +623,8 @@ paths:
               required: [account_id, host]
               properties:
                 account_id: { type: string }
-                host: { type: string, description: 'example.com or a subdomain of a zone in that account' }
+                host: { type: string, description: 'example.com or a subdomain of a zone in that account; with collector_host, a host in none' }
+                collector_host: { type: string, description: 'makes an external site: a host of a zone in that account, other than host' }
                 excluded_paths: { type: array, maxItems: 50, items: { type: string, pattern: '^/' } }
       responses:
         '202': { description: Added, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }
@@ -668,7 +681,9 @@ paths:
         creates its DNS record and certificate, so you create no record. A host that already has a
         DNS record is never taken over: a random label is tried again with another, a named host
         ends `conflict` (`dns_record_exists`). Answers `202`; poll GET until `state` is `active` and
-        `config` is `synced` (usually seconds). Up to the plan's site limit per user.
+        `config` is `synced` (usually seconds). Up to the plan's site limit per user. An external
+        site has no zone for `{site_id}` (`invalid_request`), and a site's host or collector host
+        cannot be a link host.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:
@@ -787,6 +802,7 @@ paths:
   /v1/sites/{id}/rotate:
     post:
       summary: A new path, names and snippet (scope sites); the old path is counted for 30 more days
+      description: An external site keeps its path for life (`invalid_request`).
       parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
       responses:
         '200': { description: Rotated, content: { application/json: { schema: { type: object, properties: { site: { $ref: '#/components/schemas/Site' } } } } } }

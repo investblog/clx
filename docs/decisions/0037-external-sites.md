@@ -40,11 +40,14 @@ The owner chose the second on 30.10.2026, and **only on Pro**: it is a feature t
   request's host has no site path that matches, by the first two segments of the path, then by the
   first.
 - **No two paths on one collector host meet.** Paths come from random seeds; on a shared collector
-  host two could be equal, and `ensureRoute` would adopt the other's route as its own. Every new
-  seed on a host — a new site of either kind, a zone site's rotation — is drawn and recorded under
-  the account's lease, checked against every path the account's sites hold on that host (external
-  sites' and the zone site's current, rotating and retiring ones), and drawn again on a match. The
-  lease makes the check and the record one step: two adds at once cannot both pass it (Codex, 30.10).
+  host two could be equal (or one lie under the other), and `ensureRoute` would adopt the other's
+  route as its own. A path is checked under the account's lease against every path the account's
+  sites hold on that host (external sites' and the zone site's current, rotating and retiring
+  ones), so the check and the record are one step (Codex, 30.10). An external site's seed is drawn
+  and recorded under the lease when it is added (`409 operation_in_progress` while another
+  operation holds it) and never drawn again — its key is its path. A zone site's is checked under
+  the lease before its route is made and drawn again on a match while still pending: its config is
+  keyed by its host, so the worker simply gets the new path. A rotation draws under the lease.
 - **The collector of an external site** answers a CORS request: the snippet sends a simple `POST`
   (`fetch`, `keepalive`, `text/plain`, mode `cors`), so the browser always sends the page's real
   `Origin` — a no-cors request (`sendBeacon` with a string, `mode: 'no-cors'`) may carry `null`

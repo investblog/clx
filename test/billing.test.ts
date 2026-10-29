@@ -207,6 +207,20 @@ describe('notices and the hourly check', () => {
     // No period, no grace.
     expect(await env.DB.prepare('SELECT replan_at, grace_since FROM users WHERE id = 2').first()).toEqual({ replan_at: null, grace_since: null });
   });
+
+  it('the hourly check pauses an external site a free user still has, though under ten sites (§5)', async () => {
+    // As when an add began on Pro and the downgrade finished first.
+    await env.DB.prepare("INSERT INTO edge_accounts (id, user_id, cf_account_id, state, created_at, updated_at) VALUES ('ea1', 2, 'c1', 'ready', 1, 1)").run();
+    await env.DB.prepare(
+      "INSERT INTO sites (id, account_id, user_id, target, host, kind, collector_host, zone_id, seed, state, revision, created_at, updated_at) VALUES ('z1', 'ea1', 2, 'sz', 'example.com', 'zone', NULL, 'zone1', 'a', 'active', 0, 1, 1), ('x1', 'ea1', 2, 'sx', 'othersite.net', 'external', 'example.com', 'zone1', 'b', 'active', 0, 2, 2)",
+    ).run();
+    expect(await reconcilePlans(env, T0)).toBe(1);
+    expect((await env.DB.prepare('SELECT id, paused_at FROM sites ORDER BY id').all()).results).toEqual([
+      { id: 'x1', paused_at: T0 },
+      { id: 'z1', paused_at: null },
+    ]);
+    expect(await reconcilePlans(env, T0)).toBe(0);
+  });
 });
 
 describe('a plan given by hand', () => {

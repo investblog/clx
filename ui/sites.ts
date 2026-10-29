@@ -14,6 +14,9 @@ export interface Site {
   id: string;
   account_id: string;
   host: string;
+  /** external — not on Cloudflare, counted on `collector_host` (§5) */
+  kind: 'zone' | 'external';
+  collector_host: string | null;
   state: string;
   path: string;
   snippet: { inline: string; script_tag: string } | null;
@@ -32,29 +35,63 @@ const siteBadge = (s: Site) => badge((t.sites.state as Record<string, string>)[s
 const paths = (text: string) => [...new Set(text.split(/[\s,]+/u).filter(Boolean))];
 const usable = (a: Account) => a.state === 'ready' || a.state === 'no_connection';
 
-/** Adding a site: the account, the host from its zones, the paths not to count. */
+/** Adding a site: the account, the host from its zones — or, on Pro, a host off Cloudflare and the
+ *  collector host it is counted on (§5) — and the paths not to count. */
 function newSiteDrawer(me: Me, accounts: Account[], go: (hash: string) => void): void {
   const c = t.sites;
   openDrawer(c.add, (close) => {
     const account = dropdown(
       accounts.map((a) => ({ value: a.id, label: a.name ?? a.cf_account_id })),
-      { id: 'site-account', onChange: () => zones.refresh() },
+      { id: 'site-account', onChange: () => (zones.refresh(), collectors.refresh(), (collector.value = ''), suggest()) },
     );
     const host = h('input', { class: 'input', id: 'site-host', required: '', placeholder: c.hostPlaceholder, autocomplete: 'off', spellcheck: 'false' });
     const zones = zoneHost(host, account.value);
+    const zoneField = h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-host' }, c.host), zones.el, h('p', { class: 'field-hint' }, c.hostHint));
+    // An external site: its host is in no zone, its collector host is (zoneHost's own check).
+    const outside = h('input', { class: 'input', id: 'site-external-host', placeholder: c.externalPlaceholder, autocomplete: 'off', spellcheck: 'false' });
+    const collector = h('input', { class: 'input', id: 'site-collector', placeholder: c.hostPlaceholder, autocomplete: 'off', spellcheck: 'false' });
+    const collectors = zoneHost(collector, account.value);
+    const externalFields = h(
+      'div',
+      { class: 'stack stack--md', hidden: '' },
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-external-host' }, c.externalHost), outside),
+      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-collector' }, c.collector), collectors.el, h('p', { class: 'field-hint' }, c.collectorHint)),
+    );
+    const pro = me.limits.external_sites > 0;
+    const external = h('input', { type: 'checkbox', id: 'site-external', ...(pro ? {} : { disabled: '' }) });
+    // The collector suggested: the host of an active site of the account, if it has one.
+    const suggest = () => {
+      if (!external.checked || collector.value) return;
+      const id = account.value();
+      void call<{ sites: Site[] }>('GET', `/v1/sites?account_id=${encodeURIComponent(id)}`)
+        .then((r) => {
+          const site = r.sites.find((s) => s.kind === 'zone' && s.state === 'active');
+          if (site && account.value() === id && !collector.value) collector.value = site.host;
+        })
+        .catch(() => undefined);
+    };
+    external.addEventListener('change', () => {
+      zoneField.hidden = external.checked;
+      externalFields.hidden = !external.checked;
+      suggest();
+    });
     const excluded = h('input', { class: 'input', id: 'site-excluded', placeholder: '/admin, /preview', autocomplete: 'off', spellcheck: 'false' });
     return h(
       'div',
       { class: 'stack stack--md' },
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-account' }, c.account), account.el),
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-host' }, c.host), zones.el, h('p', { class: 'field-hint' }, c.hostHint)),
+      h('div', { class: 'field' }, h('label', { class: 'check', for: 'site-external' }, external, ` ${c.external}`), h('p', { class: 'field-hint' }, pro ? c.externalHint : c.externalPro)),
+      zoneField,
+      externalFields,
       h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'site-excluded' }, c.excluded), excluded, h('p', { class: 'field-hint' }, c.excludedHint)),
       h(
         'div',
         { class: 'actions' },
         action(c.add, 'btn--primary', async (key) => {
-          if (!host.value.trim()) throw new ApiError(400, 'invalid_request', c.needHost);
-          const r = await call<{ site: Site }>('POST', '/v1/sites', { account_id: account.value(), host: host.value.trim(), excluded_paths: paths(excluded.value) }, key);
+          const name = (external.checked ? outside : host).value.trim();
+          if (!name) throw new ApiError(400, 'invalid_request', c.needHost);
+          if (external.checked && !collector.value.trim()) throw new ApiError(400, 'invalid_request', c.needCollector);
+          const r = await call<{ site: Site }>('POST', '/v1/sites', { account_id: account.value(), host: name, ...(external.checked ? { collector_host: collector.value.trim() } : {}), excluded_paths: paths(excluded.value) }, key);
           close();
           go(`#/sites/${r.site.id}`);
         }),
@@ -111,7 +148,8 @@ function snippetCard(s: Site): HTMLElement {
   const c = t.sites;
   if (!s.snippet) return h('section', { class: 'card' }, h('h3', { class: 'h4' }, c.snippet), h('p', { class: 'muted' }, c.snippetLater));
   const block = (title: string, hint: string, code: string) => h('div', { class: 'stack stack--sm secret-card' }, h('strong', {}, title), h('p', { class: 'muted text-sm' }, hint), codeBlock(code, c.copySnippet));
-  return h('section', { class: 'card stack stack--md' }, h('h3', { class: 'h4' }, c.snippet), h('p', {}, c.snippetHow), block(c.inline, c.inlineHint, s.snippet.inline), block(c.file, c.fileHint, s.snippet.script_tag));
+  const how = s.collector_host ? c.snippetHowExternal(s.collector_host) : c.snippetHow;
+  return h('section', { class: 'card stack stack--md' }, h('h3', { class: 'h4' }, c.snippet), h('p', {}, how), block(c.inline, c.inlineHint, s.snippet.inline), block(c.file, c.fileHint, s.snippet.script_tag));
 }
 
 /** Editing what can change: the paths not to count. */
@@ -170,14 +208,16 @@ export async function sitePage(id: string, live: Live, redraw: (message?: string
           { class: 'card stack stack--sm' },
           h('h3', { class: 'h4' }, c.settings),
           h('p', { class: 'muted text-sm' }, c.path(s.path, when(s.created_at))),
+          s.collector_host ? h('p', { class: 'muted text-sm' }, c.collectorAt(s.collector_host)) : null,
           s.excluded_paths.length ? h('p', { class: 'muted text-sm' }, `${c.excludedNow}: ${s.excluded_paths.join(', ')}`) : null,
           s.retiring.length ? h('p', { class: 'muted text-sm' }, c.retiring(s.retiring.map((r) => c.until(r.path, when(r.until))).join(', '))) : null,
-          // Rotation needs a working route (the API answers site_not_active otherwise).
-          s.state === 'active' ? h('p', { class: 'muted text-sm' }, c.rotateHint) : null,
+          // Rotation needs a working route (the API answers site_not_active otherwise); an external
+          // site keeps its path for life (§5).
+          s.state === 'active' && s.kind === 'zone' ? h('p', { class: 'muted text-sm' }, c.rotateHint) : null,
           h(
             'div',
             { class: 'actions' },
-            s.state === 'active'
+            s.state === 'active' && s.kind === 'zone'
               ? confirmAction(
                   c.rotate,
                   { title: c.rotate, body: c.rotateAsk, confirmLabel: c.rotateConfirm },

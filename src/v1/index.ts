@@ -103,7 +103,7 @@ v1.get(
       .first<{ cf_accounts: number; api_keys: number }>();
     // snake_case, as `use` and the rest of /v1 (the table in src/limits.ts is camelCase).
     const l = LIMITS[planOf(p.plan)];
-    const limits = { cf_accounts: l.cfAccounts, sites: l.sites, links: l.links, rules_per_link: l.rulesPerLink, api_keys: l.apiKeys };
+    const limits = { cf_accounts: l.cfAccounts, sites: l.sites, external_sites: l.externalSites, links: l.links, rules_per_link: l.rulesPerLink, api_keys: l.apiKeys };
     // The Telegram linked to the account (§17): the app shows it and unlinks it.
     const tg = await c.env.DB.prepare('SELECT tg_user_id, username, linked_at FROM tg_identities WHERE user_id = ?').bind(p.userId).first<{ tg_user_id: number; username: string | null; linked_at: number }>();
     const telegram = tg ? { id: tg.tg_user_id, username: tg.username, linked_at: new Date(tg.linked_at).toISOString() } : null;
@@ -478,10 +478,14 @@ v1.post(
     const accountId = typeof body.account_id === 'string' ? body.account_id : '';
     const host = typeof body.host === 'string' ? body.host.trim().toLowerCase().replace(/\.$/u, '') : '';
     if (!validHost(host)) fail(400, 'invalid_request', '"host" must be a host name such as example.com.', { field: 'host' });
+    // An external site (§5, ADR 0037): its route on this host of the account's zones.
+    const collector = body.collector_host === undefined || body.collector_host === null ? undefined : typeof body.collector_host === 'string' ? body.collector_host.trim().toLowerCase().replace(/\.$/u, '') : '';
+    if (collector !== undefined && !validHost(collector)) fail(400, 'invalid_request', '"collector_host" must be a host name such as example.com.', { field: 'collector_host' });
+    if (collector === host) fail(400, 'invalid_request', '"collector_host" must be another host than the site\'s.', { field: 'collector_host' });
     const excluded = excludedOf(body.excluded_paths);
     const edge = await c.env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ? AND user_id = ?').bind(accountId, p.userId).first<EdgeAccount>();
     if (!edge || !mayTouch(p, edge.cf_account_id)) return fail(404, 'not_found', 'No such account.', { field: 'account_id' });
-    const site = await addSite(c.env, p, edge, host, excluded);
+    const site = await addSite(c.env, p, edge, host, excluded, collector);
     sync(c, p, edge.id);
     return { status: 202, body: { site: siteView(site, edge.synced_revision) } };
   }),

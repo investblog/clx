@@ -113,6 +113,37 @@ export async function collect(db: D1Database, request: Request, body: string, ho
 }
 
 /**
+ * The `Origin` of a beacon to an external site (§5, ADR 0037), if its page may send: `http` or
+ * `https`, no port but the scheme's own, its host name one of the site's `origins`. Returned as
+ * sent, for `access-control-allow-origin`; null drops the beacon.
+ */
+export function allowedOrigin(request: Request, site: SiteConfig): string | null {
+  const origin = request.headers.get('origin');
+  if (!origin) return null;
+  try {
+    const u = new URL(origin);
+    return (u.protocol === 'https:' || u.protocol === 'http:') && !u.port && origin === u.origin && site.origins?.includes(u.hostname) ? origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Counts one beacon to an external site, its `Origin` already allowed (`allowedOrigin`, whose host
+ * name is `host`). The page comes from the body — a cross-site `Referer` carries only the origin:
+ * the path on the first line, the referrer on the second.
+ */
+export async function collectExternal(db: D1Database, request: Request, body: string, host: string, site: SiteConfig, now: number): Promise<'view' | 'bot' | 'dropped'> {
+  if (!/^text\/plain\b/iu.test(request.headers.get('content-type') ?? '')) return 'dropped';
+  const [first = '', second = ''] = body.split('\n');
+  const pathname = /^\/[^\s?#]*$/u.test(first) ? first : '';
+  if (pathname && site.excluded.some((p) => pathname.startsWith(p))) return 'dropped';
+  const ref = second.match(/^https?:\/\/[^\s"'<>\\]+/u)?.[0];
+  const refHost = ref ? (hostOf(ref) ?? '') : '';
+  return count(db, request, site.t, pageOf(pathname), refHost && bare(refHost) !== bare(host) ? bare(refHost) : '', now);
+}
+
+/**
  * Counts a click on a short link (§6) as a view of its target; its page is where the click was sent
  * (`to`, already as `destinationOf` records it), so a report can show which rule took which traffic. While the
  * rules stay the same it adds no row: the address follows from the country and the device, already in

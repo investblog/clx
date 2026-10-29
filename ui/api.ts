@@ -87,7 +87,7 @@ export async function text(path: string): Promise<string> {
 export interface Me {
   user: { id: number; email: string; email_confirmed: boolean; locale: string };
   plan: 'free' | 'api';
-  limits: { cf_accounts: number; sites: number; links: number; rules_per_link: number; api_keys: number };
+  limits: { cf_accounts: number; sites: number; external_sites: number; links: number; rules_per_link: number; api_keys: number };
   use: { cf_accounts: number; api_keys: number };
   telegram: { id: number; username: string | null; linked_at: string } | null;
 }

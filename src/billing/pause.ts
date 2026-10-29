@@ -1,8 +1,8 @@
 // The plan a user is on, and what of theirs works on it (docs/spec.md §18, ADR 0034). On `free`
 // what is beyond free's limits is paused — chosen top down, so what is kept can work: the oldest
 // Cloudflare account in service, then the oldest sites and links of that account, and the oldest
-// key. A paused site's or link's config row is withdrawn by the next sync (src/cf/sites.ts), a
-// paused key is refused (src/v1/auth.ts). Pro clears every pause.
+// key; external sites are Pro only. A paused site's or link's config row is withdrawn by the next
+// sync (src/cf/sites.ts), a paused key is refused (src/v1/auth.ts). Pro clears every pause.
 import { LIMITS } from '../limits';
 
 interface Row {
@@ -31,6 +31,7 @@ export async function reconcilePlans(env: { DB: D1Database }, now = Date.now()):
          OR (u.plan = 'free' AND (
            (SELECT count(*) FROM edge_accounts WHERE user_id = u.id AND state != 'pending' AND paused_at IS NULL) > ?1
            OR (SELECT count(*) FROM sites WHERE user_id = u.id AND state != 'deleted' AND paused_at IS NULL) > ?2
+           OR EXISTS (SELECT 1 FROM sites WHERE user_id = u.id AND state != 'deleted' AND paused_at IS NULL AND kind = 'external')
            OR (SELECT count(*) FROM links WHERE user_id = u.id AND state != 'deleted' AND paused_at IS NULL) > ?3
            OR (SELECT count(*) FROM api_keys WHERE user_id = u.id AND revoked_at IS NULL AND paused_at IS NULL) > ?4))
          OR (u.plan = 'api' AND (
@@ -86,11 +87,12 @@ export async function applyPlan(env: { DB: D1Database }, userId: number, now = D
   const free = LIMITS.free;
   const kept = plan === 'api' ? null : (accounts.find((a) => a.state === 'ready' || a.state === 'no_connection') ?? accounts[0])?.id;
   for (const a of accounts) {
-    const sites = (await db.prepare("SELECT id, paused_at FROM sites WHERE account_id = ? AND state != 'deleted' ORDER BY created_at, id").bind(a.id).all<Row>()).results;
+    const sites = (await db.prepare("SELECT id, paused_at, kind FROM sites WHERE account_id = ? AND state != 'deleted' ORDER BY created_at, id").bind(a.id).all<Row & { kind: string }>()).results;
     const links = (await db.prepare("SELECT id, paused_at FROM links WHERE account_id = ? AND state != 'deleted' ORDER BY created_at, id").bind(a.id).all<Row>()).results;
     const all = (rows: Row[]) => new Set(rows.map((r) => r.id));
     const first = (rows: Row[], n: number) => new Set(rows.slice(0, n).map((r) => r.id));
-    const keepSites = plan === 'api' ? all(sites) : a.id === kept ? first(sites, free.sites) : new Set<string>();
+    // External sites are Pro only (§5): free keeps zone sites alone.
+    const keepSites = plan === 'api' ? all(sites) : a.id === kept ? first(sites.filter((s) => s.kind !== 'external'), free.sites) : new Set<string>();
     const keepLinks = plan === 'api' ? all(links) : a.id === kept ? first(links, free.links) : new Set<string>();
     const accountPaused = plan === 'free' && a.id !== kept;
     const s = changes(sites, keepSites);

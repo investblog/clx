@@ -1,11 +1,12 @@
 // clx-edge — the worker clx installs into a user's Cloudflare account (docs/spec.md §4, §5). One
 // bundle for everyone; a deployment's own settings come in bindings, the sites in the synced config
-// (§6). It answers only its own paths — a site's script and collector, and the short links of the
+// (§6). It answers only its own paths — a site's script and collector (an external site's on its
+// collector host), and the short links of the
 // account's link hosts — and passes every other request through to the origin, so a probe under a
 // site's path gets the site's own answer. While
 // clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
-import { bodyHead, click, collect, countryOf } from './collect';
-import { CODE, destinationOf, deviceOf, linkHostKey, linkKey, SELF_CHECK_CRON, siteKey, WORKING_CRON, type LinkConfig, type SiteConfig } from './contract';
+import { allowedOrigin, bodyHead, click, collect, collectExternal, countryOf } from './collect';
+import { CODE, destinationOf, deviceOf, extKey, linkHostKey, linkKey, SELF_CHECK_CRON, siteKey, WORKING_CRON, type LinkConfig, type SiteConfig } from './contract';
 import { hourly } from './cron';
 
 interface Env {
@@ -52,6 +53,32 @@ function destination(link: LinkConfig, request: Request): { url: string; rule?: 
   return rule ? { url: rule.url, rule } : { url: link.url };
 }
 
+/** A site's script or collector at this address, or null when the path is none of its own. An
+ *  external site's collector answers CORS: its allowed `Origin` comes back in the answer. */
+async function serve(request: Request, url: URL, env: Env, ctx: ExecutionContext, site: SiteConfig, now: number): Promise<Response | null> {
+  for (const p of site.paths) {
+    if (p.until && now > p.until) continue;
+    if (url.pathname === `${p.path}/${p.s}.js` && (request.method === 'GET' || request.method === 'HEAD'))
+      // The cache headers of an ordinary static file, nothing of clx (§5).
+      return new Response(request.method === 'HEAD' ? null : p.script, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
+    if (url.pathname === `${p.path}/${p.c}` && request.method === 'POST') {
+      // The body is read before answering; counting goes on after. The answer is the same
+      // whether the beacon was counted, dropped or failed — but for an external site's allowed
+      // `Origin`, which the browser needs back.
+      const body = await bodyHead(request).catch(() => '');
+      if (!site.origins) {
+        ctx.waitUntil(collect(env.DB, request, body, url.hostname, site, now).catch(() => undefined));
+        return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+      }
+      const origin = allowedOrigin(request, site);
+      if (!origin) return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+      ctx.waitUntil(collectExternal(env.DB, request, body, new URL(origin).hostname, site, now).catch(() => undefined));
+      return new Response(null, { status: 204, headers: { 'cache-control': 'no-store', 'access-control-allow-origin': origin } });
+    }
+  }
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -60,21 +87,22 @@ export default {
     // Unreadable config: behave as if the path were not ours.
     const site = await configFor<SiteConfig>(env, siteKey(url.hostname)).catch(() => null);
     const now = Date.now();
-    for (const p of site?.paths ?? []) {
-      if (p.until && now > p.until) continue;
-      if (url.pathname === `${p.path}/${p.s}.js` && (request.method === 'GET' || request.method === 'HEAD'))
-        // The cache headers of an ordinary static file, nothing of clx (§5).
-        return new Response(request.method === 'HEAD' ? null : p.script, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
-      if (url.pathname === `${p.path}/${p.c}` && request.method === 'POST') {
-        // The body is read before answering; counting goes on after. The answer is the same
-        // whether the beacon was counted, dropped or failed.
-        const body = await bodyHead(request).catch(() => '');
-        ctx.waitUntil(collect(env.DB, request, body, url.hostname, site!, now).catch(() => undefined));
-        return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
-      }
-    }
+    const own = site && (await serve(request, url, env, ctx, site, now));
+    if (own) return own;
     // A link host is the worker's custom domain and has no origin behind it: nothing passes through.
     const linkHost = await configFor<object>(env, linkHostKey(url.hostname)).catch(() => undefined);
+    // An external site on this collector host (§5, ADR 0037) — a host known to be no link host
+    // (unreadable is not known): by the first two segments of the path, then the first. Its script
+    // and collector are a name under its path, so a request of one segment (a link's code) reads
+    // nothing more.
+    const segments = url.pathname.split('/').slice(1);
+    if (linkHost === null)
+      for (const path of [segments.length >= 3 ? `/${segments[0]}/${segments[1]}` : null, segments.length >= 2 ? `/${segments[0]}` : null]) {
+        if (!path) continue;
+        const ext = await configFor<SiteConfig>(env, extKey(url.hostname, path)).catch(() => null);
+        const answer = ext && (await serve(request, url, env, ctx, ext, now));
+        if (answer) return answer;
+      }
     // Unreadable (D1 down, the daily reads used up): what could be a link's address is told to try
     // again later (§8) — passed through, it would get only Cloudflare's error. A site's own requests
     // never look like one: its route is `<host>/<path>/*`, two segments at least.

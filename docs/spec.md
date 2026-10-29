@@ -341,11 +341,14 @@ Why:
   - **one path for life**: it is not rotated (`400 invalid_request`) — its config key is its path,
     and a rotation would leave retired keys an incremental sync cannot withdraw. A site on a blocker
     list is deleted and added again;
-  - its path never meets another on the collector host: every new seed on a host — a new site of
-    either kind, a zone site's rotation — is drawn and recorded **under the account's lease**,
-    checked against every path the account's sites hold on that host (external sites' and the zone
-    site's current, rotating and retiring ones), and drawn again on a match; so `ensureRoute` never
-    adopts another site's route as its own;
+  - its path never meets another on the collector host (two paths meet when one is the other or lies
+    under it), checked **under the account's lease** against every path the account's sites hold on
+    that host (external sites' and the zone site's current, rotating and retiring ones), so
+    `ensureRoute` never adopts another site's route as its own. An external site's seed is drawn and
+    recorded under the lease when it is added (another operation holding it → `409
+    operation_in_progress`) and never drawn again; a zone site's is checked under the lease before
+    its route is made and drawn again on a match while it is still `route_pending` (its config is
+    keyed by its host, so the worker simply gets the new path); a rotation draws under the lease;
   - its config is the key `ext:<collector host><path>` — target, names, script, excluded paths and
     `origins`: the host names allowed, its host with and without `www.` (§6); one key for the site's life, so a delete or a
     pause withdraws exactly it. The worker looks there when the request's host has no site path

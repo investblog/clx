@@ -105,32 +105,39 @@ function identifiers(r: Rand, n: number): string[] {
   return out;
 }
 
-/** The script for a site — the same bytes for the same seed and names. */
-export function scriptFor(seed: string, names: SiteNames): string {
+/**
+ * The script for a site — the same bytes for the same seed and names. An external site's
+ * (`collector`, §5, ADR 0037) sends to the collector host by a CORS `fetch`, so the browser always
+ * sends the page's real `Origin`; its body carries the page, which a cross-site `Referer` does not:
+ * the path, then on load the referrer on the second line.
+ */
+export function scriptFor(seed: string, names: SiteNames, collector?: string): string {
   const r = rand(`code:${seed}`);
   const [url, last, send, push, step, args, body] = identifiers(r, 7) as [string, string, string, string, string, string, string];
   const q = r.pick(['"', "'"]);
   const str = (s: string) => `${q}${s}${q}`;
-  const target = `${names.path}/${names.c}`;
+  const target = `${collector ? `https://${collector}` : ''}${names.path}/${names.c}`;
   const changed = r.pick([`location.href!=${last}`, `${last}!=location.href`]);
 
   const sender = r.pick([
     `${send}=${body}=>navigator.sendBeacon(${url},${body})`,
     `${send}=${body}=>fetch(${url},{${r.shuffle([`method:${str('POST')}`, `body:${body}`, 'keepalive:!0']).join(',')}})`,
   ]);
+  // Drawn only for an external site: a zone site's draws, and so its bytes, stay as they were.
+  const external = collector && `${send}=${body}=>fetch(${url},{${r.shuffle([`method:${str('POST')}`, `body:${body}`, 'keepalive:!0']).join(',')}}).catch(()=>0)`;
   const decls = r.shuffle([
     `${url}=${str(target)}`,
     `${last}=location.href`,
-    sender,
+    external || sender,
     `${push}=history.pushState`,
-    `${step}=()=>{${changed}&&(${last}=location.href,${send}(${str('')}))}`,
+    `${step}=()=>{${changed}&&(${last}=location.href,${send}(${collector ? 'location.pathname' : str('')}))}`,
   ]);
   const keyword = r.pick(['let', 'var']);
   const actions = r.shuffle([
     `history.pushState=(...${args})=>{${push}.apply(history,${args});${step}()}`,
     `addEventListener(${str('popstate')},${step})`,
   ]);
-  const first = `${send}(document.referrer)`;
+  const first = collector ? `${send}(location.pathname+${str('\\n')}+document.referrer)` : `${send}(document.referrer)`;
   const statements = r.int(2) ? [...actions, first] : [first, ...actions];
   const inner = `${keyword} ${decls.join(',')};${statements.join(';')}`;
   // `let` in a bare block is scoped to it; `var` needs a function around it.
@@ -143,12 +150,13 @@ export interface Snippet {
   script_tag: string;
 }
 
-/** What a site embeds: the code inline, or a tag that loads it from the worker (§5). */
-export function snippetFor(seed: string, names: SiteNames): Snippet {
+/** What a site embeds: the code inline, or a tag that loads it from the worker (§5) — on the
+ *  collector host for an external site. */
+export function snippetFor(seed: string, names: SiteNames, collector?: string): Snippet {
   const r = rand(`tag:${seed}`);
-  const src = `${names.path}/${names.s}.js`;
+  const src = `${collector ? `https://${collector}` : ''}${names.path}/${names.s}.js`;
   return {
-    inline: `<script>${scriptFor(seed, names)}</script>`,
+    inline: `<script>${scriptFor(seed, names, collector)}</script>`,
     script_tag: r.int(2) ? `<script defer src="${src}"></script>` : `<script src="${src}" defer></script>`,
   };
 }

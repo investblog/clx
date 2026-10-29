@@ -192,7 +192,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": []
   },
   "add_site": {
-    "description": "Add a site (scope sites) — the zone is found in the account, the route made, the config synced\n\nThe account must be `ready`. The answer carries the snippet at once; `config` turns\n`synced` once the worker has the site (seconds), and the counter answers from then on.",
+    "description": "Add a site (scope sites) — the zone is found in the account, the route made, the config synced\n\nThe account must be `ready`. The answer carries the snippet at once; `config` turns\n`synced` once the worker has the site (seconds), and the counter answers from then on.\n\nWith `collector_host` it is an external site — one not on Cloudflare (Pro only,\ndocs/spec.md §5): its `host` must be in no zone of the account (`invalid_request`), the\nroute is made on `collector_host`, a host of the account's zones that already answers\nthrough Cloudflare (clx makes no DNS record) and is no link host. Its snippet sends a CORS\nrequest to that host, so a page whose CSP limits `connect-src` (or `script-src`, for the\ntag) must allow it. `limit_reached` (limit 0) on free; `update_required` while the\naccount's clx-edge predates external sites; `operation_in_progress` while another\noperation holds the account.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -201,7 +201,11 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
         },
         "host": {
           "type": "string",
-          "description": "example.com or a subdomain of a zone in that account"
+          "description": "example.com or a subdomain of a zone in that account; with collector_host, a host in none"
+        },
+        "collector_host": {
+          "type": "string",
+          "description": "makes an external site: a host of a zone in that account, other than host"
         },
         "excluded_paths": {
           "type": "array",
@@ -229,6 +233,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": [
       "account_id",
       "host",
+      "collector_host",
       "excluded_paths"
     ]
   },
@@ -314,7 +319,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": []
   },
   "rotate_site": {
-    "description": "A new path, names and snippet (scope sites); the old path is counted for 30 more days",
+    "description": "A new path, names and snippet (scope sites); the old path is counted for 30 more days\n\nAn external site keeps its path for life (`invalid_request`).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -394,7 +399,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": []
   },
   "add_link_host": {
-    "description": "Add a link host (scope links) — one per site if wished; clx makes it a custom domain of clx-edge\n\n`{site_id}` makes `<label>.<site host>` (a leading `www.` dropped) with a random label of 3\ncharacters; `{account_id, host}` takes a host you name, in one of the account's zones. The\naccount must be `ready`. clx makes the host a Workers Custom Domain of clx-edge: Cloudflare\ncreates its DNS record and certificate, so you create no record. A host that already has a\nDNS record is never taken over: a random label is tried again with another, a named host\nends `conflict` (`dns_record_exists`). Answers `202`; poll GET until `state` is `active` and\n`config` is `synced` (usually seconds). Up to the plan's site limit per user.",
+    "description": "Add a link host (scope links) — one per site if wished; clx makes it a custom domain of clx-edge\n\n`{site_id}` makes `<label>.<site host>` (a leading `www.` dropped) with a random label of 3\ncharacters; `{account_id, host}` takes a host you name, in one of the account's zones. The\naccount must be `ready`. clx makes the host a Workers Custom Domain of clx-edge: Cloudflare\ncreates its DNS record and certificate, so you create no record. A host that already has a\nDNS record is never taken over: a random label is tried again with another, a named host\nends `conflict` (`dns_record_exists`). Answers `202`; poll GET until `state` is `active` and\n`config` is `synced` (usually seconds). Up to the plan's site limit per user. An external\nsite has no zone for `{site_id}` (`invalid_request`), and a site's host or collector host\ncannot be a link host.",
     "inputSchema": {
       "type": "object",
       "properties": {

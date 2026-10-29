@@ -2,9 +2,10 @@
 
 export type Plan = 'free' | 'api';
 
-export const LIMITS: Record<Plan, { cfAccounts: number; sites: number; links: number; rulesPerLink: number; apiKeys: number }> = {
-  free: { cfAccounts: 1, sites: 10, links: 200, rulesPerLink: 10, apiKeys: 1 },
-  api: { cfAccounts: 50, sites: 500, links: 10_000, rulesPerLink: 10, apiKeys: 5 },
+/** `externalSites` — of the sites, those off Cloudflare (§5, ADR 0037): Pro only. */
+export const LIMITS: Record<Plan, { cfAccounts: number; sites: number; externalSites: number; links: number; rulesPerLink: number; apiKeys: number }> = {
+  free: { cfAccounts: 1, sites: 10, externalSites: 0, links: 200, rulesPerLink: 10, apiKeys: 1 },
+  api: { cfAccounts: 50, sites: 500, externalSites: 500, links: 10_000, rulesPerLink: 10, apiKeys: 5 },
 };
 
 export const planOf = (plan: string): Plan => (plan === 'api' ? 'api' : 'free');

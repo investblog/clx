@@ -139,7 +139,7 @@ const randomLabel = () => [...crypto.getRandomValues(new Uint8Array(3))].map((b)
 async function free(db: D1Database, accountId: string, host: string, except = ''): Promise<boolean> {
   const taken = await db
     .prepare(
-      `SELECT EXISTS (SELECT 1 FROM sites WHERE host = ?2 AND state != 'deleted')
+      `SELECT EXISTS (SELECT 1 FROM sites WHERE coalesce(collector_host, host) = ?2 AND state != 'deleted')
          OR EXISTS (SELECT 1 FROM link_hosts WHERE host = ?2 AND (state != 'deleted' OR domain_id IS NOT NULL) AND id != ?3)
          OR ${POINTED('?1', '?2')} AS taken`,
     )
@@ -204,7 +204,7 @@ async function makeDomain(env: Env, edge: EdgeAccount, h: LinkHostRow, principal
       if (next) {
         const moved = await db
           // free() again, in the same statement: a site or a link may have taken the name meanwhile.
-          .prepare(`UPDATE link_hosts SET host = ?1, updated_at = ?2 WHERE id = ?3 AND state = 'pending' AND host = ?4 AND NOT EXISTS (SELECT 1 FROM sites WHERE host = ?1 AND state != 'deleted') AND NOT ${POINTED('?5', '?1')}`)
+          .prepare(`UPDATE link_hosts SET host = ?1, updated_at = ?2 WHERE id = ?3 AND state = 'pending' AND host = ?4 AND NOT EXISTS (SELECT 1 FROM sites WHERE coalesce(collector_host, host) = ?1 AND state != 'deleted') AND NOT ${POINTED('?5', '?1')}`)
           .bind(next, Date.now(), row.id, row.host, row.account_id)
           .run()
           .catch((e: unknown) => (String(e).includes('UNIQUE') ? null : Promise.reject(e)));
@@ -274,6 +274,8 @@ export async function addLinkHost(env: Env, p: Principal, edge: EdgeAccount, inp
   let zoneId: string;
   if (input.site) {
     if (input.site.state === 'deleted') fail(404, 'not_found', 'No such site.', { field: 'site_id' });
+    // Its host is in no zone of the account (§5): a link host is named with {account_id, host}.
+    if (input.site.kind === 'external') fail(400, 'invalid_request', 'An external site has no zone for a link host; name one with account_id and host.', { field: 'site_id' });
     refusePaused(input.site, 'site');
     const drawn = await freeRandom(db, edge.id, input.site.host.replace(/^www\./u, ''));
     if (!drawn) fail(409, 'operation_in_progress', 'No free name was drawn for the host; retry.');
@@ -282,9 +284,9 @@ export async function addLinkHost(env: Env, p: Principal, edge: EdgeAccount, inp
   } else {
     host = input.host ?? '';
     if (!validHost(host)) fail(400, 'invalid_request', '"host" must be a host name such as k7q.example.com.', { field: 'host' });
-    // A site's host passes everything outside its counter through to the site; a link host passes
-    // nothing. One host cannot be both.
-    if (await db.prepare("SELECT 1 FROM sites WHERE host = ? AND state != 'deleted'").bind(host).first()) fail(409, 'invalid_request', `${host} is a site; a link host must be a host of its own.`, { field: 'host' });
+    // A site's route host — its own, or an external site's collector host (§5) — passes everything
+    // outside its counter through; a link host passes nothing. One host cannot be both.
+    if (await db.prepare("SELECT 1 FROM sites WHERE coalesce(collector_host, host) = ? AND state != 'deleted'").bind(host).first()) fail(409, 'invalid_request', `${host} is a site's host; a link host must be a host of its own.`, { field: 'host' });
     // A rule's URL is stored as its href: the host is followed by "/" or ":" (a port).
     const pointing = await db
       .prepare("SELECT count(*) AS n FROM links WHERE account_id = ?1 AND state != 'deleted' AND (url_host = ?2 OR instr(rules, ?3) > 0 OR instr(rules, ?4) > 0)")
@@ -308,7 +310,7 @@ export async function addLinkHost(env: Env, p: Principal, edge: EdgeAccount, inp
         .bind(edge.id, p.userId, limit, input.site?.id ?? null),
       db
         .prepare(
-          `INSERT INTO link_hosts (id, account_id, site_id, host, zone_id, state, revision, created_at, updated_at) SELECT ?1, ?2, ?3, ?4, ?5, 'pending', (SELECT config_revision FROM edge_accounts WHERE id = ?2), ?6, ?6 WHERE changes() = 1 AND NOT EXISTS (SELECT 1 FROM sites WHERE host = ?4 AND state != 'deleted') AND NOT ${POINTED('?2', '?4')}`,
+          `INSERT INTO link_hosts (id, account_id, site_id, host, zone_id, state, revision, created_at, updated_at) SELECT ?1, ?2, ?3, ?4, ?5, 'pending', (SELECT config_revision FROM edge_accounts WHERE id = ?2), ?6, ?6 WHERE changes() = 1 AND NOT EXISTS (SELECT 1 FROM sites WHERE coalesce(collector_host, host) = ?4 AND state != 'deleted') AND NOT ${POINTED('?2', '?4')}`,
         )
         .bind(id, edge.id, input.site?.id ?? null, host, zoneId, now),
     ]);
