@@ -1,6 +1,6 @@
 ---
 title: clx — spec of the open visit counter and short links
-updated: 2026-10-23
+updated: 2026-10-30
 ---
 
 # clx v2 spec: an open visit counter and short links on users' own workers
@@ -22,17 +22,21 @@ clx is a free, open service for site owners on Cloudflare:
   bots.
 
 In scope: signing up on clx.cx, connecting one's own Cloudflare account, deploying a worker into that
-account, summary totals on clx.cx, details read from the user's database on demand.
+account, summary totals on clx.cx, details read from the user's database on demand. On Pro, also
+**external sites** — sites not on Cloudflare, counted by the same worker on a host of the user's
+zone (§5, [ADR 0037](./decisions/0037-external-sites.md)), so all of one's sites share one dashboard.
 
 Out of scope:
-- sites not on Cloudflare, and links without one's own domain (clx.cx carries no user traffic);
+- a Cloudflare account with no zone, and links without one's own domain (clx.cx carries no user
+  traffic);
 - events, goals, funnels, raw visit logs, per-visitor exports;
 - subscriptions renewed by a processor, cards, taxes: the paid plan is paid from a prepaid balance
   topped up by crypto or Telegram Stars (§18, [ADR 0034](./decisions/0034-pro-for-a-balance.md)).
 
 Integrators — for example a site generator — work through the **management API** (§15): connect a
 customer's Cloudflare account, add a site, get a counter snippet that works on the site's own domain
-and shares nothing visible with the integrator's other sites (§5), embed it at build time.
+and shares nothing visible with the integrator's other sites (§5; zone sites only — an external
+site's snippet names its collector host), embed it at build time.
 
 The code is AGPL-3.0 in a public repository; anyone can run their own clx.
 
@@ -269,7 +273,8 @@ Why:
     `cache-control: no-store`; the script is served as `text/javascript` with the cache headers of an
     ordinary static file; **every other request under `<path>/`** — another method, a probe, a typo —
     is passed through to the origin, so it gets the site's own answer (its own 404);
-  - the beacon goes to the site's own host — no third-party host in the page;
+  - the beacon goes to the site's own host — no third-party host in the page (an external site,
+    below, is the exception);
   - what remains, stated plainly: an active observer can still see the *behaviour* — a same-origin
     POST of the referrer on every page view answered with an empty `204` — and Cloudflare's own
     headers and timing are the same as on any Cloudflare site. Hiding from Cloudflare or from whoever
@@ -325,6 +330,49 @@ Why:
     go to `(other)`; totals stay exact);
   - IP, UA and body are written neither to the database nor to the log (`console.*`);
   - the answer to a `POST` is always `204 no-store`, whether the beacon was counted or dropped.
+- **External sites** (Pro, [ADR 0037](./decisions/0037-external-sites.md)) — a site added with a
+  `collector_host`, whose own host is in no zone of the account (`kind: external`; the others are
+  `zone`; a host that is in one must be added without `collector_host`, as a zone site):
+  - its beacons go to the **collector host**: a host in a zone of the same account that already
+    answers through Cloudflare (proxied) — clx makes no DNS record; the page suggests the host of an
+    active site in that account. Never a link host, and a link host is never a collector (a link
+    host passes nothing through). Its own seed gives a route `<collector host>/<path>/*`, made and
+    removed as any site's, on the collector host's zone;
+  - **one path for life**: it is not rotated (`400 invalid_request`) — its config key is its path,
+    and a rotation would leave retired keys an incremental sync cannot withdraw. A site on a blocker
+    list is deleted and added again;
+  - its path never meets another on the collector host: every new seed on a host — a new site of
+    either kind, a zone site's rotation — is drawn and recorded **under the account's lease**,
+    checked against every path the account's sites hold on that host (external sites' and the zone
+    site's current, rotating and retiring ones), and drawn again on a match; so `ensureRoute` never
+    adopts another site's route as its own;
+  - its config is the key `ext:<collector host><path>` — target, names, script, excluded paths and
+    `origins`: the host names allowed, its host with and without `www.` (§6); one key for the site's life, so a delete or a
+    pause withdraws exactly it. The worker looks there when the request's host has no site path
+    that matches, by the first two segments of the path, then by the first;
+  - its collector answers CORS: the snippet sends a simple `POST` (`fetch`, `keepalive`,
+    `text/plain`, mode `cors`), for which the browser always sends the page's real `Origin` (a
+    no-cors one may carry `null` under a strict `Referrer-Policy`). `Origin` must parse as
+    `http://` or `https://` with no port other than the scheme's own, its host name (lower case) in
+    `origins`: then `204 no-store` with `access-control-allow-origin` set to the `Origin` exactly as
+    sent; without one, `null`
+    (a sandboxed document) or another, the beacon is dropped and the `204` has no such header. A
+    cross-site `Referer` carries only the origin, so the body says the page: the first line is
+    `location.pathname`, the second `document.referrer` (an SPA change sends the path alone). The
+    page and the source are cut as above; the rest is the common count. IP and country are the
+    visitor's — the browser reaches Cloudflare directly;
+  - its snippet comes from the same generator with the absolute address `https://<collector
+    host><path>/<c>`, or as `<script src="https://<collector host><path>/<s>.js">`; no `<img>`
+    pixel. A page whose CSP limits `connect-src` (and `script-src`, for the tag) must allow the
+    collector host — the page says so;
+  - **the footprint promise does not hold**: the page carries the address of another host — the
+    user's own, not the page's — and an integrator's external sites on one collector share it. Said
+    so on the page and on the site;
+  - hosts: a live zone site's host stays unique across clx; a user holds a host once, as a zone or
+    an external site; an external site reserves its host for no one else (owning a host off
+    Cloudflare cannot be shown, and counts come only from pages that carry the snippet);
+  - it needs a bundle that serves `ext:` — at or after the first such in `edge/released.json`; an
+    account on an older one is refused `409 update_required` until its update (ADR 0032).
 - **Bots** — the classifier `src/bots.ts` (UA signatures, `headless`). `request.cf.botManagement`
   is empty without paid Bot Management (docs `workers/runtime-apis/request`, 04.10.2026) — not
   used. Bots are counted separately.
@@ -422,7 +470,8 @@ Why:
   log**, and a change costs writes only for what changed:
   - every sync has a `revision` (a growing per-account number that clx.cx issues in the same
     transaction as the change) and a random `sync_id`. It writes **new rows only** —
-    `cfg(key, revision, sync_id, deleted, data)`, where `key` is a site host or a link code and a
+    `cfg(key, revision, sync_id, deleted, data)`, where `key` is a site host (an external site's
+    collector host and path, §5) or a link code and a
     deletion is a row with `deleted = 1` — and never touches existing rows;
   - the sync becomes visible in one statement, which is atomic on its own:
     `INSERT INTO commits (revision, sync_id) SELECT R', U WHERE (SELECT max(revision) FROM commits)
@@ -694,6 +743,7 @@ were written before the pause, so the write budget counts only what is live.
 |---|---|---|
 | Cloudflare accounts | 1 | 50 |
 | sites | 10 | 500 |
+| of them external (§5) | 0 | all |
 | links | 200 | 10,000 |
 | rules per link | 10 | 10 |
 | totals writes on clx.cx a day | 3,000 | 3,000 + 110 per site + 3 per link |
@@ -760,7 +810,9 @@ Pages:
 - **Sites:** add a site by its host, suggested from the account's zones as the reader types
   (`GET /v1/accounts/{id}/zones`; a host in none of them is flagged before sending) — clx.cx still
   finds the zone itself, as the API does ([ADR 0011](./decisions/0011-zone-picker.md)) — the
-  snippet, excluded paths, rotate, delete, route status. The list shows each site's views of the
+  snippet, excluded paths, rotate, delete, route status. A host in no zone is offered as an
+  external site (§5): on Pro, with a collector host picked from the account's zones (an active
+  site's host first) and the note that it must answer through Cloudflare; on `free`, a pointer to Pro. The list shows each site's views of the
   last 7 closed days as a sparkline that opens its report; a site whose counter has counted a view
   opens at its report, one still to install at its snippet (`views_7d`, `views_today`, `counted` of `GET /v1/sites`).
 - **Links:** the link hosts (one per site at a click), a list of links with 7-day clicks, create and edit, rules, QR (SVG).
@@ -890,6 +942,11 @@ stage.
    e-mail token is refused.
 7. **`@spintax/qr-svg`** (§11) — in parallel with 2–4. At stage 5 clx kept a copy of it in the
    repository (`src/qr/`); published 22.10.2026, clx takes it from npm (ADR 0033).
+8. **External sites** (§5, ADR 0037; after billing's stage 5, before its pages): `kind` and
+   `collector_host` on sites, the `ext:` config, the external collector and snippet, a bundle that
+   serves them, the page's choice. Check: on a test account a site whose host is in no zone, its
+   snippet on a page off Cloudflare (ru.clx.cx, GitHub Pages) in a real browser — `Origin` arrives,
+   no console error, two pages and two sources apart in the report; a foreign `Origin` is dropped.
 
 ## 15. Management API
 
@@ -953,7 +1010,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `route_not_ours`, `link_host_in_use`, `link_host_not_ready`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`, `paused`, `insufficient_balance`, `invoice_limit`, `payments_unavailable`, `balance_not_empty`, `below_minimum`, `invalid_address`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `update_required`, `route_not_ours`, `link_host_in_use`, `link_host_not_ready`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`, `paused`, `insufficient_balance`, `invoice_limit`, `payments_unavailable`, `balance_not_empty`, `below_minimum`, `invalid_address`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.
@@ -975,12 +1032,12 @@ that adds a site and embeds its counter at build time.
 | `POST /v1/accounts/{id}/token` `{bootstrap_token}` | renew the working token |
 | `POST /v1/accounts/{id}/install` | install `clx-edge` again — after a failed install, or a reinstall (§4) → `202` |
 | `DELETE /v1/accounts/{id}` | disconnect (§4) |
-| `POST /v1/sites` `{account_id, host, excluded_paths?}` | add a site: the zone is found in the account, the route is created → the site with its snippet |
-| `GET /v1/sites?account_id=`, `GET /v1/sites/{id}` | state (`route_pending`, `active`, `route_conflict`), `paused_at` (§18), `snippet: {inline, script_tag}` |
+| `POST /v1/sites` `{account_id, host, excluded_paths?, collector_host?}` | add a site: the zone is found in the account, the route is created → the site with its snippet. With `collector_host` it is an external site (§5, Pro; stage 8 — in `docs/openapi.yaml` with its code): the zone is the collector host's (`zone_not_found` names the field `collector_host`); a `host` in a zone of the account, or a `collector_host` that is a link host, is `400 invalid_request`; `403 limit_reached` on `free`, `409 update_required` on an older bundle |
+| `GET /v1/sites?account_id=`, `GET /v1/sites/{id}` | `kind` (`zone`, `external`) and `collector_host` (null for `zone`) from stage 8, state (`route_pending`, `active`, `route_conflict`), `paused_at` (§18), `snippet: {inline, script_tag}` |
 | `PATCH /v1/sites/{id}` | excluded paths |
-| `POST /v1/sites/{id}/rotate` | a new seed → new `<path>`, names and snippet (§5); the old path counts for 30 more days |
+| `POST /v1/sites/{id}/rotate` | a new seed → new `<path>`, names and snippet (§5); the old path counts for 30 more days. An external site is not rotated (`400 invalid_request`) |
 | `DELETE /v1/sites/{id}` | remove the route; totals stay until the account is disconnected |
-| `POST /v1/link-hosts` `{site_id}` or `{account_id, host}`, `GET /v1/link-hosts?account_id=`, `GET`/`DELETE /v1/link-hosts/{id}` | link hosts, one per site if wished (§6) → `202`, poll `GET` until `active` and `synced` |
+| `POST /v1/link-hosts` `{site_id}` or `{account_id, host}`, `GET /v1/link-hosts?account_id=`, `GET`/`DELETE /v1/link-hosts/{id}` | link hosts, one per site if wished (§6) → `202`, poll `GET` until `active` and `synced`; `{site_id}` of an external site is `400 invalid_request` (its host is in no zone), and a site's collector host cannot be a link host |
 | `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6); `paused_at` (§18) |
 | `GET /v1/links/{id}/qr.svg` | the QR code |
 | `GET /v1/sites/{id}/report?period=`, `GET /v1/links/{id}/report?period=` | totals and series; `&breakdowns=1` adds the breakdowns (§7) |
@@ -1240,7 +1297,7 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   itself. "Paid through" is the last day of the unbroken run of paid days from the start.
 - **Pause on `free`** (ADR 0034). Moving to `free` keeps working, chosen top down so that what is
   kept can work: the oldest Cloudflare account in service (else the oldest), then the 10 oldest
-  sites of that account, then the 200 oldest links on its link hosts, and the oldest API key; the
+  zone sites of that account (external sites are Pro only: every one is paused, §5), then the 200 oldest links on its link hosts, and the oldest API key; the
   rest get `paused_at`. A paused site's
   and a paused link's config rows are withdrawn by the next sync (§6, as for a deleted one; the route
   and the link host stay), so the site's paths pass through to the origin and nothing counts, and

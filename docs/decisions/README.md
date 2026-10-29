@@ -42,3 +42,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0034](./0034-pro-for-a-balance.md) | Pro is $9 for 30 days, paid from a prepaid balance charged by the day; what is beyond free is paused without it (supersedes 0014's pricing) | 23.10.2026 | §1, §8, §9, §15, §18 |
 | [0035](./0035-crypto-on-the-site-stars-in-the-bot.md) | Top-ups by crypto on the site (Trybit) and by Telegram Stars in the bot | 23.10.2026 | §15, §17, §18 |
 | [0036](./0036-partners.md) | Partners get 30% of their referrals' top-ups, for life, one level | 23.10.2026 | §9, §15, §17, §19 |
+| [0037](./0037-external-sites.md) | External sites: a site not on Cloudflare counted by the user's own clx-edge on a host of their zone, Pro only | 30.10.2026 | §1, §5, §6, §8, §14, §15, §16, §18 |
