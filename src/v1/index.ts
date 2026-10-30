@@ -21,7 +21,7 @@ import { balanceOf, DAY_PRICE, GRACE_MS, isoDay, openPeriod, paidThrough, PRO_PR
 import { markReplan, resumeNext } from '../billing/pause';
 import { createCrypto, invoiceView, type InvoiceRow } from '../billing/invoices';
 import { createStars } from '../billing/stars';
-import { refundView, requestRefund, type RefundRow } from '../billing/refunds';
+import { refundable, refundView, requestRefund, type RefundRow } from '../billing/refunds';
 import { partnerView, requestPayout, transfer } from '../partners/wallet';
 import { RATE_BP } from '../partners/accrue';
 
@@ -770,6 +770,9 @@ async function billingView(db: D1Database, userId: number) {
       .bind(userId)
       .all<{ id: number; type: string; amount: number; day: number | null; invoice_id: string | null; note: string | null; created_at: number }>()
   ).results;
+  const invoices = (await db.prepare('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<InvoiceRow>()).results;
+  // What the page may offer to refund: the request's own rule (§18).
+  const left = await refundable(db, userId, invoices.map((i) => i.id));
   return {
     balance_micro_usd: await balanceOf(db, userId),
     pro: {
@@ -782,7 +785,7 @@ async function billingView(db: D1Database, userId: number) {
       day_micro_usd: DAY_PRICE,
     },
     journal: journal.map((r) => ({ id: r.id, type: r.type, amount_micro_usd: r.amount, day: r.day === null ? null : isoDay(r.day), invoice_id: r.invoice_id, note: r.note, at: new Date(r.created_at).toISOString() })),
-    invoices: (await db.prepare('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<InvoiceRow>()).results.map(invoiceView),
+    invoices: invoices.map((i) => ({ ...invoiceView(i), refundable_micro_usd: left.get(i.id) ?? 0 })),
     refunds: (await db.prepare('SELECT * FROM refunds WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<RefundRow>()).results.map(refundView),
   };
 }

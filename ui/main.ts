@@ -6,7 +6,9 @@ import { pageBusy } from './busy';
 import { h, s } from './dom';
 import { appPath, asLocale, homePath, pageLocale, setLocale, t } from './i18n';
 import { signInPath } from './next';
+import { billingPage } from './billing';
 import { linkPage, linksPage } from './links';
+import { partnersPage } from './partners';
 import { mePage, unconfirmedBanner } from './me';
 import { reportPage } from './report';
 import { confirmPage, resetPage, tgUnlinkPage } from './signup';
@@ -19,15 +21,17 @@ let flash = '';
 
 const icon = (name: string) => s('svg', { class: 'icon', 'aria-hidden': 'true' }, s('use', { href: `/icons.svg#i-mono-${name}` }));
 
-type Section = 'accounts' | 'sites' | 'links' | 'keys' | 'me';
+type Section = 'accounts' | 'sites' | 'links' | 'keys' | 'billing' | 'partners' | 'me';
 const NAV: [Section, string][] = [
   ['accounts', '#/'],
   ['sites', '#/sites'],
   ['links', '#/links'],
   ['keys', '#/keys'],
+  ['billing', '#/billing'],
+  ['partners', '#/partners'],
   ['me', '#/me'],
 ];
-const sectionOf = (path: string): Section => (path.startsWith('/sites') ? 'sites' : path.startsWith('/links') ? 'links' : path === '/keys' ? 'keys' : path === '/me' ? 'me' : 'accounts');
+const sectionOf = (path: string): Section => (path.startsWith('/sites') ? 'sites' : path.startsWith('/links') ? 'links' : path === '/keys' ? 'keys' : path === '/billing' ? 'billing' : path === '/partners' ? 'partners' : path === '/me' ? 'me' : 'accounts');
 
 /** Whether this browser has a session, for the site's header: its link to the app says "Dashboard"
  *  then (public/theme.js reads the mark before the first paint). */
@@ -95,6 +99,8 @@ async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, s
   if (path === '/connect') return [connectPage(go), t.titles.connect];
   if (account) return [await accountPage(account[1]!, live, redraw), t.titles.account];
   if (path === '/keys') return [await keysPage(me, redraw), t.titles.keys];
+  if (path === '/billing') return [await billingPage(me, live, () => redraw()), t.titles.billing];
+  if (path === '/partners') return [await partnersPage(live, () => redraw()), t.titles.partners];
   if (path === '/me') return [mePage(me, signedOut, () => redraw()), t.titles.me];
   // #/sites/new and #/links/new were pages before the drawers: a bookmark of one opens the list.
   if (path === '/sites' || path === '/sites/new') return [await sitesPage(me, go), t.titles.sites];

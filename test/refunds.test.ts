@@ -90,6 +90,21 @@ describe('asking for a refund', () => {
     expect(((await view.json()) as any).refunds[0].id).toBe(asked.body.refund.id);
   });
 
+  it('GET /v1/billing says what each top-up may still be refunded from, as the request judges it', async () => {
+    const left = async () => {
+      const r = await app.request('https://clx.cx/v1/billing', { headers: { authorization: `Bearer ${await signAccess('test-jwt-secret', 1, Date.now())}` } }, env);
+      return Object.fromEntries(((await r.json()) as any).invoices.map((i: { id: string; refundable_micro_usd: number }) => [i.id, i.refundable_micro_usd]));
+    };
+    const inv = await paid({ micro: 10_000_000 });
+    const old = await paid({ ago: 91 * DAY });
+    expect(await left()).toMatchObject({ [inv]: 10_000_000, [old]: 0 });
+    const id = (await ask({ invoice_id: inv, address: TRON })).body.refund.id as string;
+    expect((await left())[inv]).toBe(0);
+    await operatorRefund(env, id, '4', by);
+    await operatorRefunded(env, id, 'a'.repeat(64));
+    expect((await left())[inv]).toBe(6_000_000);
+  });
+
   it('a request the support group did not hear of is told again by the cron', async () => {
     fakeTg.blocked.add(GROUP);
     const id = (await ask({ invoice_id: await paid(), address: TRON })).body.refund.id as string;

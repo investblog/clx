@@ -71,6 +71,22 @@ async function refundRoom(db: D1Database, userId: number): Promise<number> {
 /** What a deposit brought in, less what was refunded from it already (refund rows are negative). */
 const LEFT_SQL = "SELECT coalesce(sum(amount), 0) AS rest FROM ledger WHERE invoice_id = ?1 AND type IN ('deposit', 'refund')";
 
+/** What each of the user's top-ups could still be refunded from, as `requestRefund` judges it: a
+ *  deposit under 90 days old with something left and no open request; 0 otherwise. For the page. */
+export async function refundable(db: D1Database, userId: number, invoiceIds: string[], now = Date.now()): Promise<Map<string, number>> {
+  const rows = (
+    await db
+      .prepare(
+        `SELECT l.invoice_id AS id, sum(l.amount) AS rest, max(CASE WHEN l.type = 'deposit' THEN l.created_at END) AS at,
+           EXISTS (SELECT 1 FROM refunds r WHERE r.invoice_id = l.invoice_id AND r.status IN ('requested', 'pending')) AS open
+         FROM ledger l WHERE l.user_id = ?1 AND l.type IN ('deposit', 'refund') AND l.invoice_id IN (SELECT value FROM json_each(?2)) GROUP BY l.invoice_id`,
+      )
+      .bind(userId, JSON.stringify(invoiceIds))
+      .all<{ id: string; rest: number; at: number | null; open: number }>()
+  ).results;
+  return new Map(rows.map((r) => [r.id, r.at !== null && r.at >= now - REFUND_DAYS * DAY && !r.open && r.rest > 0 ? r.rest : 0]));
+}
+
 /** The user's request (§18): a deposit under 90 days old; for crypto, the address it goes to. */
 export async function requestRefund(env: Env, userId: number, body: { invoice_id?: unknown; address?: unknown }): Promise<RefundRow> {
   if (typeof body.invoice_id !== 'string') fail(400, 'invalid_request', '"invoice_id" is required.', { field: 'invoice_id' });

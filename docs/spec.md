@@ -1394,7 +1394,7 @@ The model and its traps come from catchall.in, run by the same seller (301ST Ltd
   back what that deposit earned — the partner's clawback (§19) and a promo bonus granted on it, in
   proportion to the refunded share — in the same batch.
 - **API** (scope `billing`; a page session has every scope): `GET /v1/billing` — balance, Pro on or
-  off, paid through, grace, the last 50 journal rows, the last 10 top-ups and refund requests; `POST /v1/billing/pro`;
+  off, paid through, grace, the last 50 journal rows, the last 10 top-ups (each with `refundable_micro_usd`, what a request may still take by the rule above) and refund requests; `POST /v1/billing/pro`;
   `POST /v1/billing/invoices`; `GET /v1/billing/invoices/{id}`; `POST /v1/billing/refunds` (page
   session only).
 - **Deleting a clx account** (§9) is refused with `balance_not_empty` while the balance or the

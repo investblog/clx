@@ -30,6 +30,12 @@ export const homePath = (l: Locale) => signInPagePath(l);
 const tag = () => (locale === 'ru' ? 'ru-RU' : 'en-GB');
 export const when = (iso: string | null | undefined) => (iso ? `${new Date(iso).toLocaleString(tag(), { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })} UTC` : '—');
 export const num = (n: number) => n.toLocaleString(tag());
+/** Money of the API, integer micro-USD (§18), as dollars and cents — exact: a sum that is not whole
+ *  cents (a partner's share) shows its micro-dollars rather than rounding to what it is not. */
+export const usd = (micro: number) =>
+  (micro / 1_000_000).toLocaleString(tag(), { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: micro % 10_000 ? 6 : 2 });
+/** A UTC day of the API (`YYYY-MM-DD`), as a date. */
+export const dayText = (iso: string | null | undefined) => (iso ? new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString(tag(), { timeZone: 'UTC', dateStyle: 'medium' }) : '—');
 
 /** A label of one of the dictionary's code maps, or the code itself when it has none. */
 const pick = (map: Record<string, string>, code: string) => map[code] ?? code;

@@ -288,7 +288,15 @@ components:
               invoice_id: { type: [string, 'null'] }
               note: { type: [string, 'null'] }
               at: { type: string, format: date-time }
-        invoices: { type: array, items: { $ref: '#/components/schemas/Invoice' }, description: 'the last 10 top-ups, newest first' }
+        invoices:
+          type: array
+          description: 'the last 10 top-ups, newest first'
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Invoice'
+              - type: object
+                properties:
+                  refundable_micro_usd: { type: integer, description: 'what a refund request may still take from this top-up: under 90 days old, something left, no request open; 0 otherwise' }
         refunds: { type: array, items: { $ref: '#/components/schemas/Refund' }, description: 'the last 10 refund requests, newest first' }
     Partner:
       type: object
