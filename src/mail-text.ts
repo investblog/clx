@@ -83,7 +83,7 @@ const en: MailText = {
   }),
   proEnded: (link) => ({
     subject: 'clx: your account is back on the free plan',
-    text: `Hello,\n\nYour balance did not cover Pro, so your account is on the free plan now. Your oldest Cloudflare account with its 10 oldest sites and 200 oldest links, and your oldest API key, keep working; the rest is paused — nothing is deleted. Switch Pro on again and all of it works again.\nBalance and Pro: ${link}\n`,
+    text: `Hello,\n\nYour balance did not cover Pro, so your account is on the free plan now. Your oldest Cloudflare account with its 10 oldest sites on Cloudflare and 200 oldest links, and your oldest API key, keep working; the rest is paused, sites not on Cloudflare included (they are Pro only) — nothing is deleted. Switch Pro on again and all of it works again.\nBalance and Pro: ${link}\n`,
   }),
   silence: (name, link) => ({
     subject: `clx: no word from the worker in "${name}"`,
@@ -150,7 +150,7 @@ const ru: MailText = {
   }),
   proEnded: (link) => ({
     subject: 'clx: аккаунт снова на бесплатном плане',
-    text: `Здравствуйте!\n\nБаланса не хватило на Pro, и аккаунт теперь на бесплатном плане. Работают самый старый аккаунт Cloudflare с 10 самыми старыми сайтами и 200 самыми старыми ссылками и самый старый API-ключ; остальное на паузе — ничего не удалено. Включите Pro снова, и всё заработает.\nБаланс и Pro: ${link}\n`,
+    text: `Здравствуйте!\n\nБаланса не хватило на Pro, и аккаунт теперь на бесплатном плане. Работают самый старый аккаунт Cloudflare с 10 самыми старыми сайтами на Cloudflare и 200 самыми старыми ссылками и самый старый API-ключ; остальное на паузе, в том числе сайты не на Cloudflare (они только на Pro), — ничего не удалено. Включите Pro снова, и всё заработает.\nБаланс и Pro: ${link}\n`,
   }),
   silence: (name, link) => ({
     subject: `clx: нет связи с воркером в «${name}»`,

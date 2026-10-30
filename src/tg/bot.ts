@@ -304,11 +304,12 @@ async function listSites(turn: Turn): Promise<void> {
   const { t } = turn;
   const r = await api(turn, 'GET', '/v1/sites');
   if (r.status !== 200) return void (await say(turn, refusal(turn, r)));
-  const sites = r.body.sites as { id: string; host: string; state: string; views_7d: number[]; views_today: number; counted: boolean }[];
+  const sites = r.body.sites as { id: string; host: string; state: string; paused_at: string | null; views_7d: number[]; views_today: number; counted: boolean }[];
   if (!sites.length) return void (await say(turn, t.noSites));
   const lines = sites.slice(0, LIST_MAX).map((s) => {
     const week = s.views_7d.reduce((n, v) => n + v, 0);
-    const state = s.state === 'active' ? '' : `(${stateOf(turn, s.state)})`;
+    // A paused site (§18) keeps its state, but counts nothing.
+    const state = s.paused_at ? `(${stateOf(turn, 'paused')})` : s.state === 'active' ? '' : `(${stateOf(turn, s.state)})`;
     if (!s.counted) return `${esc(s.host)} ${state}\n${t.notCounted}`;
     return t.site(esc(s.host), state, sparkline(s.views_7d), num(turn, week), num(turn, s.views_today));
   });
@@ -365,6 +366,8 @@ async function siteHost(turn: Turn, host: string): Promise<void> {
 async function addSite(turn: Turn, host: string, accountId: string): Promise<void> {
   const { t } = turn;
   const r = await api(turn, 'POST', '/v1/sites', { account_id: accountId, host: host.trim().toLowerCase() });
+  // A site not on Cloudflare (§5) needs its collector host picked: that is the page's.
+  if (r.body.error?.code === 'zone_not_found') return void (await say(turn, t.notInZone(esc(host.trim().toLowerCase()), appUrl(turn.env, turn.lang, '#/sites'))));
   if (r.status !== 202) return void (await say(turn, refusal(turn, r)));
   const site = r.body.site as { host: string; snippet: { inline: string; script_tag: string } | null };
   await say(turn, t.siteAdded(esc(site.host)));
@@ -383,10 +386,10 @@ async function linkUrl(turn: Turn, url: string): Promise<void> {
   if (active.length === 1) return addLink(turn, url, active[0]!.id);
   if (active.length > 1) return choose(turn, t.pickHost, active.map((h) => ({ id: h.id, label: h.host })), { kind: 'link', url });
   if (hosts.length) return void (await say(turn, t.hostNotReady(esc(hosts[0]!.host))));
-  // No link host yet: one is made on a working site.
+  // No link host yet: one is made on a working site — on Cloudflare: an external one has no zone (§5).
   const s = await api(turn, 'GET', '/v1/sites');
   if (s.status !== 200) return void (await say(turn, refusal(turn, s)));
-  const sites = (s.body.sites as { id: string; host: string; state: string; paused_at: string | null }[]).filter((x) => x.state === 'active' && !x.paused_at);
+  const sites = (s.body.sites as { id: string; host: string; kind: string; state: string; paused_at: string | null }[]).filter((x) => x.state === 'active' && !x.paused_at && x.kind === 'zone');
   if (!sites.length) return void (await say(turn, t.noSiteForHost));
   await choose(turn, t.pickSiteForHost, sites.map((x) => ({ id: x.id, label: x.host })), { kind: 'linkhost' });
 }

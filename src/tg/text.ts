@@ -45,6 +45,8 @@ export interface BotText {
   pickAccount: string;
   badPick: string;
   siteAdded(host: string): string;
+  /** a host in no zone of the account: a site not on Cloudflare is added on the page (§5) */
+  notInZone(host: string, link: string): string;
   snippetInline: string;
   snippetFile: string;
   askUrl: string;
@@ -137,12 +139,14 @@ const en: BotText = {
     route_pending: 'making the route',
     active: 'works',
     route_conflict: 'the path is taken by another worker',
+    paused: 'paused: beyond the free plan, not counted',
   },
   askHost: 'Which host? Send it like example.com or blog.example.com.',
   noUsableAccount: 'No account has the worker installed yet. /connect one first, or see /accounts.',
   pickAccount: 'Which Cloudflare account holds it? Send the number:',
   badPick: 'Send one of the numbers, or /cancel.',
   siteAdded: (host) => `Site <b>${host}</b> added. Put one of the two snippets into the template of every page — the counter answers on your own domain.`,
+  notInZone: (host, link) => `No zone of this Cloudflare account holds <b>${host}</b>. A site not on Cloudflare is counted on Pro, on a host of your zones — add it in the app: ${link}`,
   snippetInline: 'An inline script:',
   snippetFile: 'Or a file, if the site has a CSP without inline scripts:',
   askUrl: 'Which address should the short link lead to? Send it like https://example.com/page.',
@@ -235,12 +239,14 @@ const ru: BotText = {
     route_pending: 'маршрут создаётся',
     active: 'работает',
     route_conflict: 'путь занят другим воркером',
+    paused: 'на паузе: сверх бесплатного плана, не считается',
   },
   askHost: 'Какой хост? Пришлите так: example.com или blog.example.com.',
   noUsableAccount: 'Ни в одном аккаунте воркер ещё не установлен. Сначала /connect, состояние — /accounts.',
   pickAccount: 'В каком аккаунте Cloudflare этот домен? Пришлите номер:',
   badPick: 'Пришлите один из номеров или /cancel.',
   siteAdded: (host) => `Сайт <b>${host}</b> добавлен. Вставьте один из двух сниппетов в шаблон всех страниц — счётчик отвечает на вашем же домене.`,
+  notInZone: (host, link) => `В этом аккаунте Cloudflare нет зоны для <b>${host}</b>. Сайт не на Cloudflare считается на тарифе Pro, на хосте ваших зон, — добавьте его в кабинете: ${link}`,
   snippetInline: 'Встроенный скрипт:',
   snippetFile: 'Или файл, если на сайте CSP без inline-скриптов:',
   askUrl: 'Куда вести короткую ссылку? Пришлите адрес так: https://example.com/page.',

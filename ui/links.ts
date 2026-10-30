@@ -75,9 +75,11 @@ function hostsCard(hosts: LinkHost[], accounts: Account[], sites: Site[], redraw
     return a ? (a.name ?? a.cf_account_id) : '—';
   };
   const forSite = h('button', { type: 'button', class: 'btn btn--primary btn--sm' }, c.hostForSite);
-  forSite.addEventListener('click', () => hostDrawer('site', accounts, sites, redraw));
+  // A paused account or site (§18) takes no new link host: the API answers 409 paused.
+  const open = accounts.filter((a) => !a.paused_at);
+  forSite.addEventListener('click', () => hostDrawer('site', open, sites, redraw));
   const named = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, c.hostNamed);
-  named.addEventListener('click', () => hostDrawer('named', accounts, sites, redraw));
+  named.addEventListener('click', () => hostDrawer('named', open, sites, redraw));
   return h(
     'section',
     { class: 'stack stack--sm' },
@@ -102,7 +104,7 @@ function hostsCard(hosts: LinkHost[], accounts: Account[], sites: Site[], redraw
           ),
         )
       : h('p', { class: 'muted' }, c.noHosts),
-    h('div', { class: 'actions' }, sites.length ? forSite : null, named),
+    h('div', { class: 'actions' }, sites.length && open.length ? forSite : null, open.length ? named : null),
   );
 }
 
@@ -182,9 +184,11 @@ export async function linksPage(me: Me, go: (hash: string) => void, redraw: () =
     call<{ sites: Site[] }>('GET', '/v1/sites'),
   ]);
   const accounts = all.filter(usable);
-  const sites = allSites.filter((s) => s.state !== 'deleted' && accounts.some((a) => a.id === s.account_id));
-  // Links go on a working host only (the API says link_host_not_ready otherwise).
-  const live = hosts.filter((lh) => lh.state === 'active');
+  // A link host is made under a site's own host: an external site (§5) has none in a zone.
+  const sites = allSites.filter((s) => s.state !== 'deleted' && s.kind === 'zone' && !s.paused_at && accounts.some((a) => a.id === s.account_id && !a.paused_at));
+  // Links go on a working host only (the API says link_host_not_ready otherwise), and not of a paused
+  // account (409 paused, §18).
+  const live = hosts.filter((lh) => lh.state === 'active' && !all.find((a) => a.id === lh.account_id)?.paused_at);
   const add = h('button', { type: 'button', class: 'btn btn--primary' }, c.add);
   add.addEventListener('click', () => newLinkDrawer(me, live, go));
   const empty = !accounts.length ? c.noAccount : !live.length ? c.needHostFirst : c.empty;

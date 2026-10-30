@@ -24,6 +24,8 @@ export interface Site {
   config: 'pending' | 'synced';
   retiring: { path: string; until: string }[];
   error: { code?: string; [k: string]: unknown } | null;
+  /** beyond the free plan (§18): not counted, not changed */
+  paused_at: string | null;
   created_at: string;
   /** the list's, with the reports scope: views of the last 7 closed days and whether any was counted */
   views_7d?: number[];
@@ -31,7 +33,8 @@ export interface Site {
 }
 
 const SITE_TONE: Record<string, Tone> = { active: 'success', route_conflict: 'danger' };
-const siteBadge = (s: Site) => badge((t.sites.state as Record<string, string>)[s.state] ?? s.state, SITE_TONE[s.state]);
+// A paused site (§18) keeps its state, but counts nothing: the pause is what the badge says.
+const siteBadge = (s: Site) => (s.paused_at && s.state !== 'deleted' ? badge(t.sites.state.paused, 'warning') : badge((t.sites.state as Record<string, string>)[s.state] ?? s.state, SITE_TONE[s.state]));
 const paths = (text: string) => [...new Set(text.split(/[\s,]+/u).filter(Boolean))];
 const usable = (a: Account) => a.state === 'ready' || a.state === 'no_connection';
 
@@ -113,13 +116,15 @@ export async function sitesPage(me: Me, go: (hash: string) => void): Promise<HTM
   if (mine !== lists) return h('div');
   const name = (id: string) => accounts.find((a) => a.id === id)?.name ?? '';
   const ready = accounts.filter(usable);
+  // A paused account (§18) takes no new site: the API answers 409 paused.
+  const open = ready.filter((a) => !a.paused_at);
   const add = h('button', { type: 'button', class: 'btn btn--primary' }, c.add);
-  add.addEventListener('click', () => newSiteDrawer(me, ready, go));
+  add.addEventListener('click', () => newSiteDrawer(me, open, go));
   const empty = !accounts.length ? c.noAccount : !ready.length ? c.noReady : c.empty;
   return h(
     'div',
     {},
-    pageHead(t.titles.sites, ready.length ? add : null),
+    pageHead(t.titles.sites, open.length ? add : null),
     sites.length
       ? paged(
           sites.map((s) => {
@@ -191,13 +196,16 @@ export async function sitePage(id: string, live: Live, redraw: (message?: string
     poll();
   }
   const deleted = s.state === 'deleted';
+  // Paused (§18): readable and deletable, not changed — the API answers 409 paused.
+  const paused = !!s.paused_at && !deleted;
   const edit = h('button', { type: 'button', class: 'btn btn--ghost' }, c.edit);
   edit.addEventListener('click', () => editSiteDrawer(s, redraw));
   return h(
     'div',
     { class: 'stack stack--md' },
     h('p', {}, h('a', { href: '#/sites' }, c.back)),
-    pageHead(s.host, siteBadge(s), deleted ? null : edit, deleted ? null : h('a', { class: 'btn btn--ghost', href: `#/sites/${s.id}/report` }, c.report)),
+    pageHead(s.host, siteBadge(s), deleted || paused ? null : edit, deleted ? null : h('a', { class: 'btn btn--ghost', href: `#/sites/${s.id}/report` }, c.report)),
+    paused ? notice(c.pausedNote, 'idle') : null,
     s.error?.code ? notice(errorText(s.error.code, s.error.code)) : null,
     s.config === 'pending' && !deleted ? notice(c.configMoving, 'loading') : null,
     deleted ? notice(c.deleted, 'idle') : snippetCard(s),
@@ -213,11 +221,11 @@ export async function sitePage(id: string, live: Live, redraw: (message?: string
           s.retiring.length ? h('p', { class: 'muted text-sm' }, c.retiring(s.retiring.map((r) => c.until(r.path, when(r.until))).join(', '))) : null,
           // Rotation needs a working route (the API answers site_not_active otherwise); an external
           // site keeps its path for life (§5).
-          s.state === 'active' && s.kind === 'zone' ? h('p', { class: 'muted text-sm' }, c.rotateHint) : null,
+          s.state === 'active' && s.kind === 'zone' && !paused ? h('p', { class: 'muted text-sm' }, c.rotateHint) : null,
           h(
             'div',
             { class: 'actions' },
-            s.state === 'active' && s.kind === 'zone'
+            s.state === 'active' && s.kind === 'zone' && !paused
               ? confirmAction(
                   c.rotate,
                   { title: c.rotate, body: c.rotateAsk, confirmLabel: c.rotateConfirm },

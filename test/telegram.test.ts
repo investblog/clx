@@ -337,6 +337,18 @@ describe('the commands', () => {
     expect(last(tg)).toContain('works');
   });
 
+  it('/site of a host in no zone points to the app for a site not on Cloudflare; /sites says a paused site is paused', async () => {
+    const tg = nextTg();
+    await readyAccount(await signIn(tg));
+    await say(tg, '/site shop.example.net');
+    expect(last(tg)).toContain('No zone of this Cloudflare account holds <b>shop.example.net</b>');
+    expect(last(tg)).toContain('/app#/sites');
+    await say(tg, '/site example.com');
+    await env.DB.prepare('UPDATE sites SET paused_at = 1').run();
+    await say(tg, '/sites');
+    expect(last(tg)).toContain('(paused: beyond the free plan, not counted)');
+  });
+
   it('/site as a question: the answer adds the site and ends the question', async () => {
     const tg = nextTg();
     await readyAccount(await signIn(tg));

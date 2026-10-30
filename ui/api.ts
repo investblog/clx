@@ -106,6 +106,8 @@ export interface Account {
   token: { name: string; expires_at: string | null } | null;
   error: { code?: string; warnings?: string[]; [k: string]: unknown } | null;
   edge: { bundle: string; up_to_date: boolean; schema: number | null; installed_at: string | null } | null;
+  /** beyond the free plan (§18): nothing new is added to it */
+  paused_at: string | null;
   push: { at: string; bundle: string; schema: number | null; queue: number; error: string | null; dropped: Record<string, number> } | null;
   advice: { level: string; metric: string | null; metrics: Record<string, MetricAdvice>; unavailable?: string[]; suggest?: string; paid?: true; at: string } | null;
   operation?: { kind: string; state: string; step: string; error: { code?: string; message?: string } | null; updated_at: string } | null;

@@ -69,6 +69,11 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] A counter for a site not on Cloudflare — not a proxy: an external site counted by the user's
       own clx-edge on a host of their zone, Pro only (ADR 0037; built 30.10, spec §14 stage 8). Its
       live check comes after the billing release.
+- [ ] **The owner's call:** a page restored from the back-forward cache (Back after a click) is not
+      counted again — the snippet sends on load and on SPA address changes, and a restored page runs
+      neither (Codex, 30.10). A `pageshow` with `persisted` would count it, but changes every
+      snippet's bytes, which §5 promises change only on `rotate`: embedded snippets keep working,
+      a rebuilt site gets new ones. For zone and external sites alike, or neither.
 Left as they are (owner, 19.10.2026) — not worth their cost now; reopened only if a real case needs one:
 - `over` from "pushes reporting write failures" (§8): the heartbeat carries the worker's error
   text only, with no clean sign of a failed D1 write. `over` already comes from writes at the
