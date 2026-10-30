@@ -81,8 +81,11 @@ for (const path of ['/auth/*', '/v1/*', '/admin/*', '/hook/*']) {
     c.header('cache-control', 'no-store');
   });
 }
-// `?ref=CODE` on the home page (§19): the cookie for a valid code, and the address without it.
+// `?ref=CODE` on the home page (§19): the cookie for a valid code, and the address without it. Also
+// on the Russian sign-in card, where the Russian host's links carry the code (it cannot set the cookie).
 app.use('/', async (c, next) => (await refVisit(c)) ?? next());
+app.use('/ru/signin', async (c, next) => (await refVisit(c)) ?? next());
+app.on(['GET', 'HEAD'], '/ru/signin', (c) => c.env.ASSETS.fetch(c.req.raw));
 app.route('/auth', auth);
 app.route('/auth', signup);
 app.route('/v1', v1);

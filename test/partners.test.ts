@@ -95,6 +95,18 @@ describe('attribution', () => {
     expect(bad.status).toBe(302);
     expect(bad.headers.get('set-cookie')).toBeNull();
     expect((await visit('?ref=partner1', { 'sec-fetch-dest': 'image' })).headers.get('set-cookie')).toBeNull();
+    // The Russian sign-in card takes it too (the Russian host's links carry it); without it, the page.
+    const ru = await visit('ru/signin?ref=partner1', { 'sec-fetch-dest': 'document' });
+    expect(ru.status).toBe(302);
+    expect(ru.headers.get('location')).toBe('/ru/signin');
+    expect(ru.headers.get('set-cookie')).toMatch(/^clx_ref=partner1;/u);
+    const assets = env.ASSETS;
+    env.ASSETS = { fetch: async (r: Request) => new Response(new URL(r.url).pathname) } as unknown as Fetcher;
+    try {
+      expect(await (await visit('ru/signin')).text()).toBe('/ru/signin');
+    } finally {
+      env.ASSETS = assets;
+    }
     // The API is not a page: ?ref= means nothing there.
     expect((await app.request('https://clx.cx/v1/me?ref=partner1', {}, env)).status).toBe(401);
   });

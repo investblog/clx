@@ -199,7 +199,7 @@ export const en: Dict = {
   },
   keys: {
     intro: ['A key is for agents, site generators and the console (', 'the guide for agents', '). It is shown once; clx.cx keeps only its hash.'],
-    free: 'The free plan has one key and the same limits as the app; more accounts, sites and keys come with the api plan — ask for it with /support in the Telegram bot @clxcxbot.',
+    free: 'The free plan has one key and the same limits as the app; more accounts, sites and keys come with Pro (the plan api in the API), switched on from the Balance page.',
     api: (n: number) => `Up to ${n} keys.`,
     colKey: 'Key',
     colScopes: 'Scopes',
@@ -519,7 +519,7 @@ export const en: Dict = {
     payments_unavailable: 'Payments are unavailable now — try again later.',
     refund_open: 'A refund of this top-up is already asked for.',
     refund_unavailable: 'This top-up cannot be refunded.',
-    balance_not_empty: 'First spend or refund the money on the balance and in the partner wallet.',
+    balance_not_empty: 'Not yet: money is on the balance or the partner wallet, or still moving — an open top-up, refund or payout, or a referral’s recent top-up. The terms list when.',
     paused: 'This is paused: beyond the free plan. Switch Pro on to change it.',
     update_required: 'The worker in this account is too old for sites not on Cloudflare — update it on the account’s page.',
     link_host_in_use: 'Links are still on this host: delete them first.',

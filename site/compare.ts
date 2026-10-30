@@ -41,7 +41,7 @@ const BITLY: CompareText = {
   title: 'A free Bitly alternative on your own domain — clx',
   description: 'clx is a free, open-source Bitly alternative: short links on your own domain, click history for 400 days, QR codes, destinations you can change, no ads.',
   h1: 'A free Bitly alternative on your own domain',
-  lead: 'Bitly’s free plan has no click data and no domain of your own. clx gives you 200 links on a domain you own, with click history for 400 days and a QR code for each, served by a worker in your own Cloudflare account. It is free and open source.',
+  lead: 'Bitly’s free plan has no click data and no domain of your own. clx gives you 200 links on a domain you own, with click history for 400 days and a QR code for each, served by a worker in your own Cloudflare account. The free plan covers that, and the code is open.',
   start: 'Start free',
   charts: [
     {
@@ -70,8 +70,8 @@ const BITLY: CompareText = {
     h: 'clx and Bitly side by side',
     head: ['', 'clx', 'Bitly'],
     rows: [
-      ['Price', 'Free; the API plan is on request, free for now', 'Free; Core $10, Growth $29, Premium $199 a month billed yearly; Enterprise by quote'],
-      ['Short links', '200 at a time; 10,000 on the API plan', '5 a month on Free; 100, 500 or 3,000 a month on paid plans'],
+      ['Price', 'Free; Pro $9 per 30 days', 'Free; Core $10, Growth $29, Premium $199 a month billed yearly; Enterprise by quote'],
+      ['Short links', '200 at a time; 10,000 on Pro', '5 a month on Free; 100, 500 or 3,000 a month on paid plans'],
       ['Click history', 'By day for 400 days, by hour for 31', 'None on Free; 30 days to 2 years by plan'],
       ['Your own domain', 'On every plan: a host in your Cloudflare account', 'From Growth'],
       ['Changing where a link goes', 'Any time; the code and the QR code stay', 'Not on Free; 5 to 110 changes a month on paid plans'],
@@ -107,9 +107,9 @@ const BITLY: CompareText = {
 
 const PLAUSIBLE: CompareText = {
   title: 'A free Plausible alternative on your Cloudflare — clx',
-  description: 'clx counts visits without cookies like Plausible, but free: an inline snippet under 600 bytes on your own domain, the data in your own Cloudflare account.',
+  description: 'clx counts visits without cookies like Plausible, with a free plan: an inline snippet under 600 bytes on your own domain, the data in your Cloudflare account.',
   h1: 'A free Plausible alternative that runs in your Cloudflare account',
-  lead: 'Like Plausible, clx counts visits without cookies. Unlike it, clx is free, its counter is a snippet under 600 bytes served from your own domain, and the data sits in a D1 database in your own Cloudflare account — with no server to run.',
+  lead: 'Like Plausible, clx counts visits without cookies. Unlike it, clx has a free plan, its counter is a snippet under 600 bytes served from your own domain, and the data sits in a D1 database in your own Cloudflare account — with no server to run.',
   start: 'Start free',
   charts: [
     {
@@ -135,8 +135,8 @@ const PLAUSIBLE: CompareText = {
     h: 'clx and Plausible side by side',
     head: ['', 'clx', 'Plausible'],
     rows: [
-      ['Price', 'Free', 'From $9 a month for 10,000 pageviews; no free plan, a 30-day trial'],
-      ['Sites', '10; 500 on the API plan', '1, 3 or 10 by plan'],
+      ['Price', 'Free for up to 10 sites, any number of pageviews; Pro $9 per 30 days', 'From $9 a month for 10,000 pageviews; no free plan, a 30-day trial'],
+      ['Sites', '10; 500 on Pro', '1, 3 or 10 by plan'],
       ['Cookies', 'None', 'None'],
       ['The counter', 'An inline snippet under 600 bytes, or a script on your own domain', 'A 2.8 KB script'],
       ['History', 'By day for 400 days', '3 years; 5 on Business'],
@@ -150,7 +150,7 @@ const PLAUSIBLE: CompareText = {
   theirs: {
     h: 'When Plausible is the better choice',
     points: [
-      'Your site is not served by Cloudflare: clx counts only sites in a Cloudflare account you connect.',
+      'You have no Cloudflare account and want none: clx needs one with a domain on it, even for a site hosted elsewhere (Pro).',
       'You need funnels or ecommerce revenue: Plausible’s plans have them; clx counts views, visitors and their breakdowns.',
       'You need more than 400 days of history, or a managed service hosted in the EU.',
     ],
@@ -200,7 +200,7 @@ const CLCK: CompareText = {
     h: 'clx и Кликер рядом',
     head: ['', 'clx', 'Яндекс Кликер'],
     rows: [
-      ['Цена', 'Бесплатно', 'Бесплатно'],
+      ['Цена', 'Бесплатно; Pro — $9 за 30 дней', 'Бесплатно'],
       ['Регистрация', 'Нужна, и нужен аккаунт Cloudflare со своим доменом', 'Не нужна'],
       ['Домен ссылки', 'Ваш: хост в вашем аккаунте Cloudflare', 'Только clck.ru'],
       ['Своё название ссылки', 'Да', 'Нет'],
@@ -254,7 +254,7 @@ const LIVEINTERNET: CompareText = {
     h: 'clx и LiveInternet рядом',
     head: ['', 'clx', 'LiveInternet'],
     rows: [
-      ['Цена', 'Бесплатно', 'Бесплатно с видимой кнопкой; без неё — от $3 в месяц за сайт'],
+      ['Цена', 'Бесплатно до 10 сайтов; Pro — $9 за 30 дней', 'Бесплатно с видимой кнопкой; без неё — от $3 в месяц за сайт'],
       ['Кнопка на странице', 'Не нужна', 'Обязательна на бесплатном тарифе'],
       ['Cookie', 'Нет', 'Да, на год'],
       ['Кто видит статистику', 'Вы, в кабинете; не публикуется', 'Все или по паролю — выбирается при добавлении сайта'],
@@ -278,7 +278,7 @@ const LIVEINTERNET: CompareText = {
   theirs: {
     h: 'Когда лучше LiveInternet или Метрика',
     points: [
-      'Сайт не на Cloudflare: clx считает только сайты в подключённом аккаунте Cloudflare.',
+      'Нет аккаунта Cloudflare и заводить не хочется: clx нужен он и домен в нём, даже для сайта на другом хостинге (Pro).',
       'Нужна открытая статистика, которую видят все: LiveInternet это умеет.',
       'Нужны записи визитов: это Вебвизор в Метрике.',
     ],
@@ -319,8 +319,8 @@ const PARENT: Record<Locale, CompareText> = {
         ['Traffic rules', 'Up to 10 a link, by country and device', 'Redirects by geo and user agent across many domains; TDS with A/B and geo splits'],
         ['Statistics', 'Views, visitors, sources, countries, devices and bots of your sites; clicks of your links', 'Real-time analytics, kept 30 to 365 days by plan; conversions from S2S postbacks'],
         ['Domains', 'Your sites, and a link host for each', 'A portfolio with expiry dates, DNS checks and VirusTotal checks through your own key'],
-        ['Price', 'Free', 'Free during Open Beta; then Free, Pro $30 or Business $100 a month'],
-        ['Cloudflare accounts', '1; 50 on the API plan', '1, 10 or 100 by plan'],
+        ['Price', 'Free; Pro $9 per 30 days', 'Free during Open Beta; then Free, Pro $30 or Business $100 a month'],
+        ['Cloudflare accounts', '1; 50 on Pro', '1, 10 or 100 by plan'],
       ],
     },
     aside: {
@@ -370,8 +370,8 @@ const PARENT: Record<Locale, CompareText> = {
         ['Правила трафика', 'До 10 на ссылку, по стране и устройству', 'Редиректы по гео и UA на многих доменах; TDS с A/B- и гео-сплитами'],
         ['Статистика', 'Просмотры, посетители, источники, страны, устройства и боты сайтов; клики ссылок', 'Аналитика в реальном времени, хранение от 30 до 365 дней по тарифу; конверсии из S2S-постбэков'],
         ['Домены', 'Ваши сайты и по хосту ссылок на каждый', 'Портфель со сроками, проверками DNS и VirusTotal по вашему ключу'],
-        ['Цена', 'Бесплатно', 'Бесплатно на Open Beta; затем Бесплатный, Pro 2 500 ₽ или Бизнес 8 500 ₽ в месяц'],
-        ['Аккаунты Cloudflare', '1; 50 на тарифе API', '1, 10 или 100 по тарифу'],
+        ['Цена', 'Бесплатно; Pro — $9 за 30 дней', 'Бесплатно на Open Beta; затем Бесплатный, Pro 2 500 ₽ или Бизнес 8 500 ₽ в месяц'],
+        ['Аккаунты Cloudflare', '1; 50 на Pro', '1, 10 или 100 по тарифу'],
       ],
     },
     aside: {

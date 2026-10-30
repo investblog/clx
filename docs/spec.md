@@ -1426,10 +1426,12 @@ the code, the links, the referrals' count and the wallet.
   the page); partner and promo codes share one name space, looked up case-insensitively, partner
   codes first; `/promo` refuses a partner's code.
 - **Attribution.** `?ref=CODE` on a page the Worker serves — the home page, which the Partners page
-  links to (the other pages are static files that never reach it) — answers `302` to the same page
+  links to, and the Russian sign-in card `/ru/signin` (the other pages are static files that never
+  reach it) — answers `302` to the same page
   without it, never cached, and sets the cookie `clx_ref` for 30 days (last touch), only for a valid
   code and a document navigation (no `Sec-Fetch-Dest`, or `document`), the lookups limited per
-  address; the Russian pages pass the code on in their links to clx.cx. `POST /auth/signup` takes
+  address. The Russian host (GitHub Pages, ADR 0030) cannot set clx.cx's cookie: its pages keep a
+  `?ref=` for the tab (`sessionStorage`) and add it to their links to `/ru/signin`. `POST /auth/signup` takes
   `code?` (a partner or promo code; one that is no code is refused, `invalid_code`); without one it
   reads the cookie, and a cookie whose code is gone is let go. The bot takes `start=ref_CODE`
   (other start parameters stay the source, §17) and keeps it in the dialog until the account is

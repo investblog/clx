@@ -60,7 +60,7 @@ components:
                 update_required (external sites need a newer clx-edge),
                 route_not_ours (a route clx made was changed outside clx and left in place).
                 Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
-                invalid_password, balance_not_empty (DELETE /v1/me with money on the balance).
+                invalid_password, balance_not_empty (DELETE /v1/me while money is on the balance or the partner wallet or still moving, §18).
                 Billing (docs/spec.md §18): insufficient_balance (Pro needs $9 on the balance), invoice_limit (3 pending top-ups),
                 payments_unavailable (crypto top-ups not set up or the processor down),
                 refund_unavailable (a top-up never credited, older than 90 days or refunded
@@ -207,7 +207,7 @@ components:
           type: [object, 'null']
           description: Embed one of the two at build time; stable until rotate (an external site is never rotated)
           properties:
-            inline: { type: string, description: '<script>…</script>, under 600 bytes' }
+            inline: { type: string, description: '<script>…</script>, under 600 bytes for a zone site; an external site''s also names its collector host' }
             script_tag: { type: string, description: '<script src="/<path>/<s>.js"> with defer (the order of the attributes varies by site); an external site''s src is https://<collector_host>/<path>/<s>.js' }
         excluded_paths: { type: array, items: { type: string } }
         config: { type: string, enum: [pending, synced], description: 'whether the worker has this version of the site yet' }
@@ -419,8 +419,9 @@ paths:
         Every connected Cloudflare account is disconnected first (clx-edge, its database and routes
         removed where the token still can — what could not be is listed in `left`, the working tokens
         to revoke in `revoke_tokens`); then the totals go at once, and the user with the keys, sites
-        and links. Refused with `balance_not_empty` while there is money on the balance (docs/spec.md
-        §18); the journal is kept for accounting without the address.
+        and links. Refused with `balance_not_empty` while money is on the balance or the partner wallet, or a
+        payment, refund or payout is open, a referral's deposit is under 90 days old or has no commission
+        yet, or a referral's refund is open (docs/spec.md §18); the journal is kept for accounting without the address.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:

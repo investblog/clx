@@ -21,7 +21,7 @@ export function agentsBody(): string {
 
 <h2 id="ask">What to ask your human for</h2>
 <ol>
-<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a> and confirms their address. The free plan has one key, enough for one Cloudflare account, 10 sites and 200 links; the <code>api</code> plan (more accounts, sites and keys) is switched on by clx on request: the person sends <code>/support</code> to the Telegram bot <a href="${BOT_URL}">@clxcxbot</a>. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites. The key is shown once.</li>
+<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a> and confirms their address. The free plan has one key, enough for one Cloudflare account, 10 sites and 200 links; Pro (<code>plan: "api"</code> in the API: 50 accounts, 500 sites including sites not on Cloudflare, 5 keys) is $9 per 30 days from a prepaid balance; the person tops it up and switches Pro on themselves, on the app's <a href="/app#/billing">Balance</a> page or with <code>/pay</code> in the Telegram bot <a href="${BOT_URL}">@clxcxbot</a>. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites. The key is shown once.</li>
 <li><strong>The Cloudflare account ID</strong> — 32 hex characters, in the dashboard address after <code>dash.cloudflare.com/</code>.</li>
 <li><strong>A bootstrap token</strong>, made by the person in that account. clx uses it within one request to make its own working token, then deletes it. Steps for them:
 <ol>
@@ -65,13 +65,13 @@ curl -s -X POST $CLX/v1/accounts \\
 </ul>
 
 <h2 id="site">2. Add a site and embed the counter</h2>
-<p>The host must be in a zone of that account and proxied through Cloudflare (orange cloud). <code>GET /v1/accounts/{id}/zones</code> lists the zones to pick from.</p>
+<p>The host must be in a zone of that account and proxied through Cloudflare (orange cloud). <code>GET /v1/accounts/{id}/zones</code> lists the zones to pick from. A site hosted elsewhere is counted on Pro only, as an external site: add <code>"collector_host"</code>, a host of the account's zones that Cloudflare already proxies (for example a site already in clx), and its snippet sends there; ask the person which host. <code>zone_not_found</code> without it means the host is in none of the account's zones.</p>
 <pre><code>curl -s -X POST $CLX/v1/sites \\
   -H "Authorization: Bearer $CLX_KEY" \\
   -H "Idempotency-Key: site-example.com-1" \\
   -H "Content-Type: application/json" \\
   -d '{"account_id": "&lt;account.id&gt;", "host": "example.com"}'</code></pre>
-<p>The answer carries <code>site.snippet</code>: <code>inline</code> (a <code>&lt;script&gt;</code> under 600 bytes) or <code>script_tag</code> (an external <code>&lt;script src="…"&gt;</code> with <code>defer</code> — use it if the site's CSP forbids inline scripts). Put one of them into every page, e.g. before <code>&lt;/body&gt;</code>. The snippet is stable — a rebuild needs no call; only <code>POST /v1/sites/{id}/rotate</code> changes it. The counter answers once <code>site.config</code> is <code>synced</code> and <code>site.state</code> is <code>active</code> (seconds). <code>route_conflict</code> means another worker already holds the host's route: show <code>error</code> to the person.</p>
+<p>The answer carries <code>site.snippet</code>: <code>inline</code> (a <code>&lt;script&gt;</code>, under 600 bytes for a site on Cloudflare) or <code>script_tag</code> (an external <code>&lt;script src="…"&gt;</code> with <code>defer</code> — use it if the site's CSP forbids inline scripts). Put one of them into every page, e.g. before <code>&lt;/body&gt;</code>. The snippet is stable — a rebuild needs no call; only <code>POST /v1/sites/{id}/rotate</code> changes it. The counter answers once <code>site.config</code> is <code>synced</code> and <code>site.state</code> is <code>active</code> (seconds). <code>route_conflict</code> means another worker already holds the host's route: show <code>error</code> to the person.</p>
 
 <h2 id="links">3. Short links and QR codes</h2>
 <p>Links live on a link host — a host given wholly to <code>clx-edge</code>, with no site on it. Make one per site, so the sites' links share nothing: <code>{"site_id"}</code> gives a random three-character name under the site's host, such as <code>k7q.example.com</code>; <code>{"account_id", "host"}</code> takes a host you name. clx makes it a custom domain of the worker: Cloudflare creates its DNS record and certificate — add no record yourself. A host that already has a record is never taken over (a named one ends <code>conflict</code>). Poll <code>GET /v1/link-hosts/{id}</code> until <code>state</code> is <code>active</code> and <code>config</code> <code>synced</code> (seconds). Both take the scope <code>links</code>:</p>
@@ -107,12 +107,13 @@ curl -s -X POST $CLX/v1/links \\
 
 <h2 id="cheatsheet">Cheat sheet</h2>
 <pre><code>base_url:      ${ORIGIN}
-auth:          Authorization: Bearer clx_...   (1 key on free, 5 on api; scopes accounts, sites, links, reports)
+auth:          Authorization: Bearer clx_...   (1 key on free, 5 on api = Pro; scopes accounts, sites, links, reports)
 idempotency:   Idempotency-Key on every POST/PUT/PATCH/DELETE; replays for 24 h
 connect:       POST /v1/accounts {cf_account_id, bootstrap_token} -&gt; 202; poll GET /v1/accounts/{id}
                while pending|installing; ready, else show error
 bootstrap:     Account API Tokens Edit + Account Settings Read, Entire Account, expires tomorrow
-site:          POST /v1/sites {account_id, host} -&gt; site.snippet.inline | script_tag
+site:          POST /v1/sites {account_id, host, collector_host?} -&gt; site.snippet.inline | script_tag
+               (collector_host: a site not on Cloudflare, Pro only)
 link host:     POST /v1/link-hosts {site_id} | {account_id, host} -&gt; 202; poll GET until active+synced
 link:          POST /v1/links {link_host_id, url, code?, rules?} -&gt; link.short_url
 qr:            GET /v1/links/{id}/qr.svg?size=512
@@ -154,6 +155,7 @@ PATCH and DELETE (new per action, the same on retry).
 1. \`POST /v1/accounts {"cf_account_id", "bootstrap_token"}\` → \`202\`; poll \`GET /v1/accounts/{id}\`
    while \`state\` is \`pending\` or \`installing\`; go on at \`ready\`, else show \`error\` to the person.
 2. \`POST /v1/sites {"account_id", "host"}\` → embed \`site.snippet.inline\` (or \`script_tag\`) in every page.
+   A site not on Cloudflare (Pro only): add \`"collector_host"\`, a proxied host of the account's zones.
 3. Links: a link host per site — \`POST /v1/link-hosts {"site_id"}\` (a random name under the site's
    host; clx makes its DNS record through Cloudflare), poll \`GET /v1/link-hosts/{id}\` until
    \`active\` and \`synced\`; \`POST /v1/links {"link_host_id", "url", "code"?, "rules"?}\` →
@@ -181,9 +183,9 @@ clx's management API (${ORIGIN}/v1) takes **bearer API keys**:
 - A person signs up at ${ORIGIN}/app (e-mail and password, with a CAPTCHA) and confirms the address.
 - The person issues a key on the Keys page of the app, choosing its scopes (\`accounts\`, \`sites\`,
   \`links\`, \`reports\`) and, optionally, the Cloudflare accounts and client IPs it may be used for.
-  The key is shown once; one per user on the free plan, up to 5 on the \`api\` plan (switched on by
-  clx on request), revoked one by one. The person asks for that plan by sending /support to the
-  Telegram bot at ${BOT_URL}.
+  The key is shown once; one per user on the free plan, up to 5 on Pro (\`plan: "api"\`: $9 per 30 days from a
+  prepaid balance, topped up and switched on by the person on the app's Balance page or with /pay in
+  the Telegram bot at ${BOT_URL}), revoked one by one.
 
 The MCP server (${ORIGIN}/mcp) takes the same key in the same header.
 

@@ -100,7 +100,7 @@ const en: Strings = {
       links: [['Where your data lives', '/how-it-works'], ['No shared footprint, in detail', '/for-site-generators'], ['Open source', '/open-source'], ['clx and 301.st', '/vs-301']],
       items: [
         ['Your data stays with you', 'Visits, clicks and their breakdowns live in a D1 database in your Cloudflare account. clx.cx stores only totals by hour and by day.'],
-        ['No shared footprint across your sites', 'Every site gets its own path, script and collector names and snippet code, generated from a random seed. The counter loads from your own domain and reports to it, with no cookie and no third-party host: nothing in the pages ties your sites to each other or to clx.'],
+        ['No shared footprint across your sites', 'Every site gets its own path, script and collector names and snippet code, generated from a random seed. The counter loads from your own domain and reports to it, with no cookie and no third-party host: nothing in the pages ties your sites to each other or to clx. A site not on Cloudflare (Pro) reports to a host of your own zone instead, and its pages name that host.'],
         ['Cloudflare’s free plan is often enough', 'Workers Free allows 100,000 requests and 100,000 D1 writes a day per account, shared with your other workers: for a typical account about 11,000 counted events a day at worst, usually several times that. clx warns you when the account nears its quota.'],
         ['Open source', 'The worker, clx.cx and these pages are open under AGPL-3.0: read what runs in your account.'],
       ],
@@ -116,17 +116,17 @@ const en: Strings = {
       h2: 'Plans',
       items: [
         { name: 'Free', price: '$0', points: ['1 Cloudflare account', '10 sites, 200 links', '1 API key'] },
-        { name: 'API', price: 'On request, free for now', points: ['50 Cloudflare accounts', '500 sites, 10,000 links', '5 API keys'] },
+        { name: 'Pro', price: '$9 per 30 days', points: ['50 Cloudflare accounts', '500 sites, including sites not on Cloudflare', '10,000 links, 5 API keys'] },
       ],
-      note: 'Cloudflare’s Workers Paid plan is never required on any plan.',
+      note: 'Pro is paid from a prepaid balance, by the day. Cloudflare’s Workers Paid plan is never required on any plan.',
       more: 'Plans in detail',
     },
     faq: {
       h2: 'Questions',
       items: [
-        ['Do I need a Cloudflare account?', 'Yes. clx counts sites served by Cloudflare, and short links need a domain of yours there: clx.cx carries none of your traffic.'],
+        ['Do I need a Cloudflare account?', 'Yes, with a domain of yours on it: clx.cx carries none of your traffic. clx counts sites served by Cloudflare; on Pro, also sites hosted elsewhere, through a host of that domain. Short links need a domain there too.'],
         ['What does clx create in my account?', 'One worker, one D1 database, the routes of your sites and the custom domains of your link hosts, with a working token of its own. Disconnecting removes what clx created and lists anything it could not; the working token you revoke yourself in Cloudflare — clx gives you the link.'],
-        ['Does it cost anything?', 'The free plan costs nothing and needs no card; the worker runs on your Cloudflare quotas.'],
+        ['Does it cost anything?', 'The free plan costs nothing and needs no card. Pro is $9 per 30 days from a balance you top up with crypto or Telegram Stars. Either way the worker runs on your Cloudflare quotas.'],
         ['Can I read the code?', 'All of it, on GitHub, under AGPL-3.0.'],
       ],
       more: 'All questions',
@@ -200,7 +200,7 @@ const ru: Strings = {
       links: [['Где лежат ваши данные', '/how-it-works'], ['Подробнее о следе', '/for-site-generators'], ['Открытый код', '/open-source'], ['clx и 301.ru', '/vs-301']],
       items: [
         ['Данные остаются у вас', 'Посещения, клики и их разбивки лежат в базе D1 в вашем аккаунте Cloudflare. На clx.cx хранятся только итоги по часам и дням.'],
-        ['Без общего следа между сайтами', 'У каждого сайта свой путь, свои имена скрипта и сборщика и свой код сниппета — из случайного зерна. Счётчик грузится с вашего же домена и шлёт отметки туда же, без cookie и стороннего хоста: по страницам не связать ваши сайты ни между собой, ни с clx.'],
+        ['Без общего следа между сайтами', 'У каждого сайта свой путь, свои имена скрипта и сборщика и свой код сниппета — из случайного зерна. Счётчик грузится с вашего же домена и шлёт отметки туда же, без cookie и стороннего хоста: по страницам не связать ваши сайты ни между собой, ни с clx. Сайт не на Cloudflare (Pro) шлёт отметки на хост вашей же зоны, и этот адрес виден в его страницах.'],
         ['Часто хватает бесплатного Cloudflare', 'Workers Free даёт аккаунту 100 000 запросов и 100 000 записей D1 в сутки — на все его воркеры: типичному аккаунту это ~11 000 событий в сутки в худшем случае, обычно в несколько раз больше. clx предупредит, когда аккаунт подойдёт к квоте.'],
         ['Открытый код', 'Воркер, clx.cx и эти страницы открыты под AGPL-3.0: видно, что работает в вашем аккаунте.'],
       ],
@@ -216,17 +216,17 @@ const ru: Strings = {
       h2: 'Тарифы',
       items: [
         { name: 'Free', price: 'Бесплатно', points: ['1 аккаунт Cloudflare', '10 сайтов, 200 ссылок', '1 ключ API'] },
-        { name: 'API', price: 'По запросу, пока бесплатно', points: ['50 аккаунтов Cloudflare', '500 сайтов, 10 000 ссылок', '5 ключей API'] },
+        { name: 'Pro', price: '$9 за 30 дней', points: ['50 аккаунтов Cloudflare', '500 сайтов, в том числе не на Cloudflare', '10 000 ссылок, 5 ключей API'] },
       ],
-      note: 'Тариф Workers Paid у Cloudflare не нужен ни на одном тарифе.',
+      note: 'Pro оплачивается с предоплаченного баланса, по дням. Тариф Workers Paid у Cloudflare не нужен ни на одном тарифе.',
       more: 'Тарифы подробно',
     },
     faq: {
       h2: 'Вопросы',
       items: [
-        ['Нужен ли аккаунт Cloudflare?', 'Да. clx считает сайты, которые обслуживает Cloudflare, а коротким ссылкам нужен ваш домен там же: через clx.cx ваш трафик не идёт.'],
+        ['Нужен ли аккаунт Cloudflare?', 'Да, и ваш домен в нём: через clx.cx ваш трафик не идёт. clx считает сайты, которые обслуживает Cloudflare, а на Pro — и сайты на другом хостинге, через хост этого домена. Коротким ссылкам тоже нужен домен там.'],
         ['Что clx создаёт в моём аккаунте?', 'Один воркер, одну базу D1, маршруты ваших сайтов и собственные домены хостов ссылок — со своим рабочим токеном. При отключении clx удаляет созданное и перечисляет, что удалить не смог; рабочий токен вы отзываете сами в Cloudflare — clx даёт ссылку.'],
-        ['Это платно?', 'Бесплатный тариф ничего не стоит и не требует карты; воркер работает в ваших квотах Cloudflare.'],
+        ['Это платно?', 'Бесплатный тариф ничего не стоит и не требует карты. Pro — $9 за 30 дней с баланса, который пополняется криптой или звёздами Telegram. В обоих случаях воркер работает в ваших квотах Cloudflare.'],
         ['Можно посмотреть код?', 'Весь, на GitHub, под AGPL-3.0.'],
       ],
       more: 'Все вопросы',

@@ -1,5 +1,5 @@
 <h1 class="h3">Privacy</h1>
-<p class="muted text-sm">Version of 19 October 2026.</p>
+<p class="muted text-sm">Version of 30 October 2026.</p>
 
 <h2 class="h4">What clx is</h2>
 <p>
@@ -13,17 +13,25 @@
   <li>your e-mail address, a hash of your password (PBKDF2), the time you signed in;</li>
   <li>the working token of your Cloudflare account — encrypted only; a log of the calls it made on your behalf (90 days);</li>
   <li>your sites, links and rules;</li>
-  <li>totals of your sites and links: views, bots and visitors by hour (2 days) and by day (400 days) — no pages, sources or other breakdowns.</li>
+  <li>totals of your sites and links: views, bots and visitors by hour (2 days) and by day (400 days) — no pages, sources or other breakdowns;</li>
+  <li>your balance: its journal, your top-ups with the payment's id at Trybit or Telegram, and refund requests with the address you gave for them;</li>
+  <li>the partner program: your code, the partner who referred you, if any, your wallet and payout requests with their address.</li>
 </ul>
-<p>clx.cx sets one cookie — the sign-in session (HttpOnly, this site only). There are no ads and no third-party analytics.</p>
+<p>
+  clx.cx sets the sign-in session cookie (HttpOnly, this site only) and, after a visit by a partner
+  link (<code>?ref=</code>), the cookie <code>clx_ref</code> with that partner's or promo code for 30
+  days, so that an account made then is credited to the partner or gets the promo. The Russian pages
+  (ru.clx.cx) keep such a code for the tab, to pass it on to clx.cx. There are no ads and no third-party analytics.
+</p>
 
 <h2 class="h4">Visitors of your sites</h2>
 <p>
-  The counter sets no cookies and loads nothing from other addresses. Visit data — page, source,
+  The counter sets no cookies and loads nothing from third-party addresses. Visit data — page, source,
   country, device type, browser and system — is kept in the database in your Cloudflare account,
   not on clx.cx. The IP address and User-Agent are used in memory only: to count a day's unique
   visitors they are hashed with a salt of the day; the salt and the hashes are deleted once the
-  day is closed. Only totals go to clx.cx.
+  day is closed. Only totals go to clx.cx. A site not on Cloudflare (Pro) sends its visits to a host
+  of your own Cloudflare zone, where the same worker counts them.
 </p>
 <p>
   For your sites' visitors you are the controller of their data, and clx processes the totals.
@@ -46,8 +54,11 @@
 <p>
   Disconnecting a Cloudflare account removes the clx worker, database and routes from it; the
   totals on clx.cx are kept 30 days and then deleted. Deleting your clx account deletes it and all
-  its totals at once.
+  its totals at once; it is refused while money is on the balance or the partner wallet, or still
+  moving (the terms list when). The record of its payments, refunds and partner money is kept
+  for accounting, without your e-mail address or the addresses you gave. A Telegram Stars payment
+  is kept by its Telegram payment id, with the payer's Telegram ID.
 </p>
 
 <h2 class="h4">Processors</h2>
-<p>clx.cx runs on Cloudflare (Workers, D1, KV, Email Sending, Turnstile). The bot and support run on Telegram.</p>
+<p>clx.cx runs on Cloudflare (Workers, D1, KV, Email Sending, Turnstile). The bot and support run on Telegram. Crypto top-ups go through Trybit, which sees the invoice's sum and the paying wallet; Stars are paid through Telegram.</p>

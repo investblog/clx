@@ -56,7 +56,7 @@ const ANALYTICS: Record<Locale, ProductText> = {
     sections: [
       {
         h: 'No cookies, nothing third-party',
-        p: 'The snippet is served from your own domain, under a path of your site, and sets no cookies. A visitor is counted once a day by a hash of a random daily salt, the site, the IP address and the browser string; the hash and the salt are deleted when the day closes, and the IP address and the browser string are never written down.',
+        p: 'The snippet is served from your own domain, under a path of your site (a site not on Cloudflare, on Pro: of a host of your zone), and sets no cookies. A visitor is counted once a day by a hash of a random daily salt, the site, the IP address and the browser string; the hash and the salt are deleted when the day closes, and the IP address and the browser string are never written down.',
       },
       {
         h: 'What the report shows',
@@ -70,13 +70,13 @@ const ANALYTICS: Record<Locale, ProductText> = {
     ],
     setup: {
       h: 'One line in your pages',
-      p: 'Add your site in the app or through the API and put its snippet into your template — a script tag or an inline script under 600 bytes. A site generator does it at build time.',
+      p: 'Add your site in the app or through the API and put its snippet into your template — a script tag or an inline script (under 600 bytes on a site on Cloudflare). A site generator does it at build time.',
       code: '<!-- the snippet of your site; the path is its own -->\n<script defer src="/lumora/k3.js"></script>',
     },
     faq: {
       h: 'Questions',
       items: [
-        ['Which sites can clx count?', 'Sites served by Cloudflare in the account you connect: a zone there or a subdomain of one. Ten sites on the free plan, 500 on the API plan.'],
+        ['Which sites can clx count?', 'Sites served by Cloudflare in the account you connect: a zone there or a subdomain of one. On Pro, also sites hosted elsewhere: their visits go to a host of a zone in that account, counted by the same worker, and their pages name that host. Ten sites on the free plan, 500 on Pro.'],
         ['How are bots told apart?', 'By known signatures in the browser string, headless browsers included: they are counted in their own report by kind and never mixed into views or visitors.'],
         ['Can I get raw visits?', 'No: clx keeps no visit log, only counters. Reports come from the app and from the API.'],
         ['What if I disconnect?', 'clx removes its worker, database and routes from your account and lists anything it could not; the totals on clx.cx go with your clx account when you delete it.'],
@@ -96,7 +96,7 @@ const ANALYTICS: Record<Locale, ProductText> = {
     sections: [
       {
         h: 'Без cookie и без чужих скриптов',
-        p: 'Сниппет грузится с вашего домена, по пути вашего же сайта, и не ставит cookie. Посетитель считается раз в сутки по хешу из случайной суточной соли, сайта, IP-адреса и строки браузера; хеш и соль удаляются, когда сутки закрываются, а IP-адрес и строка браузера не записываются вовсе.',
+        p: 'Сниппет грузится с вашего домена, по пути вашего же сайта (у сайта не на Cloudflare, на Pro, — по пути хоста вашей зоны) и не ставит cookie. Посетитель считается раз в сутки по хешу из случайной суточной соли, сайта, IP-адреса и строки браузера; хеш и соль удаляются, когда сутки закрываются, а IP-адрес и строка браузера не записываются вовсе.',
       },
       {
         h: 'Что в отчёте',
@@ -110,13 +110,13 @@ const ANALYTICS: Record<Locale, ProductText> = {
     ],
     setup: {
       h: 'Одна строка на страницах',
-      p: 'Добавьте сайт в кабинете или через API и вставьте его сниппет в шаблон — тегом script или встроенным скриптом до 600 байт. Генератор сайтов делает это при сборке.',
+      p: 'Добавьте сайт в кабинете или через API и вставьте его сниппет в шаблон — тегом script или встроенным скриптом (до 600 байт у сайта на Cloudflare). Генератор сайтов делает это при сборке.',
       code: '<!-- сниппет вашего сайта; путь у каждого свой -->\n<script defer src="/lumora/k3.js"></script>',
     },
     faq: {
       h: 'Вопросы',
       items: [
-        ['Какие сайты clx может считать?', 'Сайты, которые обслуживает Cloudflare в подключённом аккаунте: зону или её поддомен. На бесплатном тарифе — 10 сайтов, на тарифе API — 500.'],
+        ['Какие сайты clx может считать?', 'Сайты, которые обслуживает Cloudflare в подключённом аккаунте: зону или её поддомен. На Pro — и сайты на другом хостинге: их посещения идут на хост зоны этого аккаунта, считает их тот же воркер, а адрес этого хоста виден в их страницах. На бесплатном тарифе — 10 сайтов, на Pro — 500.'],
         ['Как отделяются боты?', 'По известным сигнатурам в строке браузера, включая headless-браузеры: они считаются в своём отчёте по видам и не попадают ни в просмотры, ни в посетителей.'],
         ['Можно получить сырые посещения?', 'Нет: clx не ведёт журнал посещений, только счётчики. Отчёты — в кабинете и через API.'],
         ['Что будет, если отключиться?', 'clx удалит из вашего аккаунта свой воркер, базу и маршруты и перечислит, что удалить не смог; итоги на clx.cx удаляются вместе с учётной записью clx.'],
@@ -165,7 +165,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       items: [
         ['Can I use clx without a domain of my own?', 'No. Links live on your host in your Cloudflare account: clx.cx carries none of your traffic.'],
         ['What happens to a printed QR code if the page moves?', 'Change the link’s target: the code and the QR code stay the same.'],
-        ['How many links can I have?', '200 on the free plan, 10,000 on the API plan.'],
+        ['How many links can I have?', '200 on the free plan, 10,000 on Pro.'],
         ['How is a link chosen by country?', 'By the country Cloudflare sees the click from; a device is a phone or a computer.'],
       ],
     },
@@ -226,7 +226,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       items: [
         ['Можно без своего домена?', 'Нет. Ссылки живут на вашем хосте в вашем аккаунте Cloudflare: через clx.cx ваш трафик не идёт.'],
         ['Что будет с напечатанным QR-кодом, если страница переедет?', 'Поменяйте цель ссылки: код ссылки и QR-код останутся прежними.'],
-        ['Сколько ссылок можно сделать?', '200 на бесплатном тарифе, 10 000 на тарифе API.'],
+        ['Сколько ссылок можно сделать?', '200 на бесплатном тарифе, 10 000 на Pro.'],
         ['Как выбирается страна?', 'По стране, из которой Cloudflare видит клик; устройство — телефон или компьютер.'],
         ['Работают ли ссылки для посетителей из России?', 'Да. Российские провайдеры обрывают соединения с Cloudflare после первых ~16 КБ, а переход по ссылке — это редирект 302 без тела: вместе с TLS-рукопожатием меньше 5 КБ. Дальше посетитель уходит на целевой адрес — как тот открывается в России, зависит уже от его хостинга.'],
       ],
@@ -317,17 +317,17 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
     title: 'Visit counter and links API for site generators — clx',
     description: 'Add a site through the API, embed a counter with no shared footprint at build time and read the totals back. clx runs in your customers’ Cloudflare accounts.',
     h1: 'Analytics and short links for the sites you generate',
-    lead: 'A site generator adds a site through the API, puts its counter into the pages it builds and reads the totals back. Each counter runs in the Cloudflare account its site is served from.',
+    lead: 'A site generator adds a site through the API, puts its counter into the pages it builds and reads the totals back. Each counter runs in the customer’s own Cloudflare account.',
     start: 'Start free',
     flow: [
       ['Your generator', 'adds the site and gets its snippet'],
       ['clx API', 'installs the route in the customer’s account'],
-      ['The built pages', 'count their visits on their own domain'],
+      ['The built pages', 'count their visits on the customer’s domain'],
     ],
     sections: [
       {
         h: 'No shared footprint',
-        p: 'Every site gets its own path, file names and snippet code, generated from a random seed, and no third-party host appears: no signature in the page, the URLs or the answers is shared by clx sites or names clx. What stays visible, plainly: a same-origin POST on each page view, answered with an empty 204, and the browser’s own API names.',
+        p: 'Every site gets its own path, file names and snippet code, generated from a random seed, and no third-party host appears: no signature in the page, the URLs or the answers is shared by clx sites or names clx. What stays visible, plainly: a same-origin POST on each page view, answered with an empty 204, and the browser’s own API names. That is a site on Cloudflare; a site counted from elsewhere (Pro) posts to a host of the customer’s zone, which every site counted on that host shares.',
       },
       {
         h: 'Made for build pipelines',
@@ -335,7 +335,7 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
       },
       {
         h: 'Many customers, one integration',
-        p: 'The API plan covers 50 Cloudflare accounts, 500 sites and 10,000 links with five keys; a key can be limited to some accounts and client IPs, so one customer’s key cannot reach another’s.',
+        p: 'Pro covers 50 Cloudflare accounts, 500 sites and 10,000 links with five keys; a key can be limited to some accounts and client IPs, so one customer’s key cannot reach another’s.',
       },
       {
         h: 'Works with Cloudflare Pages',
@@ -350,31 +350,31 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
     faq: {
       h: 'Questions',
       items: [
-        ['Do my customers need their own Cloudflare accounts?', 'Yes: a counter runs in the account its site is served from. A customer connects it once with a bootstrap token, by hand or through your integration.'],
-        ['Can footprint scanners or ad blockers spot clx?', 'No signature in the page, the URLs or the answers is shared by clx sites or names clx, beyond the browser’s own API names. Someone watching can still see the behaviour — a same-origin POST answered with an empty 204.'],
+        ['Do my customers need their own Cloudflare accounts?', 'Yes: a counter runs in the account the site is served from — or, for a site hosted elsewhere (Pro), the account of its collector host. A customer connects it once with a bootstrap token, by hand or through your integration.'],
+        ['Can footprint scanners or ad blockers spot clx?', 'No signature in the page, the URLs or the answers is shared by clx sites or names clx, beyond the browser’s own API names. Someone watching can still see the behaviour — a same-origin POST answered with an empty 204, or, on a site hosted elsewhere, a POST to the collector host.'],
         ['Is there an SDK?', 'No: the API is plain HTTP with an OpenAPI contract, and AI agents have a walkthrough of their own.'],
-        ['What does it cost?', 'The API plan is switched on by request (/support in the Telegram bot @clxcxbot) and is free for now; Workers Paid is never required.'],
+        ['What does it cost?', 'Pro is $9 per 30 days, paid from a prepaid balance by the day; the free plan has one key, one Cloudflare account and 10 sites. Workers Paid is never required.'],
       ],
     },
     faqKey: 'generators',
-    more: [['The API plan', '/pricing'], ['How it works', '/how-it-works'], ['Open source', '/open-source']],
+    more: [['Pricing', '/pricing'], ['How it works', '/how-it-works'], ['Open source', '/open-source']],
     final: 'Give every site you build its own counter',
   },
   ru: {
     title: 'API счётчика и ссылок для генераторов сайтов — clx',
     description: 'Добавьте сайт через API, вставьте при сборке счётчик без общего следа и читайте итоги. clx работает в аккаунтах Cloudflare ваших клиентов. Открытый API.',
     h1: 'Статистика и короткие ссылки для сайтов, которые вы генерируете',
-    lead: 'Генератор сайтов добавляет сайт через API, вставляет его счётчик в собираемые страницы и читает итоги. Каждый счётчик работает в том аккаунте Cloudflare, где обслуживается его сайт.',
+    lead: 'Генератор сайтов добавляет сайт через API, вставляет его счётчик в собираемые страницы и читает итоги. Каждый счётчик работает в собственном аккаунте Cloudflare клиента.',
     start: 'Начать бесплатно',
     flow: [
       ['Ваш генератор', 'добавляет сайт и получает сниппет'],
       ['API clx', 'ставит маршрут в аккаунт клиента'],
-      ['Собранные страницы', 'считают посещения на своём домене'],
+      ['Собранные страницы', 'считают посещения на домене клиента'],
     ],
     sections: [
       {
         h: 'Без общего следа',
-        p: 'У каждого сайта свой путь, свои имена файлов и свой код сниппета — из случайного зерна, и нет чужого хоста: ни в странице, ни в адресах, ни в ответах нет сигнатуры, общей для сайтов clx или похожей на clx. Что остаётся видно, честно: POST на свой же сайт при каждом просмотре с пустым ответом 204 и имена API самого браузера.',
+        p: 'У каждого сайта свой путь, свои имена файлов и свой код сниппета — из случайного зерна, и нет чужого хоста: ни в странице, ни в адресах, ни в ответах нет сигнатуры, общей для сайтов clx или похожей на clx. Что остаётся видно, честно: POST на свой же сайт при каждом просмотре с пустым ответом 204 и имена API самого браузера. Это про сайт на Cloudflare; сайт на другом хостинге (Pro) шлёт POST на хост зоны клиента — общий для всех сайтов, которые на нём считаются.',
       },
       {
         h: 'Для конвейеров сборки',
@@ -382,7 +382,7 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
       },
       {
         h: 'Много клиентов, одна интеграция',
-        p: 'Тариф API — 50 аккаунтов Cloudflare, 500 сайтов и 10 000 ссылок, пять ключей; ключ можно ограничить аккаунтами и IP клиента, чтобы ключ одного клиента не дотянулся до другого.',
+        p: 'Pro — 50 аккаунтов Cloudflare, 500 сайтов и 10 000 ссылок, пять ключей; ключ можно ограничить аккаунтами и IP клиента, чтобы ключ одного клиента не дотянулся до другого.',
       },
       {
         h: 'Работает с Cloudflare Pages',
@@ -397,14 +397,14 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
     faq: {
       h: 'Вопросы',
       items: [
-        ['Нужны ли клиентам свои аккаунты Cloudflare?', 'Да: счётчик работает в том аккаунте, где обслуживается сайт. Клиент подключает его один раз bootstrap-токеном — сам или через вашу интеграцию.'],
-        ['Найдут ли clx сканеры футпринтов или блокировщики рекламы?', 'В странице, адресах и ответах нет сигнатуры, общей для сайтов clx или похожей на clx, кроме имён API самого браузера. Наблюдатель всё же может заметить поведение — POST на свой сайт с пустым ответом 204.'],
+        ['Нужны ли клиентам свои аккаунты Cloudflare?', 'Да: счётчик работает в том аккаунте, где обслуживается сайт, а у сайта на другом хостинге (Pro) — в аккаунте его хоста-сборщика. Клиент подключает его один раз bootstrap-токеном — сам или через вашу интеграцию.'],
+        ['Найдут ли clx сканеры футпринтов или блокировщики рекламы?', 'В странице, адресах и ответах нет сигнатуры, общей для сайтов clx или похожей на clx, кроме имён API самого браузера. Наблюдатель всё же может заметить поведение — POST на свой сайт с пустым ответом 204, а у сайта на другом хостинге — POST на хост-сборщик.'],
         ['Есть ли SDK?', 'Нет: API — обычный HTTP с контрактом OpenAPI, а для ИИ-агентов есть отдельная пошаговая инструкция.'],
-        ['Сколько это стоит?', 'Тариф API включается по запросу (/support в Telegram-боте @clxcxbot) и пока бесплатен; Workers Paid не нужен.'],
+        ['Сколько это стоит?', 'Pro — $9 за 30 дней, с предоплаченного баланса по дням; на бесплатном тарифе — один ключ, один аккаунт Cloudflare и 10 сайтов. Workers Paid не нужен.'],
       ],
     },
     faqKey: 'generators',
-    more: [['Тариф API', '/pricing'], ['Как это работает', '/how-it-works'], ['Открытый код', '/open-source']],
+    more: [['Тарифы', '/pricing'], ['Как это работает', '/how-it-works'], ['Открытый код', '/open-source']],
     final: 'Дайте каждому собранному сайту свой счётчик',
   },
 };
@@ -416,17 +416,29 @@ interface PricingText extends ProductText {
 
 const PRICING: Record<Locale, PricingText> = {
   en: {
-    title: 'clx pricing — free, on your own Cloudflare quotas',
-    description: 'clx is free: one Cloudflare account, 10 sites and 200 links on the free plan, higher limits on the API plan on request. Workers Paid is never required.',
-    h1: 'Free, on your own Cloudflare quotas',
-    lead: 'clx costs nothing today. The worker runs in your Cloudflare account, on its quotas, and the plans differ only in their limits.',
+    title: 'clx pricing — a free plan, and Pro for $9 per 30 days',
+    description: 'clx is free for one Cloudflare account, 10 sites and 200 links. Pro is $9 per 30 days: 500 sites, sites not on Cloudflare too, 10,000 links.',
+    h1: 'A free plan, and Pro for $9 per 30 days',
+    lead: 'The worker runs in your Cloudflare account, on its quotas, so clx never charges for traffic. The plans differ in their limits, and Pro also counts sites that are not on Cloudflare.',
     start: 'Start free',
     plans: [
       { name: 'Free', price: '$0', points: ['1 Cloudflare account', '10 sites', '200 links, 10 rules each', '1 API key'] },
-      { name: 'API', price: 'On request, free for now', points: ['50 Cloudflare accounts', '500 sites', '10,000 links, 10 rules each', '5 API keys, limited by account and IP'] },
+      { name: 'Pro', price: '$9 per 30 days', points: ['50 Cloudflare accounts', '500 sites, including sites not on Cloudflare', '10,000 links, 10 rules each', '5 API keys, limited by account and IP'] },
     ],
-    note: 'The API plan is switched on by request: send /support to the Telegram bot @clxcxbot.',
+    note: 'Pro is paid from a prepaid balance: $0.30 a day, charged day by day while it is on. No card and no subscription.',
     sections: [
+      {
+        h: 'How Pro is paid',
+        p: 'Top up the balance on the app’s Balance page with USDT (TRON, BNB Smart Chain, Ethereum) or USDC (Ethereum), $9 to $1,000, or with 750 or 2,500 Telegram Stars in the bot (/pay). Switching Pro on takes the first day; then each next day (UTC) is charged in its turn. Switched off, Pro ends after the day already paid, and the rest stays on the balance.',
+      },
+      {
+        h: 'If the balance runs out',
+        p: 'Pro keeps working for 3 more days, and clx tells you by e-mail and in Telegram. Without a top-up the account returns to the free plan: what is beyond its limits is paused — not counted, not deleted — and works again once Pro is on.',
+      },
+      {
+        h: 'Refunds',
+        p: 'Money not spent can be asked back from the Balance page within 90 days of the top-up that brought it: crypto less the network fee, to an address you give; Stars whole, back to Telegram. The details are in the terms.',
+      },
       {
         h: 'What Cloudflare gives for free',
         p: 'Workers Free allows 100,000 requests and 100,000 D1 writes a day per account, shared by all its workers. For a typical account that is about 11,000 counted events a day at worst, usually several times that.',
@@ -439,17 +451,15 @@ const PRICING: Record<Locale, PricingText> = {
         h: 'If a quota runs out',
         p: 'Out of worker requests (100,000 a day), the counter’s path answers with an error and short links stop working; your pages themselves are not affected. Out of D1 writes, the counter stops counting and links keep redirecting. Out of D1 reads (5 million a day), links answer “try again later” (503). Each lasts until the quota resets.',
       },
-      {
-        h: 'Paid plans later',
-        p: 'Paid plans with higher limits are planned. Until then the API plan is free too.',
-      },
     ],
     faq: {
       h: 'Questions',
       items: [
-        ['Do I need a card?', 'No: signing up and the free plan need none.'],
+        ['Do I need a card?', 'No: signing up and the free plan need none, and Pro is paid in crypto or Telegram Stars.'],
+        ['What does Pro add besides limits?', 'Sites that are not on Cloudflare: their visits go to a host of a zone in your Cloudflare account and are counted by the same worker there. The free plan counts only sites served by Cloudflare.'],
         ['Does clx charge for traffic?', 'No: your visits and clicks go through your own Cloudflare account and its quotas, not through clx.cx.'],
         ['What counts towards the limits?', 'Connected Cloudflare accounts, sites, links and API keys; visits and clicks are limited only by your Cloudflare quotas.'],
+        ['Is there a partner program?', 'Every account has a partner link on the app’s Partners page: 30% of every top-up by the people who sign up through it, for as long as they pay. After 30 days you can move it to your balance or ask for a payout in USDT (TRON), from $20.'],
       ],
     },
     faqKey: 'pricing',
@@ -457,17 +467,29 @@ const PRICING: Record<Locale, PricingText> = {
     final: 'Start on the free plan',
   },
   ru: {
-    title: 'Тарифы clx — бесплатно, в квотах вашего Cloudflare',
-    description: 'clx бесплатен: один аккаунт Cloudflare, 10 сайтов и 200 ссылок на бесплатном тарифе, лимиты выше — на тарифе API по запросу. Workers Paid не нужен.',
-    h1: 'Бесплатно, в квотах вашего Cloudflare',
-    lead: 'Сегодня clx ничего не стоит. Воркер работает в вашем аккаунте Cloudflare, в его квотах, а тарифы различаются только лимитами.',
+    title: 'Тарифы clx — бесплатный и Pro за $9 в 30 дней',
+    description: 'clx бесплатен для одного аккаунта Cloudflare, 10 сайтов и 200 ссылок. Pro — $9 за 30 дней: 500 сайтов, в том числе не на Cloudflare, 10 000 ссылок.',
+    h1: 'Бесплатный тариф и Pro за $9 в 30 дней',
+    lead: 'Воркер работает в вашем аккаунте Cloudflare, в его квотах, поэтому clx никогда не берёт денег за трафик. Тарифы различаются лимитами, а Pro считает ещё и сайты не на Cloudflare.',
     start: 'Начать бесплатно',
     plans: [
       { name: 'Free', price: 'Бесплатно', points: ['1 аккаунт Cloudflare', '10 сайтов', '200 ссылок, по 10 правил', '1 ключ API'] },
-      { name: 'API', price: 'По запросу, пока бесплатно', points: ['50 аккаунтов Cloudflare', '500 сайтов', '10 000 ссылок, по 10 правил', '5 ключей API с ограничением по аккаунтам и IP'] },
+      { name: 'Pro', price: '$9 за 30 дней', points: ['50 аккаунтов Cloudflare', '500 сайтов, в том числе не на Cloudflare', '10 000 ссылок, по 10 правил', '5 ключей API с ограничением по аккаунтам и IP'] },
     ],
-    note: 'Тариф API включается по запросу: напишите /support Telegram-боту @clxcxbot.',
+    note: 'Pro оплачивается с предоплаченного баланса: $0,30 в день, списывается по дням, пока включён. Без карты и без подписки.',
     sections: [
+      {
+        h: 'Как платить за Pro',
+        p: 'Пополните баланс на странице «Баланс» в кабинете — USDT (TRON, BNB Smart Chain, Ethereum) или USDC (Ethereum), от $9 до $1000, — или звёздами Telegram в боте (/pay): 750 или 2500. При включении Pro списывается первый день, дальше по очереди — каждый следующий день (по UTC). Выключенный Pro заканчивается после уже оплаченного дня, остаток остаётся на балансе.',
+      },
+      {
+        h: 'Если баланс кончился',
+        p: 'Pro работает ещё 3 дня, а clx пишет на почту и в Telegram. Без пополнения аккаунт вернётся на бесплатный тариф: что сверх его лимитов, встанет на паузу — не считается, но и не удаляется — и заработает снова, когда Pro включат.',
+      },
+      {
+        h: 'Возвраты',
+        p: 'Неизрасходованные деньги можно запросить назад со страницы «Баланс» в течение 90 дней после пополнения, которое их принесло: крипту — за вычетом комиссии сети, на указанный вами адрес; звёзды — целиком, обратно в Telegram. Подробно — в условиях.',
+      },
       {
         h: 'Что Cloudflare даёт бесплатно',
         p: 'Workers Free даёт аккаунту 100 000 запросов и 100 000 записей D1 в сутки — на все его воркеры. Типичному аккаунту это ~11 000 учтённых событий в сутки в худшем случае, обычно в несколько раз больше.',
@@ -480,17 +502,15 @@ const PRICING: Record<Locale, PricingText> = {
         h: 'Если квота кончилась',
         p: 'Кончились запросы к воркерам (100 000 в сутки) — путь счётчика отвечает ошибкой, а короткие ссылки перестают работать; сами страницы сайта не затронуты. Кончились записи D1 — счётчик перестаёт считать, ссылки переадресуют. Кончились чтения D1 (5 млн в сутки) — ссылки отвечают «попробуйте позже» (503). Всё это — до сброса квоты.',
       },
-      {
-        h: 'Платные тарифы позже',
-        p: 'Платные тарифы с лимитами выше запланированы. До тех пор тариф API тоже бесплатен.',
-      },
     ],
     faq: {
       h: 'Вопросы',
       items: [
-        ['Нужна ли карта?', 'Нет: для регистрации и бесплатного тарифа она не нужна.'],
+        ['Нужна ли карта?', 'Нет: для регистрации и бесплатного тарифа она не нужна, а Pro оплачивается криптой или звёздами Telegram.'],
+        ['Что даёт Pro, кроме лимитов?', 'Сайты не на Cloudflare: их посещения идут на хост зоны в вашем аккаунте Cloudflare, и считает их тот же воркер. Бесплатный тариф считает только сайты, которые обслуживает Cloudflare.'],
         ['Берёт ли clx деньги за трафик?', 'Нет: посещения и клики идут через ваш аккаунт Cloudflare и его квоты, а не через clx.cx.'],
         ['Что входит в лимиты?', 'Подключённые аккаунты Cloudflare, сайты, ссылки и ключи API; посещения и клики ограничены только квотами вашего Cloudflare.'],
+        ['Есть ли партнёрская программа?', 'У каждого аккаунта есть партнёрская ссылка на странице «Партнёрам» в кабинете: 30% с каждого пополнения тех, кто зарегистрировался по ней, пока они платят. Через 30 дней их можно перевести на свой баланс или запросить выплату в USDT (TRON) от $20.'],
       ],
     },
     faqKey: 'pricing',

@@ -35,7 +35,8 @@ on the same terms the owner chose for clx on 23.10; its shape and its lessons ar
   code; the bot takes `t.me/clxcxbot?start=ref_CODE`; a code typed at sign-up wins over the cookie.
   The referrer is written once, when the clx account is made, and never changes; one cannot refer
   oneself. The Russian pages on `ru.clx.cx` (GitHub Pages, §16) cannot set a cookie for clx.cx, so
-  they carry the code in their links to clx.cx.
+  they keep it for the tab and carry it in their links to the Russian sign-in card on clx.cx
+  (`/ru/signin`), where the Worker sets the cookie as on the home page.
 - **Promo codes** share one field and one name space with partner codes (a partner code is looked
   up first): a bonus to the first top-up, to any top-up for a period, or a start credit granted when
   the e-mail is confirmed. Once per user and code, on a deposit of at least $9; a refund of that
