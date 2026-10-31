@@ -101,7 +101,8 @@ Why:
 | link hosts: custom domains of `clx-edge` (Cloudflare makes their DNS records) | `/accounts/{id}/workers/domains` | Workers Scripts Write, Zone Read, Workers Routes Write — no DNS right (checked live, §13 item 2) |
 
    Not taken: KV, Pages, Transform/Redirect Rules, SSL, WAF, Firewall, Cache, zone Analytics, API Tokens
-   Edit. Whether a Pages check is needed — open question §13 item 9.
+   Edit. No Pages right is needed: a route on a Pages host runs without one (§13 item 9, checked
+   05.10.2026).
 5. Storage: AES-GCM-256, random IV, AAD = record ID + Cloudflare account ID (a ciphertext cannot be
    moved to another account). The key comes from the `MASTER_KEYS` keyring (`key_id → secret`):
    encrypt with the current key, decrypt by the record's `key_id`; rotation — add a new key, re-encrypt
@@ -836,7 +837,7 @@ Pages:
 - **Balance** (§18): the balance and the journal, Pro on or off with the day it is paid through
   and any grace, a top-up in crypto (amount, coin, then the address and the exact sum with a
   countdown) and a pointer to `/pay` in the bot for Stars; what is paused, when it is.
-- **Partners** (§19): the code and the links (site and bot), referrals, the wallet with what is
+- **Partners** (§19): the code and the links (the site, the Russian site ru.clx.cx and the bot), referrals, the wallet with what is
   held and what is available, move to the balance, ask for a payout.
 
 ## 11. Open source

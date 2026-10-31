@@ -365,6 +365,7 @@ export const ru = {
   partners: {
     terms: (pct: number, days: number) => `Приводите людей в clx — и получайте ${pct}% с каждого их пополнения, пожизненно. Деньги держатся ${days} дней, потом их можно перевести на свой баланс или вывести в USDT (TRC-20).`,
     siteLink: 'Ссылка на сайт',
+    siteLinkRu: 'Ссылка на русский сайт (ru.clx.cx)',
     botLink: 'Ссылка на бота',
     copy: 'Скопировать',
     code: (code: string) => `Ваш код — ${code}: его можно ввести и при регистрации.`,
@@ -597,7 +598,7 @@ export const ru = {
   adviceLevelPaid: { upgrade_soon: 'база близко к 400 МБ', over: 'детали не копятся' },
   metric: { requests: 'Запросы к воркерам за сутки', writes: 'Записи D1 за сутки', reads: 'Чтения D1 за сутки', size: 'Размер базы clx-edge' },
   drop: { budget: 'сверх бюджета', invalid: 'неверные', unknown_target: 'неизвестный сайт', too_old: 'слишком старые', busy: 'clx.cx был занят', expired: 'устарели в очереди' },
-  scope: { accounts: 'аккаунты', sites: 'сайты', links: 'ссылки', reports: 'отчёты' },
+  scope: { accounts: 'аккаунты', sites: 'сайты', links: 'ссылки', reports: 'отчёты', billing: 'баланс' },
 };
 
 export type Dict = typeof ru;

@@ -21,7 +21,7 @@ export function agentsBody(): string {
 
 <h2 id="ask">What to ask your human for</h2>
 <ol>
-<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a> and confirms their address. The free plan has one key, enough for one Cloudflare account, 10 sites and 200 links; Pro (<code>plan: "api"</code> in the API: 50 accounts, 500 sites including sites not on Cloudflare, 5 keys) is $9 per 30 days from a prepaid balance; the person tops it up and switches Pro on themselves, on the app's <a href="/app#/billing">Balance</a> page or with <code>/pay</code> in the Telegram bot <a href="${BOT_URL}">@clxcxbot</a>. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites. The key is shown once.</li>
+<li><strong>An API key</strong> <code>clx_…</code>. The person signs up at <a href="/app">clx.cx/app</a> and confirms their address. The free plan has one key, enough for one Cloudflare account, 10 sites and 200 links; Pro (<code>plan: "api"</code> in the API: 50 accounts, 500 sites including sites not on Cloudflare, 5 keys) is $9 per 30 days from a prepaid balance; the person tops it up and switches Pro on themselves, on the app's <a href="/app#/billing">Balance</a> page or with <code>/pay</code> in the Telegram bot <a href="${BOT_URL}">@clxcxbot</a>. They issue the key on the <a href="/app#/keys">Keys</a> page with the scopes you need: <code>accounts</code>, <code>sites</code>, <code>links</code>, <code>reports</code> for the whole setup; <code>sites</code> + <code>reports</code> for a build pipeline that only adds sites; <code>billing</code> to read the balance, make a crypto top-up and switch Pro on or off (refunds and every move of partner money — to the balance or out as a payout — need the person's own sign-in). The key is shown once.</li>
 <li><strong>The Cloudflare account ID</strong> — 32 hex characters, in the dashboard address after <code>dash.cloudflare.com/</code>.</li>
 <li><strong>A bootstrap token</strong>, made by the person in that account. clx uses it within one request to make its own working token, then deletes it. Steps for them:
 <ol>
@@ -182,7 +182,7 @@ clx's management API (${ORIGIN}/v1) takes **bearer API keys**:
 ## Getting a key
 - A person signs up at ${ORIGIN}/app (e-mail and password, with a CAPTCHA) and confirms the address.
 - The person issues a key on the Keys page of the app, choosing its scopes (\`accounts\`, \`sites\`,
-  \`links\`, \`reports\`) and, optionally, the Cloudflare accounts and client IPs it may be used for.
+  \`links\`, \`reports\`, \`billing\`) and, optionally, the Cloudflare accounts and client IPs it may be used for.
   The key is shown once; one per user on the free plan, up to 5 on Pro (\`plan: "api"\`: $9 per 30 days from a
   prepaid balance, topped up and switched on by the person on the app's Balance page or with /pay in
   the Telegram bot at ${BOT_URL}), revoked one by one.

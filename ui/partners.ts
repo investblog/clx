@@ -1,4 +1,4 @@
-// The Partners page (docs/spec.md §10, §19): the code and its links (site and bot), the referrals,
+// The Partners page (docs/spec.md §10, §19): the code and its links (site, Russian site, bot), the referrals,
 // the wallet — what is held and what is available — a move to the balance and a payout request.
 // Money moves only from this page, each with its own Idempotency-Key.
 import { ApiError, call } from './api';
@@ -81,6 +81,9 @@ export async function partnersPage(live: Live, redraw: () => void): Promise<HTML
       { class: 'card stack stack--sm' },
       h('p', {}, c.terms(p.rate_bp / 100, p.hold_days)),
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, c.siteLink), codeBlock(p.links.site, c.copy)),
+      // The Russian pages are static on their own host: it keeps `?ref=` for the tab and adds it to
+      // its links to clx.cx/ru/signin (docs/spec.md §19).
+      h('div', { class: 'field' }, h('span', { class: 'field-label' }, c.siteLinkRu), codeBlock(`https://ru.clx.cx/?ref=${encodeURIComponent(p.code)}`, c.copy)),
       p.links.bot ? h('div', { class: 'field' }, h('span', { class: 'field-label' }, c.botLink), codeBlock(p.links.bot, c.copy)) : null,
       h('p', { class: 'muted text-sm' }, c.code(p.code), ' ', c.referrals(num(p.referrals))),
     ),

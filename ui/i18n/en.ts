@@ -365,6 +365,7 @@ export const en: Dict = {
   partners: {
     terms: (pct: number, days: number) => `Bring people to clx and get ${pct}% of every top-up they make, for life. The money is held ${days} days; then move it to your balance or take it out in USDT (TRC-20).`,
     siteLink: 'Link to the site',
+    siteLinkRu: 'Link to the Russian site (ru.clx.cx)',
     botLink: 'Link to the bot',
     copy: 'Copy',
     code: (code: string) => `Your code is ${code}: it can be typed at sign-up too.`,
@@ -595,5 +596,5 @@ export const en: Dict = {
   adviceLevelPaid: { upgrade_soon: 'database near 400 MB', over: 'details stopped' },
   metric: { requests: 'Worker requests a day', writes: 'D1 writes a day', reads: 'D1 reads a day', size: 'Size of the clx-edge database' },
   drop: { budget: 'over the budget', invalid: 'invalid', unknown_target: 'unknown site', too_old: 'too old', busy: 'clx.cx was busy', expired: 'expired in the queue' },
-  scope: { accounts: 'accounts', sites: 'sites', links: 'links', reports: 'reports' },
+  scope: { accounts: 'accounts', sites: 'sites', links: 'links', reports: 'reports', billing: 'billing' },
 };

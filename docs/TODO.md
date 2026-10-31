@@ -56,9 +56,10 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] Stage 7: the QR library published as `@spintax/qr-svg` 0.1.0 (22.10, no npm organisation
       needed — the `spintax` account); `src/qr` gave way to the dependency (ADR 0033).
 
-- [ ] Open questions of spec §13, on a test Cloudflare account: rights for Workers Custom Domains.
-      (A route on a Pages host — verified 05.10, §13 item 9; an ignored `INSERT OR IGNORE` writes
-      0 rows — verified 05.10, `cloudflare-facts.md`.)
+- [x] Open questions of spec §13, on a test Cloudflare account: rights for Workers Custom Domains —
+      verified 11.10 (`scripts/probe-link-hosts.mjs`, `cloudflare-facts.md`, ADR 0024). (A route on a
+      Pages host — verified 05.10, §13 item 9; an ignored `INSERT OR IGNORE` writes 0 rows —
+      verified 05.10, `cloudflare-facts.md`.)
 - [ ] `MASTER_KEYS` rotation tool (a new key in front, re-encrypt, drop the old one) — before the
       first key needs replacing.
 - [x] Sign-out: the page showed the sign-in form even when `/auth/logout` failed, so the refresh
@@ -67,8 +68,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       freed rowid; both started at session version 0; Codex 07.10). New users now start at the
       sign-up time as their session version.
 - [x] A counter for a site not on Cloudflare — not a proxy: an external site counted by the user's
-      own clx-edge on a host of their zone, Pro only (ADR 0037; built 30.10, spec §14 stage 8). Its
-      live check comes after the billing release.
+      own clx-edge on a host of their zone, Pro only (ADR 0037; built 30.10, spec §14 stage 8). Checked
+      live 31.10, two runs (`scripts/probe-external.mjs`, `cloudflare-facts.md`).
 - [ ] **The owner's call:** a page restored from the back-forward cache (Back after a click) is not
       counted again — the snippet sends on load and on SPA address changes, and a restored page runs
       neither (Codex, 30.10). A `pageshow` with `persisted` would count it, but changes every
