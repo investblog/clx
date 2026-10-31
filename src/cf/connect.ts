@@ -8,7 +8,7 @@
 // checks is finished even when its bootstrap token is already gone. The sealed token lives in the
 // account's own row, so a renewal swaps secret and metadata in one statement.
 import { EDGE_SHA256 } from '../../edge/bundle.gen';
-import { open, seal, type Sealed } from '../lib/crypto';
+import { keyring, open, seal, type Sealed } from '../lib/crypto';
 import { FREE_ACCOUNTS_CAP, LIMITS, planOf } from '../limits';
 import { sendNotice } from '../mail';
 import { appUrl, MAIL, recipient } from '../mail-text';
@@ -107,7 +107,7 @@ export interface EdgeAccount {
 }
 
 /** AAD: the ciphertext belongs to this record and this Cloudflare account only (§3 item 5). */
-const aad = (edge: { id: string; cf_account_id: string }) => `${edge.id}|${edge.cf_account_id}`;
+export const aad = (edge: { id: string; cf_account_id: string }) => `${edge.id}|${edge.cf_account_id}`;
 
 /** The public shape of a connected account (never the ciphertext). */
 export function accountView(a: EdgeAccount) {
@@ -380,13 +380,14 @@ export async function connect(env: Env, p: Principal, cfAccountId: string, boots
       log,
     ).catch(bootstrapError);
     Object.assign(data, { token_id: made.id, token_name: name, token_expires_at: expires });
-    const sealed = JSON.stringify(await seal(env.MASTER_KEYS, made.value!, aad(edge)));
+    const box = await seal(keyring(env), made.value!, aad(edge));
+    const sealed = JSON.stringify(box);
     if (renew) await owned(db.prepare('UPDATE edge_accounts SET next_sealed = ?, updated_at = ? WHERE id = ? AND lease_owner = ?').bind(sealed, Date.now(), edge.id, owner));
     else
       await owned(
         db
           .prepare('UPDATE edge_accounts SET cf_account_name = ?, token_id = ?, token_name = ?, token_expires_at = ?, key_id = ?, token_sealed = ?, updated_at = ? WHERE id = ? AND lease_owner = ?')
-          .bind(data.account_name, made.id, name, expires, env.MASTER_KEYS.split(':')[0], sealed, Date.now(), edge.id, owner),
+          .bind(data.account_name, made.id, name, expires, box.key_id, sealed, Date.now(), edge.id, owner),
       );
     await step(db, edge.id, owner, opId, 'token_stored', data);
 
@@ -447,9 +448,9 @@ async function finish(env: Env, p: Principal, edge: EdgeAccount, owner: string, 
     await owned(
       db
         .prepare(
-          'UPDATE edge_accounts SET cf_account_name = ?, token_id = ?, token_name = ?, token_expires_at = ?, key_id = ?, token_sealed = next_sealed, next_sealed = NULL, updated_at = ? WHERE id = ? AND lease_owner = ? AND next_sealed IS NOT NULL',
+          "UPDATE edge_accounts SET cf_account_name = ?, token_id = ?, token_name = ?, token_expires_at = ?, key_id = json_extract(next_sealed, '$.key_id'), token_sealed = next_sealed, next_sealed = NULL, updated_at = ? WHERE id = ? AND lease_owner = ? AND next_sealed IS NOT NULL",
         )
-        .bind(data.account_name ?? edge.cf_account_name, data.token_id, data.token_name, data.token_expires_at, env.MASTER_KEYS.split(':')[0], Date.now(), edge.id, owner),
+        .bind(data.account_name ?? edge.cf_account_name, data.token_id, data.token_name, data.token_expires_at, Date.now(), edge.id, owner),
     );
   }
   if (renew && data.old_token_id && data.old_token_id !== data.token_id) {
@@ -483,7 +484,7 @@ async function finish(env: Env, p: Principal, edge: EdgeAccount, owner: string, 
 /** The working token of a connected account, opened from its ciphertext. */
 export async function workingToken(env: Env, edge: EdgeAccount): Promise<string> {
   if (!edge.token_sealed) return fail(409, 'account_not_ready', 'This account has no working token; connect it again.');
-  return open(env.MASTER_KEYS, JSON.parse(edge.token_sealed) as Sealed, aad(edge));
+  return open(keyring(env), JSON.parse(edge.token_sealed) as Sealed, aad(edge));
 }
 
 /** Accounts the token check visits per cron run: hourly runs cover ~4,800 accounts a day. */
@@ -513,7 +514,7 @@ export async function checkTokens(env: Env, now = Date.now()): Promise<{ checked
     let error: string | null = null;
     let checkedAt = now;
     // An unreadable ciphertext (a dropped key, damage) is flagged and the check goes on.
-    const token = edge.token_sealed ? await open(env.MASTER_KEYS, JSON.parse(edge.token_sealed) as Sealed, aad(edge)).catch(() => null) : null;
+    const token = edge.token_sealed ? await open(keyring(env), JSON.parse(edge.token_sealed) as Sealed, aad(edge)).catch(() => null) : null;
     if (!edge.token_sealed) error = JSON.stringify({ code: 'credentials_missing' });
     else if (!token) error = JSON.stringify({ code: 'credentials_unreadable' });
     else {

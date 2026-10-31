@@ -60,8 +60,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       verified 11.10 (`scripts/probe-link-hosts.mjs`, `cloudflare-facts.md`, ADR 0024). (A route on a
       Pages host — verified 05.10, §13 item 9; an ignored `INSERT OR IGNORE` writes 0 rows —
       verified 05.10, `cloudflare-facts.md`.)
-- [ ] `MASTER_KEYS` rotation tool (a new key in front, re-encrypt, drop the old one) — before the
-      first key needs replacing.
+- [x] `MASTER_KEYS` rotation tool — `scripts/rekey.mjs` (ADR 0038): a second secret, the cron
+      re-seals, then the new key becomes `MASTER_KEYS` (01.11).
 - [x] Sign-out: the page showed the sign-in form even when `/auth/logout` failed, so the refresh
       cookie stayed valid behind it — now it stays on the page and says the session is not ended (07.10).
 - [x] A deleted user's sessions opened a new user who got the same id (SQLite reuses the highest

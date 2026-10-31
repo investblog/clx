@@ -6,7 +6,7 @@
 // - JWT_SECRET: a new one signs everyone out within 15 minutes.
 // - MASTER_KEYS: the keyring sealing users' working tokens (docs/spec.md §3), "<id>:<base64>".
 //   It is set only when the Worker has none: replacing it would make every stored token unreadable.
-//   Rotation (a new key in front of the old one, re-encryption) is a separate, later tool.
+//   Rotation: scripts/rekey.mjs (ADR 0038).
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 

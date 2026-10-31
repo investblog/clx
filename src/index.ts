@@ -14,6 +14,7 @@ import { GRACE_MS, LOW_DAYS, lowBalances, markLowTold, runCharges } from './bill
 import { checkTokens } from './cf/connect';
 import { runOperations } from './cf/deploy';
 import { runLinkHosts } from './cf/links';
+import { rekey } from './cf/rekey';
 import { runSites } from './cf/sites';
 import { hook } from './hook';
 import { sendNotice } from './mail';
@@ -101,7 +102,7 @@ for (const path of Object.keys(MARKDOWN_PAGES)) app.on(['GET', 'HEAD'], path, (c
 export default {
   fetch: app.fetch,
   // Every minute: install and update operations — resumed if stalled, ended if the worker's
-  // setup_ok is overdue (§4). Hourly: a slice of the token check (§3 item 6), lost connects,
+  // setup_ok is overdue (§4) — and, during a MASTER_KEYS rotation, a share of the re-encryption. Hourly: a slice of the token check (§3 item 6), lost connects,
   // expired idempotency records (§15), API call log rows (90 days, §13 item 1) and totals (§7), and
   // workers gone silent, and a slice of the upgrade advice (§8).
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
@@ -114,6 +115,9 @@ export default {
         if (sites.synced + sites.routes + sites.retired) console.log(`sites: synced ${sites.synced}, routes ${sites.routes}, retired ${sites.retired}`);
         const linkHosts = await runLinkHosts(env, now);
         if (linkHosts) console.log(`link hosts: ${linkHosts}`);
+        // A MASTER_KEYS rotation under way (ADR 0038): a few working tokens re-sealed with the new key.
+        const rekeyed = await rekey(env).catch((e: unknown) => (console.error('rekey', e instanceof Error ? e.message : e), { resealed: 0, failed: 0 }));
+        if (rekeyed.resealed + rekeyed.failed) console.log(`tokens re-sealed: ${rekeyed.resealed}, failed ${rekeyed.failed}`);
         // Crypto top-ups Trybit has not told us of, and Stars invoices that can no longer be paid
         // (§18): every 15 minutes.
         if (new Date(event.scheduledTime).getUTCMinutes() % RECONCILE_EVERY_MIN === 2) {

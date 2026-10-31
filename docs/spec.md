@@ -105,8 +105,9 @@ Why:
    05.10.2026).
 5. Storage: AES-GCM-256, random IV, AAD = record ID + Cloudflare account ID (a ciphertext cannot be
    moved to another account). The key comes from the `MASTER_KEYS` keyring (`key_id → secret`):
-   encrypt with the current key, decrypt by the record's `key_id`; rotation — add a new key, re-encrypt
-   in the background, then remove the old key. The ciphertext sits in the account's own row of D1
+   encrypt with the current key, decrypt by the record's `key_id`; rotation — a new key in a second
+   secret `MASTER_KEYS_NEXT` goes in front of the ring, the cron re-encrypts, then the new key becomes
+   `MASTER_KEYS` (`scripts/rekey.mjs`, [ADR 0038](./decisions/0038-master-keys-rotation.md): a secret cannot be read back). The ciphertext sits in the account's own row of D1
    `clx`, next to its metadata (token ID, expiry, account ID, `key_id`): a renewal swaps secret and
    metadata in one statement, and D1 reads are consistent where KV's are not (stage 2 review).
 6. Token state:
