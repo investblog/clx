@@ -7,7 +7,7 @@ import { applyPlan } from '../src/billing/pause';
 import { edgeById } from '../src/cf/connect';
 import { runSites, undoRotation } from '../src/cf/sites';
 import { app } from '../src/index';
-import { namesFor, scriptFor } from '../src/snippet';
+import { namesFor, scriptFor, SNIPPET_REV } from '../src/snippet';
 import RELEASED from '../edge/released.json';
 import type { Env } from '../src/types';
 import { d1 } from './d1';
@@ -449,6 +449,58 @@ describe('review fixes (4a)', () => {
     expect(acc).toEqual({ config_revision: 1000, synced_revision: 1000 });
     const data = userDb().prepare("SELECT c.data FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = 'site:example.com' ORDER BY c.revision DESC LIMIT 1").get() as { data: string };
     expect(JSON.parse(data.data).excluded).toEqual(['/y']);
+  });
+});
+
+describe('a change of every snippet (SNIPPET_REV, ADR 0039)', () => {
+  const account = () => env.DB.prepare('SELECT config_revision, synced_revision FROM edge_accounts').first<{ config_revision: number; synced_revision: number }>();
+  const record = () => env.DB.prepare('SELECT revision, snippet_rev, written_rev FROM sites').first<{ revision: number; snippet_rev: number | null; written_rev: number | null }>();
+  /** The revision of the latest committed config row of the site, in the worker's database. */
+  const written = () => (userDb().prepare("SELECT max(c.revision) AS r FROM cfg c JOIN commits m ON m.revision = c.revision AND m.sync_id = c.sync_id WHERE c.key = 'site:example.com'").get() as { r: number }).r;
+
+  it('a sync records what wrote the site; the cron leaves such a site alone', async () => {
+    await addSite('example.com');
+    const r = (await record())!;
+    expect(r).toEqual({ revision: r.revision, snippet_rev: SNIPPET_REV, written_rev: r.revision });
+    const before = (await account())!;
+    await runSites(env);
+    expect(await account()).toEqual(before);
+  });
+
+  it('a synced site written by other code — before the change, or by an older Worker after it — is written again and recorded', async () => {
+    const { site } = (await addSite('example.com')).body;
+    const before = (await account())!;
+    // An older Worker's sync: the site at its revision, synced, with no record of the code.
+    await env.DB.prepare('UPDATE sites SET snippet_rev = NULL, written_rev = NULL').run();
+    await runSites(env);
+    expect(await account()).toEqual({ config_revision: before.config_revision + 1, synced_revision: before.config_revision + 1 });
+    expect(await record()).toEqual({ revision: before.config_revision + 1, snippet_rev: SNIPPET_REV, written_rev: before.config_revision + 1 });
+    expect(written()).toBe(before.config_revision + 1);
+    const seed = (await env.DB.prepare('SELECT seed FROM sites WHERE id = ?').bind(site.id).first<{ seed: string }>())!.seed;
+    const names = namesFor(seed);
+    expect((await viaWorker(`https://example.com${names.path}/${names.s}.js`)).body).toBe(scriptFor(seed, names));
+  });
+
+  it('a change an older Worker synced after the code was recorded is caught too', async () => {
+    await addSite('example.com');
+    const before = (await account())!;
+    // The older Worker changed the site and synced it: a new revision, the record still the old one.
+    await env.DB.batch([
+      env.DB.prepare('UPDATE edge_accounts SET config_revision = config_revision + 1, synced_revision = config_revision + 1'),
+      env.DB.prepare('UPDATE sites SET revision = revision + 1'),
+    ]);
+    await runSites(env);
+    expect(await record()).toEqual({ revision: before.config_revision + 2, snippet_rev: SNIPPET_REV, written_rev: before.config_revision + 2 });
+  });
+
+  it('a site not yet synced is left to its sync', async () => {
+    await addSite('example.com');
+    await env.DB.prepare('UPDATE sites SET snippet_rev = NULL, written_rev = NULL').run();
+    await env.DB.prepare('UPDATE edge_accounts SET synced_revision = 0').run();
+    const before = (await account())!;
+    expect((await runSites(env)).synced).toBe(1);
+    // Written by the sync (a full one, from 0) — no extra move.
+    expect((await account())!.config_revision).toBe(before.config_revision);
   });
 });
 

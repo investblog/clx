@@ -270,7 +270,10 @@ Why:
     order of statements and one of two equivalent forms (`navigator.sendBeacon`, `fetch` with
     `keepalive`), no comments, no literal shared by all snippets except the browser's own API names;
   - the snippet is stable for a seed — rebuilding a site gives the same bytes — and changes only on
-    `rotate`;
+    `rotate`, or when clx changes every snippet's code (once so far: 01.11.2026, a page restored from
+    the back-forward cache is counted — [ADR 0039](./decisions/0039-back-forward-cache.md)). An
+    embedded snippet keeps working as it was; the served script's worker copy follows within minutes,
+    browsers and caches holding the old one for up to a day (`max-age=86400`);
   - the answers add no clx header and no clx text: the collector answers `204` with
     `cache-control: no-store`; the script is served as `text/javascript` with the cache headers of an
     ordinary static file; **every other request under `<path>/`** — another method, a probe, a typo —
@@ -282,7 +285,8 @@ Why:
     headers and timing are the same as on any Cloudflare site. Hiding from Cloudflare or from whoever
     has access to the account is out of scope.
 - **Snippet** — an inline script under 600 bytes (a zone site's; an external site's names its collector host, §5 below) that sends `document.referrer` to `/<path>/<c>` on
-  load and on SPA address changes (`pushState`/`popstate`). Alternative — `<script defer
+  load, and an empty body on SPA address changes (`pushState`/`popstate`) and when the page comes back
+  from the back-forward cache (`pageshow` with `persisted`). Alternative — `<script defer
   src="/<path>/<s>.js">` (the same code, served by the worker, cached for a day). Both forms come from
   the API (§15) for embedding at build time.
 - **Collector** `POST /<path>/<c>`. The counter is **not fraud-resistant**: the path is visible in
@@ -1056,7 +1060,7 @@ that adds a site and embeds its counter at build time.
   account (its bootstrap token comes from the customer — clx needs its own working token, with the
   rights of §3), `POST /v1/sites` per site, and the `snippet` from the answer embedded into every
   page at build time. The snippet is stable, so rebuilding a site needs no call; only `rotate`
-  changes it.
+  changes it (or, rarely, a change of every snippet's code by clx — ADR 0039; the old one keeps working).
 - **MCP** ([ADR 0023](./decisions/0023-mcp-server.md)). `POST https://clx.cx/mcp` — a stateless
   MCP server over Streamable HTTP, the same `/v1` as tools, for agents that speak MCP (Claude Code,
   Cursor, VS Code and the like):

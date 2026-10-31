@@ -44,3 +44,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0036](./0036-partners.md) | Partners get 30% of their referrals' top-ups, for life, one level | 23.10.2026 | §9, §15, §17, §19 |
 | [0037](./0037-external-sites.md) | External sites: a site not on Cloudflare counted by the user's own clx-edge on a host of their zone, Pro only | 30.10.2026 | §1, §5, §6, §8, §14, §15, §16, §18 |
 | [0038](./0038-master-keys-rotation.md) | MASTER_KEYS rotation through a second secret, MASTER_KEYS_NEXT, re-sealed by the cron | 01.11.2026 | §3 |
+| [0039](./0039-back-forward-cache.md) | A page restored from the back-forward cache is counted; every snippet changes once, the served scripts follow by SNIPPET_REV | 01.11.2026 | §5, §15 |

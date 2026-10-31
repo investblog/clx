@@ -9,7 +9,7 @@ const seeds = Array.from({ length: 1000 }, (_, i) => `seed-${i}-${(i * 265443576
 /** Run a snippet in a small fake browser and return what it sent. */
 function runIn(code: string, start = 'https://example.com/a', referrer = 'https://google.com/') {
   const sent: { url: string; body: string; via: string }[] = [];
-  const listeners: Record<string, (() => void)[]> = {};
+  const listeners: Record<string, ((e?: unknown) => void)[]> = {};
   const location = {
     href: start,
     get pathname() {
@@ -31,10 +31,10 @@ function runIn(code: string, start = 'https://example.com/a', referrer = 'https:
       sent.push({ url, body: init.body, via: 'fetch' });
       return Promise.resolve();
     },
-    addEventListener: (type: string, fn: () => void) => (listeners[type] ??= []).push(fn),
+    addEventListener: (type: string, fn: (e?: unknown) => void) => (listeners[type] ??= []).push(fn),
   };
   vm.runInNewContext(code, ctx);
-  return { sent, history, location, fire: (type: string) => listeners[type]?.forEach((f) => f()) };
+  return { sent, history, location, fire: (type: string, e?: unknown) => listeners[type]?.forEach((f) => f(e)) };
 }
 
 describe('snippet', () => {
@@ -59,6 +59,20 @@ describe('snippet', () => {
     }
   });
 
+  it('counts a page restored from the back-forward cache, and not a first show', () => {
+    for (const s of seeds.slice(0, 100)) {
+      const names = namesFor(s);
+      const zone = runIn(scriptFor(s, names));
+      zone.fire('pageshow', { persisted: false });
+      zone.fire('pageshow', { persisted: true });
+      expect(zone.sent.map((x) => x.body)).toEqual(['https://google.com/', '']);
+      const external = runIn(scriptFor(s, names, 'collect.example.com'), 'https://example.com/a?x=1');
+      external.fire('pageshow', { persisted: false });
+      external.fire('pageshow', { persisted: true });
+      expect(external.sent.map((x) => x.body)).toEqual(['/a\nhttps://google.com/', '/a']);
+    }
+  });
+
   it('uses both ways to send', () => {
     const via = new Set(seeds.slice(0, 50).map((s) => runIn(scriptFor(s, namesFor(s))).sent[0]!.via));
     expect(via).toEqual(new Set(['beacon', 'fetch']));
@@ -77,19 +91,21 @@ describe('snippet', () => {
     }
   });
 
-  it("a zone site's bytes are what they were before external sites came (embedded snippets keep working)", () => {
+  // Pinned: a change here changes what every site embeds. They changed once on purpose, on 01.11.2026,
+  // for the back-forward cache (ADR 0039; SNIPPET_REV re-sends the served scripts).
+  it("a zone site's bytes are pinned (embedded snippets keep working)", () => {
     const all = Array.from({ length: 1000 }, (_, i) => {
       const s = `seed-${i}`;
       const n = namesFor(s);
       return JSON.stringify(snippetFor(s, n)) + scriptFor(s, n);
     }).join('|');
-    expect(createHash('sha256').update(all).digest('hex')).toBe('54fa63432321db6798b54635504892d1050db50bd5fd33399444fd77037c6123');
+    expect(createHash('sha256').update(all).digest('hex')).toBe('e569f061443df95373281c448f683b4561d1aba33de0fa779fc5f35e36ff16b1');
   });
 });
 
 describe('footprint (§13 item 10)', () => {
   // Browser API names and values, JS keywords: what any site's own code is made of.
-  const ALLOWED = new Set(['navigator', 'sendBeacon', 'fetch', 'method', 'body', 'keepalive', 'POST', 'history', 'pushState', 'apply', 'location', 'href', 'addEventListener', 'popstate', 'document', 'referrer', 'let', 'var', 'function', 'script', 'defer', 'src']);
+  const ALLOWED = new Set(['navigator', 'sendBeacon', 'fetch', 'method', 'body', 'keepalive', 'POST', 'history', 'pushState', 'apply', 'location', 'href', 'addEventListener', 'popstate', 'pageshow', 'persisted', 'document', 'referrer', 'let', 'var', 'function', 'script', 'defer', 'src']);
   const tokens = (code: string) => code.match(/"[^"]*"|'[^']*'|[A-Za-z_$][\w$]*/gu) ?? [];
   const all = seeds.map((s) => {
     const names = namesFor(s);

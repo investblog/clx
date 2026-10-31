@@ -5,8 +5,15 @@
 // equivalent ways to send (`navigator.sendBeacon`, `fetch` with `keepalive`).
 //
 // What the code does: on load it sends `document.referrer` to `/<path>/<c>`; on an SPA address
-// change (`pushState`, `popstate`) it sends an empty body — the page itself comes from the Referer
+// change (`pushState`, `popstate`) and when the page comes back from the back-forward cache
+// (`pageshow` with `persisted`) it sends an empty body — the page itself comes from the Referer
 // header of the request (§5 collector).
+//
+// The bytes of every site's snippet changed once, on 01.11.2026, for the back-forward cache
+// (ADR 0039): SNIPPET_REV makes the cron write every site's script to its worker again.
+
+/** Raised when the code of every snippet changes, so that the served scripts follow (src/cf/sites.ts). */
+export const SNIPPET_REV = 1;
 
 /** Substrings no generated path or name may contain (§5). */
 export const FORBIDDEN = ['clx', 'stat', 'track', 'count', 'beacon', 'analytic', 'pixel', 'metric', 'collect', 'log'];
@@ -136,6 +143,8 @@ export function scriptFor(seed: string, names: SiteNames, collector?: string): s
   const actions = r.shuffle([
     `history.pushState=(...${args})=>{${push}.apply(history,${args});${step}()}`,
     `addEventListener(${str('popstate')},${step})`,
+    // A page restored from the back-forward cache runs no code of its own: a view all the same.
+    `addEventListener(${str('pageshow')},${args}=>${args}.persisted&&(${last}=location.href,${send}(${collector ? 'location.pathname' : str('')})))`,
   ]);
   const first = collector ? `${send}(location.pathname+${str('\\n')}+document.referrer)` : `${send}(document.referrer)`;
   const statements = r.int(2) ? [...actions, first] : [first, ...actions];

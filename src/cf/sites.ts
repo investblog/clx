@@ -11,7 +11,7 @@
 import RELEASED from '../../edge/released.json';
 import { extKey, siteKey, type SiteConfig } from '../../edge/contract';
 import { LIMITS, planOf } from '../limits';
-import { namesFor, scriptFor, snippetFor } from '../snippet';
+import { namesFor, scriptFor, SNIPPET_REV, snippetFor } from '../snippet';
 import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
 import { cf, CfError, type CallLog } from './api';
@@ -512,6 +512,9 @@ export async function syncAccount(env: Env, accountId: string, principal = 'cron
       await held(db, edge.id, owner);
       const [commit] = await query(`INSERT INTO commits (revision, sync_id, at) SELECT ${target}, ${lit(syncId)}, ${now} WHERE (SELECT coalesce(max(revision), 0) FROM commits) = ${head}`);
       if (!commit?.meta?.changes) return true; // the worker moved on meanwhile: the next run looks again
+      // What wrote these sites: today's snippet code, at their revision (ADR 0039). An older Worker's
+      // sync leaves no such record, and the cron writes its sites again.
+      await db.prepare('UPDATE sites SET snippet_rev = ?1, written_rev = revision WHERE account_id = ?2 AND revision > ?3 AND revision <= ?4').bind(SNIPPET_REV, edge.id, head, target).run();
       await query(
         `DELETE FROM cfg WHERE (sync_id NOT IN (SELECT sync_id FROM commits) AND at < ${now - 3_600_000}) OR EXISTS (SELECT 1 FROM cfg n JOIN commits m ON m.revision = n.revision AND m.sync_id = n.sync_id WHERE n.key = cfg.key AND n.revision > cfg.revision)`,
       );
@@ -550,6 +553,16 @@ export async function staleSync(db: D1Database, edge: EdgeAccount, revision: num
  */
 export async function runSites(env: Env, now = Date.now()): Promise<{ synced: number; routes: number; retired: number }> {
   const db = env.DB;
+  // A synced site not written by today's snippet code at its revision (ADR 0039) — every site when
+  // SNIPPET_REV is raised, or one an older Worker synced just after a deploy or after a rollback —
+  // moves to a new revision, so the sync below writes its served script again; 20 accounts a minute.
+  const STALE = "state != 'deleted' AND revision <= (SELECT synced_revision FROM edge_accounts e WHERE e.id = sites.account_id) AND (snippet_rev IS NOT ?1 OR written_rev IS NOT revision)";
+  const stale = (await db.prepare(`SELECT DISTINCT account_id AS id FROM sites WHERE ${STALE} LIMIT 20`).bind(SNIPPET_REV).all<{ id: string }>()).results;
+  for (const a of stale)
+    await db.batch([
+      db.prepare('UPDATE edge_accounts SET config_revision = config_revision + 1 WHERE id = ?2').bind(SNIPPET_REV, a.id),
+      db.prepare(`UPDATE sites SET revision = (SELECT config_revision FROM edge_accounts WHERE id = ?2) WHERE account_id = ?2 AND ${STALE}`).bind(SNIPPET_REV, a.id),
+    ]);
   const behind = (await db.prepare('SELECT id FROM edge_accounts WHERE synced_revision < config_revision AND bundle IS NOT NULL AND (lease_until IS NULL OR lease_until < ?) LIMIT 20').bind(now).all<{ id: string }>()).results;
   let synced = 0;
   for (const a of behind) if (await syncAccount(env, a.id).catch((e: unknown) => (console.error('sync', a.id, e instanceof Error ? e.message : e), false))) synced++;
