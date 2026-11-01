@@ -1,7 +1,7 @@
 ---
 title: Backups of the clx.cx database — after the release
 type: decision
-status: accepted
+status: superseded
 date: 2026-10-06
 ---
 
@@ -18,3 +18,6 @@ paid plan switched on in the clx.cx account (owner's decision, 06.10.2026).
 **Consequences.** Until then a lost clx.cx database means lost accounts, settings and totals
 history; the users' workers keep counting in their own accounts, and their detail (hourly 31 days,
 daily 400 days) stays there, but they would have to connect again. Tracked in `docs/TODO.md`.
+
+**Superseded** by [0040](./0040-nightly-backup.md) (01.11.2026): R2 was already on in the account;
+the nightly backup runs.

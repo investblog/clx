@@ -913,9 +913,10 @@ moving into `clx-edge`).
     least-privilege scopes (a build pipeline holds no `accounts`), per-key allow lists of Cloudflare
     accounts and IPs, keys hashed and shown once, revocable one by one, the Cloudflare API call log
     (item 1) shows the key ID.
-12. **Backups of the clx.cx database.** A nightly copy to R2 needs R2 switched on, a paid plan in
-    the clx.cx account — decided 06.10.2026: after the release ([ADR 0006](./decisions/0006-backups-after-release.md)). The users'
-    own databases are theirs; clx.cx keeps only totals (§7).
+12. **Backups of the clx.cx database.** A nightly copy of D1 `clx` to R2 (bucket `clx-backups`, 30
+    days), since 01.11.2026 ([ADR 0040](./decisions/0040-nightly-backup.md), superseding 0006). A copy
+    plus `MASTER_KEYS` is as good as the users' tokens (item 1). The users' own databases are theirs;
+    clx.cx keeps only totals (§7).
 
 ## 14. Implementation stages
 

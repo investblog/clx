@@ -116,6 +116,12 @@ something clx does with its token. The zone's own mail stays on an outside serve
 | A routing rule and `support_subaddress` (`PATCH /zones/{zone}/email/routing`) take effect after a delay: mail sent seconds after was refused `550 5.1.1 Address does not exist`, a minute or two later it went through. | 07.10.2026 | the probes' inbox |
 | Plus-addressing works on a subdomain: one literal rule `probe@t.<zone>` → a Worker gets `probe+<tag>@t.<zone>`, and the Worker's `message.to` is the full address, tag included. | 07.10.2026 | the probes' inbox (`mailbox/`) |
 
+## R2 (the nightly backup, the clx.cx account)
+
+| Fact | Checked | Used in |
+|---|---|---|
+| `GET /accounts/{id}/subscriptions` lists `r2_paid` when R2 is on; then `POST /accounts/{id}/r2/buckets {name}` makes a bucket at once (Global API Key). `PUT …/r2/buckets/{name}/lifecycle {rules: [{id, enabled: true, conditions: {prefix: ""}, deleteObjectsTransition: {condition: {type: "Age", maxAge: <seconds>}}}]}` sets expiry, and `GET` of it returns the rule as sent. | 01.11.2026 | ADR 0040 |
+
 ## Reaching visitors in Russia (the site's Russian questions)
 
 | Fact | Checked | Used in |

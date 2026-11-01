@@ -11,6 +11,7 @@ import { refVisit } from './partners/codes';
 import { tellPayouts } from './partners/wallet';
 import { reconcilePlans } from './billing/pause';
 import { GRACE_MS, LOW_DAYS, lowBalances, markLowTold, runCharges } from './billing/pro';
+import { runBackup } from './backup';
 import { checkTokens } from './cf/connect';
 import { runOperations } from './cf/deploy';
 import { runLinkHosts } from './cf/links';
@@ -133,6 +134,13 @@ export default {
           if (payouts) console.log(`payout requests told again: ${payouts}`);
           const accrued = await sweepAccruals(env.DB, now).catch((e: unknown) => (console.error('accruals', e instanceof Error ? e.message : e), 0));
           if (accrued) console.log(`commissions and promo bonuses written late: ${accrued}`);
+        }
+        // The backup, from 03:00 UTC a slice a minute until it is done (src/backup.ts) — but in the
+        // minutes the reconcile and the hourly work have, which need the call's time themselves.
+        const minute = new Date(event.scheduledTime).getUTCMinutes();
+        if (minute !== HOURLY_AT && minute % RECONCILE_EVERY_MIN !== 2) {
+          const backup = await runBackup(env, now).catch((e: unknown) => (console.error('backup', e instanceof Error ? e.message : e), null));
+          if (backup) console.log(`backup ${backup.day}: ${backup.chunk ?? 'no chunk'}, ${backup.rows} rows${backup.done ? ', done' : ''}`);
         }
         if (new Date(event.scheduledTime).getUTCMinutes() !== HOURLY_AT) return;
         const hour = Math.floor(now / 3_600_000);

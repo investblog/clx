@@ -1,5 +1,5 @@
 <h1 class="h3">Privacy</h1>
-<p class="muted text-sm">Version of 30 October 2026.</p>
+<p class="muted text-sm">Version of 1 November 2026.</p>
 
 <h2 class="h4">What clx is</h2>
 <p>
@@ -57,8 +57,10 @@
   its totals at once; it is refused while money is on the balance or the partner wallet, or still
   moving (the terms list when). The record of its payments, refunds and partner money is kept
   for accounting, without your e-mail address or the addresses you gave. A Telegram Stars payment
-  is kept by its Telegram payment id, with the payer's Telegram ID.
+  is kept by its Telegram payment id, with the payer's Telegram ID. A copy of the clx.cx database
+  is made every night for recovery and kept 30 days: what is deleted leaves the copies as they
+  expire.
 </p>
 
 <h2 class="h4">Processors</h2>
-<p>clx.cx runs on Cloudflare (Workers, D1, KV, Email Sending, Turnstile). The bot and support run on Telegram. Crypto top-ups go through Trybit, which sees the invoice's sum and the paying wallet; Stars are paid through Telegram.</p>
+<p>clx.cx runs on Cloudflare (Workers, D1, KV, R2 for the nightly copy, Email Sending, Turnstile). The bot and support run on Telegram. Crypto top-ups go through Trybit, which sees the invoice's sum and the paying wallet; Stars are paid through Telegram.</p>

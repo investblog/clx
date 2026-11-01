@@ -115,5 +115,5 @@ Left as they are (owner, 19.10.2026) — not worth their cost now; reopened only
 - [x] Check the pages at phone width (stage 4e): 10.10, emulated 390 px through chrome-devtools —
       home, connect, keys, new site, new link, account, site, report and /privacy have no horizontal
       scroll and nothing past the screen.
-- [ ] Nightly backup of the clx.cx D1 to R2 (as 301 does) — after the release: R2 needs a paid
-      plan switched on in the clx.cx account (owner's decision 06.10.2026).
+- [x] Nightly backup of the clx.cx D1 to R2 — `src/backup.ts`, a slice a minute in key order, bucket `clx-backups`
+      with 30 days' lifecycle (ADR 0040, 01.11; R2 was already on in the account).

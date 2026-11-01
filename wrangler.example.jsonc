@@ -32,6 +32,8 @@
   "kv_namespaces": [
     { "binding": "SESSIONS", "id": "00000000000000000000000000000000" }
   ],
+  // The nightly backup of D1 clx (src/backup.ts); the bucket deletes objects after 30 days.
+  "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "clx-backups" }],
   // Requests per API key (§15); breakdown reports per user (§7); sign-up and reset per IP (§9);
   // messages per Telegram user (§17).
   "ratelimits": [

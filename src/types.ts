@@ -12,6 +12,8 @@ export interface Env {
   MASTER_KEYS: string;
   /** A rotation's new key, sealing in front of MASTER_KEYS until the rotation ends (scripts/rekey.mjs). */
   MASTER_KEYS_NEXT?: string;
+  /** The nightly backup of D1 `clx` (src/backup.ts); absent where it is not bound — nothing is written. */
+  BACKUPS?: R2Bucket;
   /** Where clx-edge workers report (`https://clx.cx/hook`), a var in wrangler.jsonc. */
   HOOK_URL: string;
   /** Cloudflare Email Sending (§9); absent where it is not set up — nothing is sent then. */
