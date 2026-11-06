@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-10-30
+updated: 2026-11-06
 ---
 
 # Backlog
@@ -41,6 +41,17 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
       before the MCP server (ADR 0023) handed it to agents.
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
+- [ ] **Dropdown menus in drawers and tables can be cut off** (the owner, 06.11). The menu of
+      `dropdown()` (`ui/pick.ts`) always opens down and as wide as its trigger
+      (`dropdown__menu--fit-trigger`). Near the bottom of a drawer or a table, or inside an
+      element with `overflow`, part of it hides. In a narrow trigger its items wrap: the rule
+      row's "Who" in the new-link drawer, 06.11. 301-ui solved this long ago: the menu opens up
+      when there is no room below, keeps to the viewport, and may be wider than its trigger. Take
+      that behaviour over and check it in the new-link drawer, the account and site tables and at
+      390 px.
+- [ ] **Remove buttons in drawers as a trash icon** (the owner, 06.11), as in 301-ui: an icon
+      button with an `aria-label` instead of the word. Rows with several controls then have more
+      room — the rule row in the new-link drawer is the first ("Remove" next to "↑").
 - [x] **Rotation is not durable** (Codex, 10.10): `rotate()` in `src/cf/sites.ts` created the new
       Cloudflare route before it recorded the seed. Now the seed is recorded first (`sites.rotating`,
       migration 0014); a retry finishes the rotation and adopts the route, the cron undoes one left

@@ -57,7 +57,7 @@ components:
                 name_taken, resource_drift, cron_limit, permission_error, revoked, self_check_timeout,
                 credentials_missing, credentials_unreadable (clx cannot open the stored token),
                 cloudflare_error. Sites: zone_not_found, site_exists, route_conflict, site_not_active,
-                update_required (external sites need a newer clx-edge),
+                update_required (external sites, or link rules with bots, need a newer clx-edge),
                 route_not_ours (a route clx made was changed outside clx and left in place).
                 Sign-up: email_unconfirmed (POST /v1/accounts before the address is confirmed),
                 invalid_password, balance_not_empty (DELETE /v1/me while money is on the balance or the partner wallet or still moving, §18).
@@ -170,10 +170,18 @@ components:
     Rule:
       type: object
       required: [url]
-      description: 'matches when the visitor''s country is in countries (if given) and their device in devices (if given)'
+      minProperties: 2
+      description: |
+        Matches when the visitor's country is in countries (if given), their device in devices (if
+        given) and, if bots is given, the visitor is a bot of one of those categories (by its
+        User-Agent). At least one of the three. A rule with bots never takes a browser; a rule without
+        it takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that
+        knows it: on an older one the request is refused with update_required.
+      additionalProperties: false
       properties:
-        countries: { type: array, items: { type: string, pattern: '^[A-Z]{2}$' } }
-        devices: { type: array, items: { type: string, enum: [mobile, desktop] } }
+        countries: { type: array, minItems: 1, maxItems: 250, items: { type: string, pattern: '^[A-Z]{2}$' } }
+        devices: { type: array, minItems: 1, items: { type: string, enum: [mobile, desktop] } }
+        bots: { type: array, minItems: 1, items: { type: string, enum: [search, ai_training, monitoring, ad_review, social_preview, headless, other] }, description: 'bot categories, as the bots breakdown of a report names them' }
         url: { type: string, format: uri, description: 'https:// only, up to 2048 characters, not on a link host of the account' }
     Link:
       type: object
@@ -734,8 +742,9 @@ paths:
       description: |
         A click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of
         the link, with source `qr` when the address carries `?q` (the QR code's) — or as a bot when
-        the client is one (curl, a script, a crawler: it is redirected all the same). `config` turns
-        `synced` once the worker has the link (seconds).
+        the client is one (curl, a script, a crawler: it is redirected all the same, by a rule with
+        its category if there is one), in the report's `bots` breakdown and not among the
+        destinations. `config` turns `synced` once the worker has the link (seconds).
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         content:

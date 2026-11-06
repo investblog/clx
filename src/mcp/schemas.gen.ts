@@ -526,7 +526,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
     "body": []
   },
   "add_link": {
-    "description": "Add a short link (scope links) on one of the account's link hosts\n\nA click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of\nthe link, with source `qr` when the address carries `?q` (the QR code's) — or as a bot when\nthe client is one (curl, a script, a crawler: it is redirected all the same). `config` turns\n`synced` once the worker has the link (seconds).",
+    "description": "Add a short link (scope links) on one of the account's link hosts\n\nA click is a `302` to the first matching rule's URL, else `url`; it is counted as a view of\nthe link, with source `qr` when the address carries `?q` (the QR code's) — or as a bot when\nthe client is one (curl, a script, a crawler: it is redirected all the same, by a rule with\nits category if there is one), in the report's `bots` breakdown and not among the\ndestinations. `config` turns `synced` once the worker has the link (seconds).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -552,10 +552,14 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
             "required": [
               "url"
             ],
-            "description": "matches when the visitor's country is in countries (if given) and their device in devices (if given)",
+            "minProperties": 2,
+            "description": "Matches when the visitor's country is in countries (if given), their device in devices (if\ngiven) and, if bots is given, the visitor is a bot of one of those categories (by its\nUser-Agent). At least one of the three. A rule with bots never takes a browser; a rule without\nit takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that\nknows it: on an older one the request is refused with update_required.\n",
+            "additionalProperties": false,
             "properties": {
               "countries": {
                 "type": "array",
+                "minItems": 1,
+                "maxItems": 250,
                 "items": {
                   "type": "string",
                   "pattern": "^[A-Z]{2}$"
@@ -563,6 +567,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
               },
               "devices": {
                 "type": "array",
+                "minItems": 1,
                 "items": {
                   "type": "string",
                   "enum": [
@@ -570,6 +575,23 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
                     "desktop"
                   ]
                 }
+              },
+              "bots": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "search",
+                    "ai_training",
+                    "monitoring",
+                    "ad_review",
+                    "social_preview",
+                    "headless",
+                    "other"
+                  ]
+                },
+                "description": "bot categories, as the bots breakdown of a report names them"
               },
               "url": {
                 "type": "string",
@@ -642,10 +664,14 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
             "required": [
               "url"
             ],
-            "description": "matches when the visitor's country is in countries (if given) and their device in devices (if given)",
+            "minProperties": 2,
+            "description": "Matches when the visitor's country is in countries (if given), their device in devices (if\ngiven) and, if bots is given, the visitor is a bot of one of those categories (by its\nUser-Agent). At least one of the three. A rule with bots never takes a browser; a rule without\nit takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that\nknows it: on an older one the request is refused with update_required.\n",
+            "additionalProperties": false,
             "properties": {
               "countries": {
                 "type": "array",
+                "minItems": 1,
+                "maxItems": 250,
                 "items": {
                   "type": "string",
                   "pattern": "^[A-Z]{2}$"
@@ -653,6 +679,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
               },
               "devices": {
                 "type": "array",
+                "minItems": 1,
                 "items": {
                   "type": "string",
                   "enum": [
@@ -660,6 +687,23 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
                     "desktop"
                   ]
                 }
+              },
+              "bots": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "search",
+                    "ai_training",
+                    "monitoring",
+                    "ad_review",
+                    "social_preview",
+                    "headless",
+                    "other"
+                  ]
+                },
+                "description": "bot categories, as the bots breakdown of a report names them"
               },
               "url": {
                 "type": "string",

@@ -9,7 +9,7 @@ A free, open visit counter and short-link service for sites on Cloudflare, at [c
 
 - **Counter** — no cookies, no third-party address in the page: the beacon goes to a path on your own
   site.
-- **Short links** on your own domain, a QR code for every link, rules by country and device.
+- **Short links** on your own domain, a QR code for every link, rules by country, device and bot category.
 - **Reports** — views, visitors, clicks, pages, sources, countries, devices, browsers, OS, bots.
 
 The counting runs in a worker that clx installs into **your** Cloudflare account, on your quotas;

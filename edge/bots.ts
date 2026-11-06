@@ -1,7 +1,8 @@
 // Bot classification by User-Agent, ported from the 301.st edge worker (docs/spec.md §5). The main
 // filter is upstream of this: a bot that never runs the page's script never sends a beacon.
 
-export type BotCategory = 'search' | 'ai_training' | 'monitoring' | 'ad_review' | 'social_preview' | 'headless' | 'other';
+export const BOT_CATEGORIES = ['search', 'ai_training', 'monitoring', 'ad_review', 'social_preview', 'headless', 'other'] as const;
+export type BotCategory = (typeof BOT_CATEGORIES)[number];
 
 const SIGNATURES: { category: BotCategory; re: RegExp }[] = [
   { category: 'search', re: /Googlebot|Bingbot|YandexBot|DuckDuckBot|Baiduspider|\bYeti\b|Sogou|Applebot(?!-Extended)|Google-InspectionTool|SeznamBot|Qwantify/i },

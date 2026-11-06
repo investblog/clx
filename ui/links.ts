@@ -7,12 +7,14 @@ import { action, badge, cell, confirmAction, notice, pageHead, table, type Live,
 import { openDrawer } from './dialog';
 import { codeBlock, h, hostName } from './dom';
 import { errorText, num, t, when } from './i18n';
+import { BOT_CATEGORIES, type BotCategory } from '../edge/bots';
 import { paged } from './pager';
 import { dropdown, zoneHost } from './pick';
 
 export interface Rule {
   countries?: string[];
   devices?: ('mobile' | 'desktop')[];
+  bots?: BotCategory[];
   url: string;
 }
 export interface Link {
@@ -108,11 +110,36 @@ function hostsCard(hosts: LinkHost[], accounts: Account[], sites: Site[], redraw
   );
 }
 
+/** Who a rule takes: anyone, any bot, bots of one category — or, for a rule the API wrote, the
+ *  categories it has, kept as they are (ADR 0041). */
+function whoPicker(c: typeof t.links, bots: BotCategory[] | undefined): { el: HTMLElement; value: () => BotCategory[] | undefined } {
+  const names = t.report.names.bots as Record<string, string>;
+  const set = bots ? [...new Set(bots)] : [];
+  const custom = set.length > 1 && set.length < BOT_CATEGORIES.length;
+  const picked = !set.length ? '' : set.length === BOT_CATEGORIES.length ? 'any' : custom ? 'custom' : set[0]!;
+  const who = dropdown(
+    [
+      { value: '', label: c.anyone },
+      { value: 'any', label: c.anyBot },
+      ...BOT_CATEGORIES.map((b) => ({ value: b, label: c.bot(names[b] ?? b) })),
+      ...(custom ? [{ value: 'custom', label: c.bot(set.map((b) => names[b] ?? b).join(', ')) }] : []),
+    ],
+    { label: c.who, value: picked },
+  );
+  return {
+    el: who.el,
+    value: () => {
+      const v = who.value();
+      return !v ? undefined : v === 'any' ? [...BOT_CATEGORIES] : v === 'custom' ? set : [v as BotCategory];
+    },
+  };
+}
+
 /** The rules editor: one row per rule, the first match wins (§6). */
 function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } {
   const c = t.links;
   const list = h('div', { class: 'stack stack--sm' });
-  const rows: { countries: HTMLInputElement; device: () => string; url: HTMLInputElement; el: HTMLElement }[] = [];
+  const rows: { countries: HTMLInputElement; device: () => string; bots: () => BotCategory[] | undefined; url: HTMLInputElement; el: HTMLElement }[] = [];
   const add = (r?: Rule) => {
     const countries = h('input', { class: 'input', placeholder: 'DE, AT', value: r?.countries?.join(', ') ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': c.countries });
     const device = dropdown(
@@ -123,12 +150,22 @@ function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } 
       ],
       { label: c.device, value: r?.devices?.length === 1 ? r.devices[0]! : '' },
     );
-    const url = h('input', { class: 'input', placeholder: 'https://…', value: r?.url ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': c.target });
+    const who = whoPicker(c, r?.bots);
+    const url = h('input', { class: 'input rule-row__url', placeholder: 'https://…', value: r?.url ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': c.target });
     const remove = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, c.removeRule);
-    const row = { countries, device: device.value, url, el: h('div', { class: 'rule-row' }, countries, device.el, url, remove) };
+    // The first match wins and a rule without bots takes bots too: a new rule for bots must be
+    // movable above the ones already there.
+    const up = h('button', { type: 'button', class: 'btn btn--ghost btn--sm', 'aria-label': c.moveUp, title: c.moveUp }, '↑');
+    const row = { countries, device: device.value, bots: who.value, url, el: h('div', { class: 'rule-row' }, countries, device.el, who.el, h('span', { class: 'actions rule-row__acts' }, up, remove), url) };
     remove.addEventListener('click', () => {
       rows.splice(rows.indexOf(row), 1);
       row.el.remove();
+    });
+    up.addEventListener('click', () => {
+      const i = rows.indexOf(row);
+      if (i < 1) return;
+      rows.splice(i - 1, 0, ...rows.splice(i, 1));
+      rows[i]!.el.before(row.el);
     });
     rows.push(row);
     list.append(row.el);
@@ -141,7 +178,8 @@ function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } 
     value: () =>
       rows.map((r) => {
         const countries = [...new Set(r.countries.value.toUpperCase().split(/[\s,]+/u).filter(Boolean))];
-        return { ...(countries.length ? { countries } : {}), ...(r.device() ? { devices: [r.device() as 'mobile' | 'desktop'] } : {}), url: r.url.value.trim() };
+        const bots = r.bots();
+        return { ...(countries.length ? { countries } : {}), ...(r.device() ? { devices: [r.device() as 'mobile' | 'desktop'] } : {}), ...(bots ? { bots } : {}), url: r.url.value.trim() };
       }),
   };
 }

@@ -158,12 +158,16 @@ export async function click(db: D1Database, request: Request, link: LinkConfig, 
   return count(db, request, link.t, to, source, now);
 }
 
+/** The User-Agent as counting and the link rules read it: its first 512 characters, so a click is
+ *  sent and counted as the same kind of visitor (ADR 0041). */
+export const userAgentOf = (request: Request) => (request.headers.get('user-agent') ?? '').slice(0, 512);
+
 /** One view (or bot hit) of `target`: exact totals, a capped detail row, the day's visitor hash. */
 async function count(db: D1Database, request: Request, target: string, page: string, source: string, now: number): Promise<'view' | 'bot'> {
   const h = request.headers;
   const hour = hourOf(now);
   const day = dayOf(now);
-  const ua = (h.get('user-agent') ?? '').slice(0, 512);
+  const ua = userAgentOf(request);
   const bot = botCategory(ua);
   if (bot) {
     await db.batch([

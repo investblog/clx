@@ -5,7 +5,7 @@ import Sankey from 'affiliate-charts/charts-sankey.js';
 import Series from 'affiliate-charts/charts-series.js';
 import Share from 'affiliate-charts/charts-share.js';
 import Spark from 'affiliate-charts/charts-spark.js';
-import { destinationOf, parseDestination } from '../edge/contract';
+import { destinationOf, parseDestination, ruleOf } from '../edge/contract';
 import { call } from './api';
 import { h } from './dom';
 import { flowChart, type Flow } from './flows';
@@ -169,7 +169,7 @@ function flows(link: Link, rows: Flow[] | undefined, total: number): HTMLElement
     // A destination of the past leads with its URL: two earlier rules may share their conditions.
     if (!d.rule) return key === destinationOf(link.url) ? F.main : F.formerMain(bareUrl(d.url));
     const cond = [...d.rule.countries.map((c) => c.replace(/#.*/u, '')), ...d.rule.devices.map((x) => devices[x] ?? x)].join(', ');
-    const n = link.rules.findIndex((r) => destinationOf(r.url, r) === key);
+    const n = ruleOf(link.rules, key);
     return n < 0 ? F.gone(cond, bareUrl(d.url)) : F.rule(String(n + 1), cond);
   };
   const { nodes, links } = flowChart(rows, { source: (k) => label('sources', k), destination, rest: F.rest, display: (n) => `${num(n)} · ${pct(n, total)}` });

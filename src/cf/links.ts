@@ -3,18 +3,19 @@
 // A link host is a host in one of the account's zones made a Workers Custom Domain of clx-edge:
 // Cloudflare creates its DNS record and certificate, and the whole host is the worker's. An account
 // has many — one per site, if wished, under the site's host with a random 3-character label. A link
-// is a code on one host → a target URL, with rules by country and device. Hosts and links are config
+// is a code on one host → a target URL, with rules by country, device and bot category. Hosts and links are config
 // like sites: every change issues the account's next revision in the same batch, and the sync
 // (src/cf/sites.ts) writes them to the worker as `linkhost:<host>` and `link:<host>/<code>`.
 // clx deletes only a custom domain it recorded and that still serves clx-edge (§4 ownership); a
 // host with someone's DNS record is refused by Cloudflare and never taken over.
-import { CODE, linkHostKey, linkKey, type Device, type LinkConfig } from '../../edge/contract';
+import { BOT_CATEGORIES, type BotCategory } from '../../edge/bots';
+import { CODE, linkHostKey, linkKey, type Device, type LinkConfig, type LinkRule } from '../../edge/contract';
 import { LIMITS, planOf } from '../limits';
 import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
 import { cf, CfError, type CallLog } from './api';
 import { inService, leased, workingToken, type EdgeAccount } from './connect';
-import { refusePaused, validHost, zoneFor, type SiteRow } from './sites';
+import { BOTS_SINCE, refusePaused, servesSince, validHost, zoneFor, type SiteRow } from './sites';
 
 export interface LinkHostRow {
   id: string;
@@ -48,7 +49,7 @@ export interface LinkRow {
   created_at: number;
   updated_at: number;
 }
-export type Rule = LinkConfig['rules'][number];
+export type Rule = LinkRule;
 
 const SCRIPT = 'clx-edge';
 const MAX_URL = 2048;
@@ -85,8 +86,15 @@ export function linkView(l: LinkRow, host: string | null, syncedRevision: number
   };
 }
 
-/** The link as the worker reads it (edge/contract.ts). */
-export const linkConfigOf = (l: LinkRow): LinkConfig => ({ t: l.target, url: l.url, rules: JSON.parse(l.rules) as Rule[] });
+/** The link as the worker reads it (edge/contract.ts). `rules` never holds a rule with `bots`: a
+ *  worker before ADR 0041 reads only it, and would take such a rule for one without conditions and
+ *  send everyone there — on any version, even one taken back outside clx, it can only miss a rule
+ *  for bots. The whole list goes in `all`, which only a worker that knows `bots` reads. */
+export const linkConfigOf = (l: LinkRow): LinkConfig => {
+  const rules = JSON.parse(l.rules) as Rule[];
+  const plain = rules.filter((r) => !r.bots);
+  return { t: l.target, url: l.url, rules: plain, ...(plain.length < rules.length ? { all: rules } : {}) };
+};
 
 export const linkHostById = (db: D1Database, id: string) => db.prepare('SELECT * FROM link_hosts WHERE id = ?').bind(id).first<LinkHostRow>();
 const linkById = (db: D1Database, id: string) => db.prepare('SELECT * FROM links WHERE id = ?').bind(id).first<LinkRow>();
@@ -109,7 +117,8 @@ export function targetOf(v: unknown, field: string, linkHosts: string[]): { url:
   return { url: u!.href, host };
 }
 
-/** Rules: up to the plan's limit, each with countries (ISO 3166 alpha-2) and/or devices, and a URL. */
+/** Rules: up to the plan's limit, each with countries (ISO 3166 alpha-2), devices and/or bot
+ *  categories, and a URL. A rule with `bots` needs a worker that knows them: see `refuseOldBots`. */
 export function rulesOf(v: unknown, plan: string, linkHosts: string[]): { rules: Rule[]; hosts: string[] } {
   if (v === undefined) return { rules: [], hosts: [] };
   const max = LIMITS[planOf(plan)].rulesPerLink;
@@ -117,18 +126,31 @@ export function rulesOf(v: unknown, plan: string, linkHosts: string[]): { rules:
   const hosts: string[] = [];
   const rules = (v as unknown[]).map((r, i) => {
     const field = `rules[${i}]`;
-    if (!r || typeof r !== 'object' || Array.isArray(r) || Object.keys(r).some((k) => !['countries', 'devices', 'url'].includes(k))) fail(400, 'invalid_request', `"${field}" must be {countries?, devices?, url}.`, { field });
-    const { countries, devices, url } = r as Record<string, unknown>;
+    if (!r || typeof r !== 'object' || Array.isArray(r) || Object.keys(r).some((k) => !['countries', 'devices', 'bots', 'url'].includes(k))) fail(400, 'invalid_request', `"${field}" must be {countries?, devices?, bots?, url}.`, { field });
+    const { countries, devices, bots, url } = r as Record<string, unknown>;
     if (countries !== undefined && (!Array.isArray(countries) || !countries.length || countries.length > 250 || !countries.every((c) => typeof c === 'string' && /^[A-Z]{2}$/u.test(c))))
       fail(400, 'invalid_request', `"${field}.countries" must be a non-empty list of two-letter country codes such as "DE".`, { field: `${field}.countries` });
     if (devices !== undefined && (!Array.isArray(devices) || !devices.length || !devices.every((d) => DEVICES.includes(d as Device))))
       fail(400, 'invalid_request', `"${field}.devices" must be a non-empty list of "mobile" and "desktop".`, { field: `${field}.devices` });
-    if (countries === undefined && devices === undefined) fail(400, 'invalid_request', `"${field}" needs countries or devices.`, { field });
+    if (bots !== undefined && (!Array.isArray(bots) || !bots.length || !bots.every((b) => (BOT_CATEGORIES as readonly unknown[]).includes(b))))
+      fail(400, 'invalid_request', `"${field}.bots" must be a non-empty list of bot categories: ${BOT_CATEGORIES.map((b) => `"${b}"`).join(', ')}.`, { field: `${field}.bots` });
+    if (countries === undefined && devices === undefined && bots === undefined) fail(400, 'invalid_request', `"${field}" needs countries, devices or bots.`, { field });
     const target = targetOf(url, `${field}.url`, linkHosts);
     hosts.push(target.host);
-    return { ...(countries ? { countries: [...new Set(countries as string[])] } : {}), ...(devices ? { devices: [...new Set(devices as Device[])] } : {}), url: target.url };
+    return {
+      ...(countries ? { countries: [...new Set(countries as string[])] } : {}),
+      ...(devices ? { devices: [...new Set(devices as Device[])] } : {}),
+      ...(bots ? { bots: [...new Set(bots as BotCategory[])] } : {}),
+      url: target.url,
+    };
   });
   return { rules, hosts };
+}
+
+/** A worker before `BOTS_SINCE` ignores `bots` and would send everyone to such a rule (ADR 0041):
+ *  rules with it go only to an account whose clx-edge is new enough. */
+function refuseOldBots(rules: Rule[], bundle: string | null): void {
+  if (rules.some((r) => r.bots) && !servesSince(bundle, BOTS_SINCE)) fail(409, 'update_required', 'clx-edge in this account is too old for rules by bot category; update it first.', { bundle, field: 'rules' });
 }
 
 /** A random label of 3 characters `[a-z0-9]` (ADR 0024): 46,656 of them under a site's host. */
@@ -357,11 +379,13 @@ export async function addLink(env: Env, p: Principal, host: LinkHostRow, input: 
   if (host.state === 'deleted') fail(404, 'not_found', 'No such link host.', { field: 'link_host_id' });
   // Links go on a working host only: until then its name may still change (makeDomain).
   if (host.state !== 'active') fail(409, 'link_host_not_ready', `${host.host} is ${host.state}; links can be added once it is active.`, { field: 'link_host_id', state: host.state });
-  refusePaused((await db.prepare('SELECT paused_at FROM edge_accounts WHERE id = ?').bind(host.account_id).first<{ paused_at: number | null }>()) ?? { paused_at: null }, 'Cloudflare account');
+  const edge = (await db.prepare('SELECT paused_at, bundle FROM edge_accounts WHERE id = ?').bind(host.account_id).first<{ paused_at: number | null; bundle: string | null }>()) ?? { paused_at: null, bundle: null };
+  refusePaused(edge, 'Cloudflare account');
   if (input.code !== undefined && (typeof input.code !== 'string' || !CODE.test(input.code))) fail(400, 'invalid_request', '"code" must be 3–32 characters of A–Z, a–z, 0–9, "_" and "-".', { field: 'code' });
   const hosts = await liveHosts(db, host.account_id);
   const target = targetOf(input.url, 'url', hosts);
   const { rules, hosts: ruleHosts } = rulesOf(input.rules, p.plan, hosts);
+  refuseOldBots(rules, edge.bundle);
   // Every host the link leads to: checked again in the write, against hosts made meanwhile.
   const leads = JSON.stringify([target.host, ...ruleHosts]);
   const limit = LIMITS[planOf(p.plan)].links;
@@ -408,6 +432,7 @@ export async function patchLink(env: Env, p: Principal, link: LinkRow, input: { 
   const hosts = await liveHosts(db, link.account_id);
   const target = input.url === undefined ? { url: link.url, host: link.url_host } : targetOf(input.url, 'url', hosts);
   const checked = input.rules === undefined ? null : rulesOf(input.rules, p.plan, hosts);
+  if (checked) refuseOldBots(checked.rules, (await db.prepare('SELECT bundle FROM edge_accounts WHERE id = ?').bind(link.account_id).first<{ bundle: string | null }>())?.bundle ?? null);
   const rules = checked ? JSON.stringify(checked.rules) : link.rules;
   // Every host the link leads to: checked again in the write, against hosts made meanwhile.
   const ruleHosts = checked ? checked.hosts : (JSON.parse(link.rules) as Rule[]).map((r) => new URL(r.url).hostname);

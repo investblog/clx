@@ -1,3 +1,5 @@
+import type { BotCategory } from './bots';
+
 // What clx.cx and clx-edge agree on (docs/spec.md §4): the cron of the self-check, when the worker
 // reports `setup_ok`, and the working cron clx.cx sets once it has.
 export const SELF_CHECK_CRON = '* * * * *';
@@ -28,11 +30,19 @@ export interface LinkConfig {
   /** the target, `l…`: every click of this link carries it */
   t: string;
   url: string;
-  /** the first rule that matches the visitor's country and device wins; else `url` */
-  rules: { countries?: string[]; devices?: Device[]; url: string }[];
+  /** the first rule that matches the visitor's country and device wins; else `url`. No rule with
+   *  `bots` is here: a worker before ADR 0041 reads only this list, and would take such a rule for
+   *  one without conditions — whatever version runs, it can only miss a rule for bots. */
+  rules: LinkRule[];
+  /** every rule in order, those with `bots` among them — only when there is one. A rule with `bots`
+   *  takes only bots of those categories; one without takes bots too (ADR 0041). */
+  all?: LinkRule[];
 }
+export type LinkRule = { countries?: string[]; devices?: Device[]; bots?: BotCategory[]; url: string };
 export type Device = 'mobile' | 'desktop';
 export const linkKey = (host: string, code: string) => `link:${host}/${code}`;
+/** `bots` is left out of a destination: a bot's click records none (it counts as a bot), and no
+ *  browser matches a rule with `bots`. */
 type Conditions = { countries?: string[]; devices?: Device[] };
 /** FNV-1a, 32 bits, in base 36: a short fingerprint, not a secret. */
 function fnv(s: string): string {
@@ -61,6 +71,10 @@ export function parseDestination(key: string): { rule: { countries: string[]; de
   const [countries = '', devices = ''] = key.slice(0, at).split(';');
   return { rule: { countries: countries ? countries.split(',') : [], devices: devices ? devices.split(',') : [] }, url: key.slice(at + 1) };
 }
+/** The place (0-based) of today's rule whose clicks record `key`, or -1. A rule with `bots` is never
+ *  it: it takes no browser, and a bot's click records no destination (ADR 0041) — yet it may share
+ *  its key with a rule below it, which is the one the clicks took. */
+export const ruleOf = (rules: (Conditions & { bots?: unknown[]; url: string })[], key: string) => rules.findIndex((r) => !r.bots && destinationOf(r.url, r) === key);
 /** A link code: 3–32 of `[A-Za-z0-9_-]`. */
 export const CODE = /^[A-Za-z0-9_-]{3,32}$/u;
 

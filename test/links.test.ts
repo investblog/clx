@@ -3,6 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseDestination } from '../edge/contract';
+import RELEASED from '../edge/released.json';
 import { signAccess } from '../src/auth/jwt';
 import type { EdgeAccount } from '../src/cf/connect';
 import { runLinkHosts } from '../src/cf/links';
@@ -94,6 +95,9 @@ async function viaWorker(url: string, init: RequestInit = {}, country = 'RS'): P
 }
 const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const GOOGLEBOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+const GPTBOT = 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)';
+const TELEGRAM = 'TelegramBot (like TwitterBot)';
 const visit = (url: string, headers: Record<string, string> = {}, country?: string) => viaWorker(url, { headers: { 'user-agent': CHROME, 'cf-connecting-ip': '198.51.100.7', ...headers } }, country);
 
 describe('the worker with its config unreadable (D1 down, the reads used up)', () => {
@@ -336,6 +340,65 @@ describe('links', () => {
     expect(await where(CHROME, 'DE')).toBe('https://example.org/de');
     expect(await where(IPHONE, 'RS')).toBe('https://example.org/mobile');
     expect(await where(CHROME, 'RS')).toBe('https://example.org/');
+  });
+
+  it('rules by bot category: a bot of a listed one takes its rule, a browser never; a rule without bots takes bots too', async () => {
+    await addLink({
+      code: 'bots',
+      url: 'https://example.org/',
+      rules: [
+        { bots: ['search', 'social_preview'], url: 'https://example.org/indexed' },
+        { bots: ['ai_training'], countries: ['AT'], url: 'https://example.org/ai-at' },
+        { countries: ['DE', 'AT'], url: 'https://example.org/de' },
+      ],
+    });
+    const where = async (ua: string, country: string) => (await visit('https://go.example.com/bots', { 'user-agent': ua }, country)).headers.get('location');
+    expect(await where(GOOGLEBOT, 'RS')).toBe('https://example.org/indexed');
+    expect(await where(TELEGRAM, 'DE')).toBe('https://example.org/indexed');
+    // Both conditions of a rule: an AI crawler from AT takes its rule; from DE it falls through.
+    expect(await where(GPTBOT, 'AT')).toBe('https://example.org/ai-at');
+    expect(await where(GPTBOT, 'DE')).toBe('https://example.org/de');
+    expect(await where(GPTBOT, 'RS')).toBe('https://example.org/');
+    expect(await where(CHROME, 'AT')).toBe('https://example.org/de');
+    expect(await where(IPHONE, 'RS')).toBe('https://example.org/');
+    // A signature past the 512 characters counting reads is not seen by the rules either: one kind of visitor.
+    expect(await where(`${CHROME} ${'x'.repeat(600)} Googlebot/2.1`, 'RS')).toBe('https://example.org/');
+    // Bots count as bots, by category; the browsers' clicks record only the rules a browser takes.
+    expect(userDb().prepare("SELECT category, sum(hits) AS hits FROM bots_hourly WHERE target LIKE 'l%' GROUP BY category ORDER BY category").all()).toEqual([
+      { category: 'ai_training', hits: 3 },
+      { category: 'search', hits: 1 },
+      { category: 'social_preview', hits: 1 },
+    ]);
+    expect(userDb().prepare("SELECT DISTINCT page FROM views_hourly WHERE target LIKE 'l%' ORDER BY page").all()).toEqual([{ page: '>https://example.org/' }, { page: 'AT,DE;>https://example.org/de' }]);
+  });
+
+  it('bots in a rule: known categories only, a non-empty list, kept without repeats', async () => {
+    for (const bots of [[], ['robots'], 'search', [null]])
+      expect((await addLink({ url: 'https://example.org/', rules: [{ bots, url: 'https://example.org/b' }] })).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'rules[0].bots' } });
+    expect((await addLink({ url: 'https://example.org/', rules: [{ bot: ['search'], url: 'https://example.org/b' }] })).body.error).toMatchObject({ code: 'invalid_request', details: { field: 'rules[0]' } });
+    const r = await addLink({ url: 'https://example.org/', rules: [{ bots: ['search', 'other', 'search'], url: 'https://example.org/b' }] });
+    expect(r.body.link.rules).toEqual([{ bots: ['search', 'other'], url: 'https://example.org/b' }]);
+  });
+
+  it('a worker too old for bots in rules: update_required on add and on a change of rules; other changes go on', async () => {
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/a', rules: [{ bots: ['search'], url: 'https://example.org/s' }] })).body.link.id;
+    await env.DB.prepare('UPDATE edge_accounts SET bundle = ?').bind(RELEASED[11]).run();
+    const rules = [{ bots: ['monitoring'], url: 'https://example.org/m' }];
+    expect((await addLink({ url: 'https://example.org/', rules })).body.error).toMatchObject({ code: 'update_required', details: { field: 'rules', bundle: RELEASED[11] } });
+    expect((await call('PATCH', `/v1/links/${id}`, { body: { rules } })).body.error.code).toBe('update_required');
+    expect((await call('PATCH', `/v1/links/${id}`, { body: { url: 'https://example.org/b' } })).status).toBe(200);
+    expect((await addLink({ url: 'https://example.org/', rules: [{ countries: ['DE'], url: 'https://example.org/de' }] })).status).toBe(201);
+  });
+
+  it("a rule with bots is never in the config's rules, which an older worker reads: only in all, in order", async () => {
+    const rules = [{ countries: ['DE'], url: 'https://example.org/de' }, { bots: ['search'], url: 'https://example.org/s' }, { devices: ['mobile'], url: 'https://example.org/m' }];
+    await addLink({ code: 'mixed', url: 'https://example.org/', rules });
+    await addLink({ code: 'plain', url: 'https://example.org/', rules: [rules[0]] });
+    await runSites(env);
+    const sent = (code: string) => JSON.parse((userDb().prepare('SELECT data FROM cfg WHERE key = ? ORDER BY revision DESC LIMIT 1').get(`link:go.example.com/${code}`) as { data: string }).data);
+    expect(sent('mixed')).toMatchObject({ rules: [rules[0], rules[2]], all: rules });
+    // Without a rule for bots the config is what it always was.
+    expect(sent('plain')).toEqual({ t: expect.any(String), url: 'https://example.org/', rules: [rules[0]] });
   });
 
   it('a random 6-character code unless chosen; a taken code is link_exists, a deleted one is free again', async () => {

@@ -67,6 +67,7 @@ async function until(read, done, minutes, every = 5_000) {
 
 const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const GOOGLEBOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
 /** One request to the link host, redirects not followed. */
 async function hit(url, ua = CHROME, method = 'GET') {
   const res = await fetch(url, { method, redirect: 'manual', headers: { 'user-agent': ua } });
@@ -118,6 +119,8 @@ try {
       code: `p${run}`,
       url: 'https://example.com/a',
       rules: [
+        // A rule by bot category first (ADR 0041): it never takes a browser, so the rest still match.
+        { bots: ['search'], url: 'https://example.com/search' },
         { countries: [loc], devices: ['mobile'], url: `https://example.com/mobile-${loc}` },
         { devices: ['mobile'], url: 'https://example.com/mobile' },
       ],
@@ -141,6 +144,8 @@ try {
   // each is repeated until it is redirected — on 06.10 the phone's first try was lost that way.
   const phone = await until(() => hit(short, IPHONE), (r) => r.status === 302, 0.5, 2000);
   step(`… the rule by country (${loc}) and device`, phone.location === `https://example.com/mobile-${loc}`, phone.location);
+  const crawler = await until(() => hit(short, GOOGLEBOT), (r) => r.status === 302, 0.5, 2000);
+  step('… the rule by bot category (search)', crawler.location === 'https://example.com/search', crawler.location);
   const qr = await until(() => hit(`${short}?q`), (r) => r.status === 302, 0.5, 2000);
   step('… the QR address redirects too', qr.status === 302 && qr.location === 'https://example.com/a', qr.location);
   const misses = [await hit(`https://${host}/nope-${run}`), await hit(`https://${host}/`), await hit(short, CHROME, 'POST')];
@@ -153,6 +158,8 @@ try {
   const target = (await q(`SELECT data FROM cfg WHERE key = 'link:${host}/p${run}' ORDER BY revision DESC LIMIT 1`)).map((r) => JSON.parse(r.data).t)[0];
   const totals = await until(() => q(`SELECT views, bots FROM totals WHERE target = '${target}'`), (r) => r?.[0]?.views >= 3, 1);
   const detail = await q(`SELECT source, device, country, views FROM views_hourly WHERE target = '${target}' ORDER BY source, device`);
+  const bots = await q(`SELECT category, sum(hits) AS hits FROM bots_hourly WHERE target = '${target}' GROUP BY category`);
+  step('… the crawler counted as a bot, by category', bots.length === 1 && bots[0].category === 'search' && bots[0].hits === 1, JSON.stringify(bots));
   step('the clicks counted in the account: 3 views, one from the QR, one from a phone', totals?.[0]?.views === 3 && detail.some((r) => r.source === 'qr') && detail.some((r) => r.device === 'mobile' && r.country === loc), JSON.stringify(detail));
 
   // The link's report: today live from the account's D1, totals and breakdowns in one statement.

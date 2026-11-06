@@ -316,7 +316,7 @@ const PARENT: Record<Locale, CompareText> = {
         ['What it does', 'A cookieless visit counter and short links with QR codes', 'A domain portfolio, edge redirects, TDS and postback attribution'],
         ['For whom', 'Site owners, site generators and AI agents', 'SEO webmasters, affiliate teams, media buyers and agencies'],
         ['Where it runs', 'A worker and a D1 database in your Cloudflare account', 'Workers in your Cloudflare account; your DNS does not move'],
-        ['Traffic rules', 'Up to 10 a link, by country and device', 'Redirects by geo and user agent across many domains; TDS with A/B and geo splits'],
+        ['Traffic rules', 'Up to 10 a link, by country, device and bot category', 'Redirects by geo and user agent across many domains; TDS with A/B and geo splits'],
         ['Statistics', 'Views, visitors, sources, countries, devices and bots of your sites; clicks of your links', 'Real-time analytics, kept 30 to 365 days by plan; conversions from S2S postbacks'],
         ['Domains', 'Your sites, and a link host for each', 'A portfolio with expiry dates, DNS checks and VirusTotal checks through your own key'],
         ['Price', 'Free; Pro $9 per 30 days', 'Free during Open Beta; then Free, Pro $30 or Business $100 a month'],

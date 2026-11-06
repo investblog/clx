@@ -85,7 +85,7 @@ curl -s -X POST $CLX/v1/links \\
   -d '{"link_host_id": "&lt;link_host.id&gt;", "url": "https://example.com/spring", "code": "spring",
        "rules": [{"countries": ["DE", "AT"], "url": "https://example.com/de/spring"},
                  {"devices": ["mobile"], "url": "https://example.com/m/spring"}]}'</code></pre>
-<p><code>link.short_url</code> is the address to share. Rules are tried in order; the first match wins, else <code>url</code>. The QR code is <code>GET /v1/links/{id}/qr.svg?size=512</code> with the same <code>Authorization</code> header — scans count with source <code>qr</code>.</p>
+<p><code>link.short_url</code> is the address to share. Rules are tried in order; the first match wins, else <code>url</code>. A rule may also take bots by category — <code>{"bots": ["search", "social_preview"], "url": …}</code> — and never takes a browser; put it above the others, which take bots too. The QR code is <code>GET /v1/links/{id}/qr.svg?size=512</code> with the same <code>Authorization</code> header — scans count with source <code>qr</code>.</p>
 <p>To check a link, open it without following the redirect: <code>curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://k7q.example.com/spring</code> → <code>302</code> and the target. Such a <code>GET</code> is counted as a bot (curl and scripts are), not as a view — a person's click in a browser is a view; a <code>HEAD</code> (<code>curl -I</code>) is redirected but not counted. A rule by country can only be seen from that country; the <code>rules</code> in the link's answer are what the worker applies.</p>
 
 <h2 id="reports">4. Reports</h2>

@@ -16,8 +16,8 @@ What Cloudflare was found to do on a live account — and what this spec relies 
 
 clx is a free, open service for site owners on Cloudflare:
 - a **visit counter** with no cookies and no third-party address in the page;
-- **short links** on the user's own domain, with a QR code for every link and rules by country and
-  device;
+- **short links** on the user's own domain, with a QR code for every link and rules by country,
+  device and bot category;
 - **reports** on clx.cx: views, visitors, clicks, pages, sources, countries, devices, browsers, OS,
   bots.
 
@@ -462,14 +462,25 @@ Why:
   /v1/links/{id}/qr.svg`, error correction M, an optional `size` in pixels). The address in the QR
   is `k7q.example.com/<code>?q`; the worker records `?q` as source `qr` and does not pass it on.
   Built on clx.cx, not in the browser, so that API clients get it too.
-- **Rules:** `{countries?, devices?, url}` — countries as ISO alpha-2 codes (`cf.country`), devices
-  `mobile`/`desktop` (as the collector tells them), at least one of the two; the first match wins,
-  otherwise the main target. Up to 10 rules per link. A click records where it was sent — the
+- **Rules:** `{countries?, devices?, bots?, url}` — countries as ISO alpha-2 codes (`cf.country`), devices
+  `mobile`/`desktop` (as the collector tells them), bots as the categories of `edge/bots.ts`
+  (`search`, `ai_training`, `monitoring`, `ad_review`, `social_preview`, `headless`, `other`, by
+  User-Agent), at least one of the three; the first match wins, otherwise the main target. Up to 10
+  rules per link. A rule with `bots` takes only bots of those categories, never a browser; a rule
+  without it takes bots as before — a rule for bots goes above the others. Only a redirect, no
+  block. A worker before it ignores `bots` and would send everyone to such a rule, so a rule with
+  `bots` is `409 update_required` until the account's `bundle` is that release or later
+  (`BOTS_SINCE`, as external sites, §5). In the worker's config a link's `rules` never holds a rule
+  with `bots`; the whole ordered list goes in `all` (only when there is one), which only a worker
+  that knows `bots` reads, so an older one — on any path — can only miss such a rule
+  ([ADR 0041](./decisions/0041-bot-rules.md)). A click records where it was sent — the
   matched rule's conditions, sorted, and URL (`AT,DE;mobile>https://…`; past 40 countries the first
   40 and `+N#<fingerprint>`) or the main target (`>https://…`), the first 512 characters (`destinationOf` in
   `edge/contract.ts`) — in its row's `page`, which a
   link has no other use for: no new column or migration, and while the rules stay the same no
-  extra row (the destination follows from the country and the device, already in the row).
+  extra row (the destination follows from the country and the device, already in the row). A bot's
+  click records no destination (it counts as a bot, by category), so a rule with `bots` never shows
+  among them.
   Clicks counted by a bundle before this record `''` ([ADR 0019](./decisions/0019-link-flows.md)).
 - **Targets:** `https://` only, not on a link host of the account (no loops), up to 2048 characters.
 - **Sync clx.cx → worker** — everything the worker serves for the account: its sites (config of §5)
@@ -832,7 +843,9 @@ Pages:
   the clicks went": a sankey from its sources to its destinations (`ui/flows.ts`; at most eight a
   side, the rest joined), each destination named from what its clicks recorded — "Rule 2 (DE,
   AT)", "Main address", or by its URL ("… (earlier rule: DE, AT)") when today's rules no longer hold it
-  ([ADR 0019](./decisions/0019-link-flows.md)).
+  ([ADR 0019](./decisions/0019-link-flows.md)); a rule with `bots` is skipped when numbering, as it
+  records none ([ADR 0041](./decisions/0041-bot-rules.md)). A rule's row in the editor: countries,
+  device, who (anyone, any bot, bots of one category — a set the API wrote is kept), the URL.
 - **Status:** last push, bundle and schema version, queue depth, last error, rejected rows, the
   upgrade advice (a banner at `upgrade_soon` and `over`, §8), "reinstall", "renew the token" and
   "disconnect" — the last shows what could not be removed and the link to revoke the working
@@ -1048,7 +1061,7 @@ that adds a site and embeds its counter at build time.
 | `POST /v1/sites/{id}/rotate` | a new seed → new `<path>`, names and snippet (§5); the old path counts for 30 more days. An external site is not rotated (`400 invalid_request`) |
 | `DELETE /v1/sites/{id}` | remove the route; totals stay until the account is disconnected |
 | `POST /v1/link-hosts` `{site_id}` or `{account_id, host}`, `GET /v1/link-hosts?account_id=`, `GET`/`DELETE /v1/link-hosts/{id}` | link hosts, one per site if wished (§6) → `202`, poll `GET` until `active` and `synced`; `{site_id}` of an external site is `400 invalid_request` (its host is in no zone), and a site's collector host cannot be a link host |
-| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6); `paused_at` (§18) |
+| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6); `paused_at` (§18); a rule with `bots` on an older worker → `409 update_required` |
 | `GET /v1/links/{id}/qr.svg` | the QR code |
 | `GET /v1/sites/{id}/report?period=`, `GET /v1/links/{id}/report?period=` | totals and series; `&breakdowns=1` adds the breakdowns (§7) |
 | `GET /v1/billing`, `POST /v1/billing/pro` `{on}` | balance, Pro, paid through, grace, the journal; Pro on or off (§18) |

@@ -64,9 +64,12 @@ const patternOf = (host: string, seed: string) => `${host}${namesFor(seed).path}
 /** The host a site's routes are on: its own, or an external site's collector host. */
 const routeHost = (s: SiteRow) => s.collector_host ?? s.host;
 
-/** The first bundle in edge/released.json that serves external sites (§5): its index. */
+/** The first bundle in edge/released.json that serves a feature, by its index: external sites (§5),
+ *  link rules by bot category (§6, ADR 0041). */
 const EXTERNAL_SINCE = 11;
-const servesExternal = (sha: string | null) => sha !== null && (RELEASED as string[]).indexOf(sha) >= EXTERNAL_SINCE;
+export const BOTS_SINCE = 12;
+/** Whether the bundle `sha` is the release `since` or a later one. */
+export const servesSince = (sha: string | null, since: number) => sha !== null && (RELEASED as string[]).indexOf(sha) >= since;
 
 /** Two paths meet when one is the other or lies under it: the worker would take one for the other. */
 const meet = (a: string, b: string) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
@@ -269,7 +272,7 @@ export async function addSite(env: Env, p: Principal, edge: EdgeAccount, host: s
   if (!inService(edge)) fail(409, 'account_not_ready', 'clx-edge is not installed and confirmed in this account yet.', { state: edge.state });
   if (collector !== undefined) {
     if (!LIMITS[planOf(p.plan)].externalSites) fail(403, 'limit_reached', 'External sites (sites not on Cloudflare) are on Pro.', { limit: 0, field: 'collector_host' });
-    if (!servesExternal(edge.bundle)) fail(409, 'update_required', 'clx-edge in this account is too old for external sites; update it first.', { bundle: edge.bundle });
+    if (!servesSince(edge.bundle, EXTERNAL_SINCE)) fail(409, 'update_required', 'clx-edge in this account is too old for external sites; update it first.', { bundle: edge.bundle });
   }
   const token = await workingToken(env, edge);
   const on = collector ?? host;

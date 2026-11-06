@@ -1,6 +1,6 @@
 // A link's flows as a sankey's nodes and links (ui/flows.ts, docs/spec.md §7).
 import { describe, expect, it } from 'vitest';
-import { destinationOf, parseDestination } from '../edge/contract';
+import { destinationOf, parseDestination, ruleOf } from '../edge/contract';
 import { flowChart, type Flow } from '../ui/flows';
 
 const words = { source: (k: string) => `src ${k}`, destination: (k: string) => `to ${k}`, rest: 'rest', display: (n: number) => String(n) };
@@ -28,6 +28,15 @@ describe('a recorded destination (edge/contract.ts)', () => {
     // Lists alike in their first 40 and their length, apart in the rest, stay apart.
     const other = [...countries.slice(0, 170), 'ZZ'];
     expect(destinationOf('https://a/', { countries: other })).not.toBe(destinationOf('https://a/', { countries }));
+  });
+});
+
+describe("today's rule of a destination", () => {
+  it('a rule with bots is never it, even with the same key; the number stays its place in the list', () => {
+    const rules = [{ bots: ['search'], countries: ['DE'], url: 'https://a/de' }, { countries: ['DE'], url: 'https://a/de' }, { devices: ['mobile' as const], url: 'https://a/m' }];
+    expect(ruleOf(rules, destinationOf('https://a/de', { countries: ['DE'] }))).toBe(1);
+    expect(ruleOf(rules, destinationOf('https://a/m', { devices: ['mobile'] }))).toBe(2);
+    expect(ruleOf(rules.slice(0, 1), destinationOf('https://a/de', { countries: ['DE'] }))).toBe(-1);
   });
 });
 

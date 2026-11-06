@@ -5,8 +5,9 @@
 // account's link hosts — and passes every other request through to the origin, so a probe under a
 // site's path gets the site's own answer. While
 // clx.cx checks a fresh deployment (the every-minute cron) it reports `setup_ok`.
-import { allowedOrigin, bodyHead, click, collect, collectExternal, countryOf } from './collect';
-import { CODE, destinationOf, deviceOf, extKey, linkHostKey, linkKey, SELF_CHECK_CRON, siteKey, WORKING_CRON, type LinkConfig, type SiteConfig } from './contract';
+import { botCategory } from './bots';
+import { allowedOrigin, bodyHead, click, collect, collectExternal, countryOf, userAgentOf } from './collect';
+import { CODE, destinationOf, deviceOf, extKey, linkHostKey, linkKey, SELF_CHECK_CRON, siteKey, WORKING_CRON, type LinkConfig, type LinkRule, type SiteConfig } from './contract';
 import { hourly } from './cron';
 
 interface Env {
@@ -45,11 +46,16 @@ async function configFor<T>(env: Env, key: string): Promise<T | null> {
   return value;
 }
 
-/** Where a link sends this visitor: the first rule matching their country and device, else its URL. */
-function destination(link: LinkConfig, request: Request): { url: string; rule?: LinkConfig['rules'][number] } {
+/** Where a link sends this visitor: the first rule matching their country, device and bot category
+ *  (a browser has none, so a rule with `bots` never takes it), else its URL. */
+function destination(link: LinkConfig, request: Request): { url: string; rule?: LinkRule } {
   const country = countryOf(request);
-  const device = deviceOf(request.headers.get('user-agent') ?? '');
-  const rule = link.rules.find((r) => (!r.countries || r.countries.includes(country)) && (!r.devices || r.devices.includes(device)));
+  const ua = userAgentOf(request);
+  const device = deviceOf(ua);
+  const bot = botCategory(ua);
+  const rule = (link.all ?? link.rules).find(
+    (r) => (!r.countries || r.countries.includes(country)) && (!r.devices || r.devices.includes(device)) && (!r.bots || (bot !== null && r.bots.includes(bot))),
+  );
   return rule ? { url: rule.url, rule } : { url: link.url };
 }
 

@@ -147,8 +147,8 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
         p: 'Download it as SVG from the app or the API. A scan is reported as its own source, and the code never changes — change the target or the rules, and printed codes keep working.',
       },
       {
-        h: 'Rules by country and device',
-        p: 'Up to ten rules a link: send Germany to the German page and phones to the app. The first rule that matches wins; otherwise the main target.',
+        h: 'Rules by country, device and bot',
+        p: 'Up to ten rules a link: send Germany to the German page, phones to the app, and link previews or search engines to a page of their own. The first rule that matches wins; otherwise the main target.',
       },
       {
         h: 'Link tracking',
@@ -208,8 +208,8 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
         p: 'Скачайте его в SVG в кабинете или через API. Сканирование учитывается отдельным источником, а код ссылки не меняется: смените цель или правила — напечатанные коды продолжат работать.',
       },
       {
-        h: 'Правила по стране и устройству',
-        p: 'До десяти правил на ссылку: Германию — на немецкую страницу, телефоны — в приложение. Срабатывает первое подходящее правило, иначе — основная цель.',
+        h: 'Правила по стране, устройству и боту',
+        p: 'До десяти правил на ссылку: Германию — на немецкую страницу, телефоны — в приложение, превью соцсетей или поисковики — на свою страницу. Срабатывает первое подходящее правило, иначе — основная цель.',
       },
       {
         h: 'Статистика кликов',
