@@ -60,19 +60,36 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       checked again — not `running` → nothing; in its self-check before the fresh deadline →
       nothing (two tests with a stale first read; both fail without it). Codex found two more of
       the kind, older than this fix — the next two items.
-- [ ] **A run whose lease ran out can still write or undo the operation** (Codex, 06.11). The
+- [x] **A run whose lease ran out can still write or undo the operation** (Codex, 06.11). The
       lease lasts 120 s (`src/cf/deploy.ts`). If a Cloudflare call outlasts it, another run takes
       the lease and finishes. The first run's error then is not `operation_in_progress`, so it
       writes its stale `data` over the operation, or calls `undo`, which may deploy the previous
-      version or delete the worker and marks the operation failed. Before a retry or an undo,
-      check the lease is still this run's; make the operation's writes depend on the lease owner
-      and on `state = 'running'`.
-- [ ] **`confirmSetup` checks the operation before the lease and not again after it** (Codex,
+      version or delete the worker and marks the operation failed. Fixed 06.11: every change the
+      run makes in Cloudflare goes through `change()`, which renews the lease first (`held`) and
+      stops the run once it is lost, and every such call is cut at 50 s, well within the 120 s, so
+      one started under the lease ends before another run can take it; the catch renews it before
+      a retry is written or an undo starts; `undo` checks it again after its slow read; the
+      operation's writes in `undo`, `unconfirmed()` and the missing-token end need
+      `state = 'running'` and the owner's write of the account in the same batch. Tests steal the
+      lease during the read before the upload, during the upload (503, 400) and during the undo's
+      read, and check no change reaches Cloudflare after it. A change cut off (timeout, network)
+      has an unknown outcome — Cloudflare may still apply it — so the run then keeps the lease to
+      run out instead of releasing it, also when the cut-off call is inside the undo.
+- [ ] **Known risk: a cut-off install upload applied very late** (Codex, 06.11). If Cloudflare
+      applies an upload clx gave up on more than ~70 s later, after the next run has uploaded its
+      own, the worker holds a key and deployment id clx does not know: `setup_ok` fails, the
+      install ends `unconfirmed` and its pushes get 401 until the heartbeat (26 h) marks it
+      `no_connection` and a reinstall fixes it. The digest check sees only `worker.js`, not the
+      bindings, and secrets cannot be read back. Not fixed: unlikely, visible, recoverable. If it
+      is ever seen, compare the script's settings (bindings without secrets: `DEPLOYMENT_ID`)
+      before the install is called ready.
+- [x] **`confirmSetup` checks the operation before the lease and not again after it** (Codex,
       06.11). Between its read and the lease, a timeout, `unconfirmed()` or a new operation can
       change the row. The old `setup_ok` then still sets the working cron alone — for a new
       upload that drops its self-check cron — and returns `ok` though its conditional update
-      changed nothing. Read the account and the operation again under the lease and compare the
-      deployment and the report before the Cloudflare call.
+      changed nothing. Fixed 06.11: the same checks (`reportFits`) run again on the account and
+      the operation read under the lease, before the Cloudflare call, and `ok` needs the write
+      to have happened (a test with a late report of a timed-out update).
 - [ ] **A rollout's uploads retried 4–5 times each** (06.11): 47 updates started within three
       seconds, reached the self-check over 18 minutes, `attempts` 4–5, and `cf_calls` holds a single
       `503`. So the passing failures were clx.cx's own: likely the per-minute cron's batch of 20

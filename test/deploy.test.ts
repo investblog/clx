@@ -5,8 +5,8 @@ import { EDGE_CODE, EDGE_SHA256 } from '../edge/bundle.gen';
 import { SELF_CHECK_CRON, WORKING_CRON } from '../edge/contract';
 import { SCHEMA } from '../edge/migrations';
 import { signAccess } from '../src/auth/jwt';
-import { checkTokens } from '../src/cf/connect';
-import { runDeploy, runOperations } from '../src/cf/deploy';
+import { checkTokens, type EdgeAccount } from '../src/cf/connect';
+import { confirmSetup, runDeploy, runOperations } from '../src/cf/deploy';
 import { app } from '../src/index';
 import { sha256 } from '../src/lib/crypto';
 import type { Env } from '../src/types';
@@ -436,6 +436,116 @@ describe('update (rollout)', () => {
     expect(edge()!.live).toBe(updated);
     expect(edge()!.crons).toEqual([WORKING_CRON]);
     expect(await account(id)).toMatchObject({ state: 'ready', error: null, operation: { kind: 'update', state: 'done' } });
+  });
+
+  describe('a run whose lease ran out during a slow call changes nothing in Cloudflare after it', () => {
+    const script = (path: string) => path.endsWith('/workers/scripts/clx-edge');
+    /** An update whose run meets `steal` on some call: another run takes the account there, and
+     *  every change this run still sends to Cloudflare after that is listed. */
+    async function stolen(steal: (method: string, path: string) => Promise<Response | void | 'steal'>) {
+      const id = await ready();
+      const before = edge()!.live;
+      const after: string[] = [];
+      let taken = false;
+      fakeCf.onCall = async (method, path) => {
+        if (taken) {
+          if (method !== 'GET') after.push(`${method} ${path}`);
+          return;
+        }
+        const r = await steal(method, path);
+        if (r === undefined) return;
+        taken = true;
+        await env.DB.prepare("UPDATE edge_accounts SET lease_owner = 'another-run', lease_until = ?").bind(Date.now() + 120_000).run();
+        return r === 'steal' ? undefined : r;
+      };
+      await call('POST', '/admin/edge/rollout', { body: { force: true } });
+      const op = (await env.DB.prepare("SELECT state, step, data FROM operations WHERE kind = 'update'").first<{ state: string; step: string; data: string }>())!;
+      const owner = (await env.DB.prepare('SELECT lease_owner FROM edge_accounts WHERE id = ?').bind(id).first<{ lease_owner: string }>())!.lease_owner;
+      return { taken, after, op: { ...op, data: JSON.parse(op.data) }, before, owner };
+    }
+    const answer = (status: number) => Response.json({ success: false, result: null, errors: [{ code: 1000, message: `fake ${status}` }] }, { status });
+
+    it('a slow read before the upload: no upload follows', async () => {
+      const r = await stolen(async (method, path) => {
+        const step = (await env.DB.prepare("SELECT step FROM operations WHERE kind = 'update' AND state = 'running'").first<{ step: string }>())?.step;
+        return method === 'GET' && script(path) && step === 'uploading' ? 'steal' : undefined;
+      });
+      expect(r.taken).toBe(true);
+      expect(r.after).toEqual([]);
+      expect(edge()!.live).toBe(r.before);
+      expect(r.op).toMatchObject({ state: 'running', step: 'uploading' });
+      expect(r.owner).toBe('another-run');
+    });
+
+    for (const status of [503, 400])
+      it(`a slow upload that ends in ${status}: no retry written, no undo`, async () => {
+        const r = await stolen(async (method, path) => (method === 'PUT' && script(path) ? answer(status) : undefined));
+        expect(r.after).toEqual([]);
+        expect(edge()!.live).toBe(r.before);
+        expect(r.op.state).toBe('running');
+        expect(r.op.data.attempts).toBeUndefined();
+        expect(r.owner).toBe('another-run');
+      });
+
+    it('a change cut off has an unknown outcome: the run keeps the lease to run out, so no run follows at once', async () => {
+      const id = await ready();
+      fakeCf.onCall = async (method, path) => {
+        if (method === 'PUT' && script(path)) throw new Error('The operation was aborted due to timeout');
+      };
+      await call('POST', '/admin/edge/rollout', { body: { force: true } });
+      const row = (await env.DB.prepare('SELECT lease_owner, lease_until FROM edge_accounts WHERE id = ?').bind(id).first<{ lease_owner: string | null; lease_until: number | null }>())!;
+      expect(row.lease_owner).not.toBeNull();
+      expect(row.lease_until).toBeGreaterThan(Date.now() + 60_000);
+      const op = (await env.DB.prepare("SELECT state, data FROM operations WHERE kind = 'update'").first<{ state: string; data: string }>())!;
+      expect(op.state).toBe('running');
+      expect(JSON.parse(op.data).attempts).toBe(1);
+    });
+
+    it("so does one cut off inside the undo, which carries on past it", async () => {
+      const id = await ready();
+      fakeCf.onCall = async (method, path) => {
+        if (method === 'PUT' && script(path)) return answer(400);
+        if (method === 'POST' && path.endsWith('/workers/scripts/clx-edge/deployments')) throw new Error('The operation was aborted due to timeout');
+      };
+      await call('POST', '/admin/edge/rollout', { body: { force: true } });
+      const op = (await env.DB.prepare("SELECT state, data FROM operations WHERE kind = 'update'").first<{ state: string; data: string }>())!;
+      expect(op.state).toBe('failed');
+      expect(JSON.parse(op.data).warnings).toContain('worker_version_not_undone');
+      const row = (await env.DB.prepare('SELECT lease_owner, lease_until FROM edge_accounts WHERE id = ?').bind(id).first<{ lease_owner: string | null; lease_until: number | null }>())!;
+      expect(row.lease_owner).not.toBeNull();
+      expect(row.lease_until).toBeGreaterThan(Date.now() + 60_000);
+    });
+
+    it("a slow read in the undo: the previous version is not put back over the newer run's", async () => {
+      let refused = false;
+      const r = await stolen(async (method, path) => {
+        if (method === 'PUT' && script(path) && !refused) {
+          refused = true;
+          return answer(400);
+        }
+        return refused && method === 'GET' && script(path) ? 'steal' : undefined;
+      });
+      expect(r.taken).toBe(true);
+      expect(r.after).toEqual([]);
+      expect(r.op.state).toBe('running');
+    });
+  });
+
+  it("a setup_ok read before the lease is checked again under it: a late one takes nothing from the next update", async () => {
+    const id = await ready();
+    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    const stale = (await env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(id).first<EdgeAccount>())!;
+    const db = edge()!.bindings.find((b) => b.name === 'DB')?.id;
+    const late = { deployment_id: binding('DEPLOYMENT_ID')!, bundle: binding('BUNDLE')!, schema: db ? fakeCf.schemaOf(db) : null };
+    // That update times out and the next one starts before the late report is handled.
+    await overdue();
+    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
+    // As the hook read the account and the operation before the lease.
+    expect(await confirmSetup({ ...env, DB: staleRead(env.DB, { state: 'running', step: 'selfcheck' }) }, stale, late)).toBe('mismatch');
+    expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
+    expect(await account(id)).toMatchObject({ operation: { kind: 'update', state: 'running', step: 'selfcheck' } });
+    expect(await setupOk()).toMatchObject({ status: 200 });
   });
 
   it('a return that Cloudflare refuses claims no bundle: the account asks for a reinstall', async () => {

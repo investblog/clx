@@ -47,6 +47,9 @@ export const fakeCf = {
   onRouteMade: null as null | (() => Promise<void>),
   /** called when zones are listed, before the answer: a concurrent change lands here */
   onZones: null as null | (() => Promise<void>),
+  /** called for every call before it is answered: a change made meanwhile lands here, and an
+   *  answer it returns is the call's (a slow call that ends in a 503, say) */
+  onCall: null as null | ((method: string, path: string) => Promise<Response | void>),
   scripts: new Map<string, Script>(),
   dbs: new Map<string, { name: string; sql: string[]; db: DatabaseSync }>(),
   zones: [
@@ -90,6 +93,7 @@ export const fakeCf = {
     this.onRoutePost = null;
     this.onRouteMade = null;
     this.onZones = null;
+    this.onCall = null;
     this.scripts.clear();
     for (const d of this.dbs.values()) d.db.close();
     this.dbs.clear();
@@ -298,6 +302,8 @@ async function cloudflare(url: URL, init: RequestInit): Promise<Response> {
   const bearer = String((init.headers as Record<string, string>).authorization ?? '').replace('Bearer ', '');
   const caller = [...fakeCf.tokens.values()].find((t) => t.value === bearer && t.status === 'active');
   if (!caller) return no(401, 9109);
+  const hooked = await fakeCf.onCall?.(method, path);
+  if (hooked) return hooked;
   for (const f of fakeCf.failOnce)
     if (path.includes(f)) {
       fakeCf.failOnce.delete(f);

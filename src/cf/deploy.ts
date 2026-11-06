@@ -17,7 +17,7 @@ import { sha256 } from '../lib/crypto';
 import type { Env } from '../types';
 import { ApiError, fail, newId } from '../v1/http';
 import { cf, CfError, scriptDigest, type CallLog } from './api';
-import { edgeById, lease, owned, release, step, workingToken, type EdgeAccount } from './connect';
+import { edgeById, held, lease, owned, release, step, workingToken, type EdgeAccount } from './connect';
 import { dropDomain, recordedDomains } from './links';
 import { dropRoute, recordedRoutes } from './sites';
 
@@ -116,12 +116,33 @@ interface Run {
   data: DeployData;
   token: string;
   log: CallLog;
+  /** a change of this run was cut off: its outcome is unknown (see runDeploy) */
+  unsure?: boolean;
 }
 
 const acc = (r: Run) => `/accounts/${r.edge.cf_account_id}`;
 const record = (r: Run, name: string, state = 'running') => step(r.db, r.edge.id, r.owner, r.opId, name, r.data, state);
 const ownedUpdate = (r: Run, sql: string, ...args: unknown[]) =>
   owned(r.db.prepare(`UPDATE edge_accounts SET ${sql}, updated_at = ? WHERE id = ? AND lease_owner = ?`).bind(...args, Date.now(), r.edge.id, r.owner));
+
+/** A Cloudflare call well within the lease: one that starts while it is held ends before another
+ *  run could take it (Codex 06.11). */
+const CALL_MS = 50_000;
+/**
+ * A change of this run in Cloudflare: made only while the lease is still its own, renewed first —
+ * a run whose lease ran out during a slow read must not upload over, or revert, a newer run's
+ * work. A lost lease throws `operation_in_progress`, which stops the run.
+ */
+async function change<T>(r: Run, method: string, path: string, body?: unknown): Promise<T> {
+  await held(r.db, r.edge.id, r.owner);
+  try {
+    return await cf<T>(r.token, method, path, body, r.log, AbortSignal.timeout(CALL_MS));
+  } catch (e) {
+    // Marked on the run itself: an undo that swallows the error still keeps the lease (Codex 06.11).
+    if (e instanceof CfError && e.status === 0) r.unsure = true;
+    throw e;
+  }
+}
 
 /** The version serving now: the only one of the latest deployment (clx never splits traffic). */
 async function liveVersion(r: Run): Promise<string | null> {
@@ -155,7 +176,7 @@ async function databaseNamed(r: Run): Promise<Database | null> {
 
 /** Bring the database to SCHEMA; each migration and its number in one call (edge/migrations.ts). */
 async function migrate(r: Run): Promise<number> {
-  const query = (sql: string) => cf<{ results: { value?: number }[] }[]>(r.token, 'POST', `${acc(r)}/d1/database/${r.edge.d1_id}/query`, { sql }, r.log);
+  const query = (sql: string) => change<{ results: { value?: number }[] }[]>(r, 'POST', `${acc(r)}/d1/database/${r.edge.d1_id}/query`, { sql });
   // A (re)install also clears the worker's count of refused pushes (§7): the key it is about to
   // receive will be accepted, so the once-a-day back-off must not hold it.
   const read = await query("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value); DELETE FROM meta WHERE key IN ('push_401', 'push_401_next'); SELECT value FROM meta WHERE key = 'schema'");
@@ -203,7 +224,7 @@ async function claimSubdomain(r: Run): Promise<void> {
   for (let i = 0; ; i++) {
     const name = pick(ALPHA, 234) + Array.from({ length: 10 }, () => pick(ALNUM, 252)).join('');
     try {
-      await cf(r.token, 'PUT', `${acc(r)}/workers/subdomain`, { subdomain: name }, r.log);
+      await change(r, 'PUT', `${acc(r)}/workers/subdomain`, { subdomain: name });
       r.data.subdomain_created = name;
       return;
     } catch (e) {
@@ -249,7 +270,7 @@ async function advance(r: Run, at: string): Promise<string> {
       return 'd1_creating';
     }
     case 'd1_creating': {
-      const db = (await databaseNamed(r)) ?? (await cf<Database>(r.token, 'POST', `${acc(r)}/d1/database`, { name: DATABASE }, r.log));
+      const db = (await databaseNamed(r)) ?? (await change<Database>(r, 'POST', `${acc(r)}/d1/database`, { name: DATABASE }));
       data.d1_created = true;
       // A new database holds no config yet: the sync starts over from revision 0.
       await ownedUpdate(r, 'd1_id = ?, synced_revision = 0', db.uuid);
@@ -286,7 +307,7 @@ async function advance(r: Run, at: string): Promise<string> {
       form.append('worker.js', new Blob([EDGE_CODE], { type: 'application/javascript+module' }), 'worker.js');
       const metadata = { main_module: 'worker.js', compatibility_date: EDGE_COMPATIBILITY_DATE, bindings, ...(key ? {} : { keep_bindings: ['secret_text'] }) };
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}`, form, r.log);
+      await change(r, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}`, form);
       data.script_put = true;
       // A new script's reads may answer 404 10007 for a moment after its upload (13.10.2026):
       // the version is only recorded, so the install goes on without it.
@@ -318,7 +339,7 @@ async function advance(r: Run, at: string): Promise<string> {
       const used = holders.reduce((sum, h) => sum + h.crons, 0);
       if (r.kind === 'install' && used >= CRON_LIMIT) fail(409, 'cron_limit', `This account already uses all ${CRON_LIMIT} cron triggers of Workers Free; clx-edge needs one.`, { holders });
       const crons = used + 2 <= CRON_LIMIT ? [{ cron: SELF_CHECK_CRON }, { cron: WORKING_CRON }] : [{ cron: SELF_CHECK_CRON }];
-      const schedule = () => cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, crons, r.log);
+      const schedule = () => change(r, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, crons);
       await schedule().catch(async (e: unknown) => {
         if (!(e instanceof CfError && e.codes.includes(NO_SUBDOMAIN))) throw e;
         await claimSubdomain(r);
@@ -337,6 +358,15 @@ async function advance(r: Run, at: string): Promise<string> {
 }
 
 const passing = (e: unknown) => !(e instanceof ApiError) && !(e instanceof CfError && e.status >= 400 && e.status < 500 && e.status !== 429);
+
+/** Another run has the lease: this one only stops. */
+const lost = (e: unknown) => e instanceof ApiError && e.code === 'operation_in_progress';
+/** Whether this run still holds the lease, renewed; false once another run has taken it. */
+const stillHeld = (r: Run) =>
+  held(r.db, r.edge.id, r.owner).then(
+    () => true,
+    () => false,
+  );
 
 /**
  * Undo a failed install or update. A script that was ours before goes back to its previous version
@@ -359,6 +389,7 @@ async function undo(r: Run, at: string, e: unknown): Promise<void> {
       call().then(
         () => true,
         (x: unknown) => {
+          if (lost(x)) throw x;
           if (x instanceof CfError && x.status === 404) return true;
           warnings.add(`${what}_not_undone`);
           return false;
@@ -368,6 +399,8 @@ async function undo(r: Run, at: string, e: unknown): Promise<void> {
       // Only a clx bundle is reverted or deleted: the upload may never have happened, and a worker
       // of that name may have appeared since (§4 ownership).
       const there = await scriptDigest(r.token, r.edge.cf_account_id, SCRIPT).catch(() => 'unreadable');
+      // That read may be slow too: nothing is reverted or deleted by a run that lost the lease.
+      if (!(await stillHeld(r))) return;
       if (there === 'unreadable') warnings.add('worker_not_undone');
       // Absent right after this operation's own upload is not believed: it may not show yet. The
       // mark stays, so a reinstall takes it over and a disconnect deletes it.
@@ -377,11 +410,11 @@ async function undo(r: Run, at: string, e: unknown): Promise<void> {
         warnings.add('worker_not_ours');
         scriptGone = !!data.script_created;
       } else if (data.prev_version_id) {
-        reverted = await attempt('worker_version', () => cf(r.token, 'POST', `${acc(r)}/workers/scripts/${SCRIPT}/deployments`, { strategy: 'percentage', versions: [{ version_id: data.prev_version_id, percentage: 100 }] }, r.log));
-        cronBack = await attempt('cron', () => cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, [{ cron: WORKING_CRON }], r.log));
-      } else scriptGone = await attempt('worker', () => cf(r.token, 'DELETE', `${acc(r)}/workers/scripts/${SCRIPT}?force=true`, undefined, r.log));
+        reverted = await attempt('worker_version', () => change(r, 'POST', `${acc(r)}/workers/scripts/${SCRIPT}/deployments`, { strategy: 'percentage', versions: [{ version_id: data.prev_version_id, percentage: 100 }] }));
+        cronBack = await attempt('cron', () => change(r, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, [{ cron: WORKING_CRON }]));
+      } else scriptGone = await attempt('worker', () => change(r, 'DELETE', `${acc(r)}/workers/scripts/${SCRIPT}?force=true`));
     }
-    if (data.d1_created && r.edge.d1_id && (await attempt('database', () => cf(r.token, 'DELETE', `${acc(r)}/d1/database/${r.edge.d1_id}`, undefined, r.log)))) r.edge.d1_id = null;
+    if (data.d1_created && r.edge.d1_id && (await attempt('database', () => change(r, 'DELETE', `${acc(r)}/d1/database/${r.edge.d1_id}`)))) r.edge.d1_id = null;
   } else warnings.add('token_revoked');
   // A clx script whose return did not fully happen may serve the failed new code, or run on the
   // self-check cron: that is not a ready account, so no bundle is claimed — a reinstall sets it
@@ -406,7 +439,8 @@ async function undo(r: Run, at: string, e: unknown): Promise<void> {
          WHERE id = ?8 AND lease_owner = ?9`,
       )
       .bind(state, error, r.edge.d1_id, scriptGone ? 1 : 0, restoreKey ? 1 : 0, data.prev_key_hash ?? null, Date.now(), r.edge.id, r.owner, unknownCode ? 1 : 0),
-    r.db.prepare("UPDATE operations SET state = 'failed', step = ?, data = ?, updated_at = ? WHERE id = ?").bind(`failed:${at}`, JSON.stringify(data), Date.now(), r.opId),
+    // Only with the owner's write above: a run that lost the lease marks nothing failed.
+    r.db.prepare("UPDATE operations SET state = 'failed', step = ?, data = ?, updated_at = ? WHERE id = ? AND state = 'running' AND changes() = 1").bind(`failed:${at}`, JSON.stringify(data), Date.now(), r.opId),
   ]);
 }
 
@@ -418,15 +452,16 @@ async function undo(r: Run, at: string, e: unknown): Promise<void> {
 async function unconfirmed(r: Run): Promise<void> {
   const warnings = ['not_confirmed'];
   try {
-    await cf(r.token, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, [{ cron: WORKING_CRON }], r.log);
+    await change(r, 'PUT', `${acc(r)}/workers/scripts/${SCRIPT}/schedules`, [{ cron: WORKING_CRON }]);
   } catch (e) {
+    if (lost(e)) throw e;
     if (passing(e) && (r.data.attempts ?? 0) + 1 < MAX_ATTEMPTS) throw e;
     warnings.push('cron_not_set');
   }
   r.data.warnings = warnings;
   await r.db.batch([
     r.db.prepare('UPDATE edge_accounts SET deployment_id = NULL, error = ?, updated_at = ? WHERE id = ? AND lease_owner = ?').bind(JSON.stringify({ warnings }), Date.now(), r.edge.id, r.owner),
-    r.db.prepare("UPDATE operations SET state = 'done', step = 'unconfirmed', data = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(r.data), Date.now(), r.opId),
+    r.db.prepare("UPDATE operations SET state = 'done', step = 'unconfirmed', data = ?, updated_at = ? WHERE id = ? AND state = 'running' AND changes() = 1").bind(JSON.stringify(r.data), Date.now(), r.opId),
   ]);
 }
 
@@ -471,7 +506,7 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
       const error = JSON.stringify({ code: edge.token_sealed ? 'credentials_unreadable' : 'credentials_missing', step: at });
       await db.batch([
         db.prepare("UPDATE edge_accounts SET state = CASE WHEN state = 'installing' THEN (CASE WHEN bundle IS NULL THEN 'connected' ELSE 'ready' END) ELSE state END, error = ?, deployment_id = NULL, updated_at = ? WHERE id = ? AND lease_owner = ?").bind(error, Date.now(), edge.id, owner),
-        db.prepare("UPDATE operations SET state = 'failed', step = ?, updated_at = ? WHERE id = ?").bind(`failed:${at}`, Date.now(), opId),
+        db.prepare("UPDATE operations SET state = 'failed', step = ?, updated_at = ? WHERE id = ? AND state = 'running' AND changes() = 1").bind(`failed:${at}`, Date.now(), opId),
       ]);
       return;
     }
@@ -485,15 +520,26 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
   } catch (e) {
     if (!r) throw e;
     // The lease was lost to a newer run: that run owns the operation now, this one only stops.
-    if (e instanceof ApiError && e.code === 'operation_in_progress') return;
+    if (lost(e)) return;
+    // Or it ran out during a slow call without a takeover noticed yet: a run that took it may have
+    // finished the operation meanwhile, so neither the stale data nor an undo may follow (Codex 06.11).
+    try {
+      await held(db, r.edge.id, owner);
+    } catch {
+      return;
+    }
     r.data.attempts = (r.data.attempts ?? 0) + 1;
     if (passing(e) && r.data.attempts < MAX_ATTEMPTS) {
       // A passing failure: the cron takes it up again next minute.
-      await db.prepare('UPDATE operations SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(r.data), Date.now(), opId).run();
+      await db.prepare("UPDATE operations SET data = ?, updated_at = ? WHERE id = ? AND state = 'running'").bind(JSON.stringify(r.data), Date.now(), opId).run();
       console.error('deploy', opId, at, e instanceof Error ? e.message : e);
     } else await undo(r, at, e);
   } finally {
-    await release(db, found.id, owner);
+    // A change cut off at CALL_MS (`change`) has an unknown outcome: Cloudflare may still apply it.
+    // The lease is then left to run out rather than released, so the next run starts a minute or
+    // more later (Codex 06.11); the deployment id and the digest checks catch most of what is
+    // applied later still.
+    if (!r?.unsure) await release(db, found.id, owner);
   }
 }
 
@@ -503,6 +549,40 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
  */
 export async function confirmSetup(env: Env, edge: EdgeAccount, report: { deployment_id: string; bundle: string; schema: number | null }): Promise<'ok' | 'mismatch' | 'busy'> {
   const db = env.DB;
+  const early = await reportFits(db, edge, report);
+  if (typeof early === 'string') return early;
+  const owner = newId();
+  try {
+    await lease(db, edge.id, owner);
+  } catch {
+    return 'busy';
+  }
+  try {
+    // What was read before the lease may be stale: the operation may have timed out and a new one
+    // started meanwhile, whose self-check cron this report must not take away (Codex 06.11).
+    const now0 = await edgeById(db, edge.id);
+    const fits = now0 ? await reportFits(db, now0, report) : 'mismatch';
+    if (typeof fits === 'string') return fits;
+    const { op, data } = fits;
+    const token = await workingToken(env, now0!);
+    await held(db, edge.id, owner);
+    await cf(token, 'PUT', `/accounts/${now0!.cf_account_id}/workers/scripts/${SCRIPT}/schedules`, [{ cron: WORKING_CRON }], { db, edgeAccountId: edge.id, principal: data.principal }, AbortSignal.timeout(CALL_MS));
+    const now = Date.now();
+    const [ready] = await db.batch([
+      db
+        .prepare("UPDATE edge_accounts SET state = 'ready', error = NULL, bundle = ?, version_id = ?, schema = ?, deployment_id = NULL, installed_at = ?, updated_at = ? WHERE id = ? AND lease_owner = ? AND deployment_id = ?")
+        .bind(data.bundle, data.version_id ?? null, data.schema, now, now, edge.id, owner, report.deployment_id),
+      db.prepare("UPDATE operations SET state = 'done', step = 'done', updated_at = ? WHERE id = ? AND changes() = 1").bind(now, op.id),
+    ]);
+    return ready!.meta.changes ? 'ok' : 'mismatch';
+  } finally {
+    await release(db, edge.id, owner);
+  }
+}
+
+/** Whether a report is the one the account's waiting operation is waiting for: its deployment,
+ *  bundle and schema; `busy` while the run has not yet recorded the self-check. */
+async function reportFits(db: D1Database, edge: EdgeAccount, report: { deployment_id: string; bundle: string; schema: number | null }): Promise<'mismatch' | 'busy' | { op: OpRow; data: DeployData }> {
   if (!edge.deployment_id || report.deployment_id !== edge.deployment_id || !edge.operation_id) return 'mismatch';
   const op = await db.prepare('SELECT * FROM operations WHERE id = ?').bind(edge.operation_id).first<OpRow>();
   if (!op || op.state !== 'running') return 'mismatch';
@@ -512,26 +592,7 @@ export async function confirmSetup(env: Env, edge: EdgeAccount, report: { deploy
   if (op.step !== 'selfcheck') return 'mismatch';
   const data = JSON.parse(op.data) as DeployData;
   if (report.deployment_id !== data.deployment_id || report.bundle !== data.bundle || report.schema !== data.schema) return 'mismatch';
-  const owner = newId();
-  try {
-    await lease(db, edge.id, owner);
-  } catch {
-    return 'busy';
-  }
-  try {
-    const token = await workingToken(env, edge);
-    await cf(token, 'PUT', `/accounts/${edge.cf_account_id}/workers/scripts/${SCRIPT}/schedules`, [{ cron: WORKING_CRON }], { db, edgeAccountId: edge.id, principal: data.principal });
-    const now = Date.now();
-    await db.batch([
-      db
-        .prepare("UPDATE edge_accounts SET state = 'ready', error = NULL, bundle = ?, version_id = ?, schema = ?, deployment_id = NULL, installed_at = ?, updated_at = ? WHERE id = ? AND lease_owner = ? AND deployment_id = ?")
-        .bind(data.bundle, data.version_id ?? null, data.schema, now, now, edge.id, owner, report.deployment_id),
-      db.prepare("UPDATE operations SET state = 'done', step = 'done', updated_at = ? WHERE id = ? AND changes() = 1").bind(now, op.id),
-    ]);
-    return 'ok';
-  } finally {
-    await release(db, edge.id, owner);
-  }
+  return { op, data };
 }
 
 /** The per-minute cron: operations that stalled, wait for setup_ok, or lost their account. */
