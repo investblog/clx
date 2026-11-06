@@ -457,7 +457,12 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
   try {
     const edge = (await edgeById(db, found.id))!;
     if (edge.operation_id !== opId) return;
-    const fresh = (await db.prepare('SELECT step, data FROM operations WHERE id = ?').bind(opId).first<{ step: string; data: string }>())!;
+    // What was read before the lease may be stale: another run may have advanced the operation to
+    // its self-check, or a setup_ok ended it, while this one waited (rollout 06.11: an update failed
+    // self_check_timeout 4 s into its 15 minutes). So the checks above are made again here.
+    const fresh = (await db.prepare('SELECT state, step, data FROM operations WHERE id = ?').bind(opId).first<{ state: string; step: string; data: string }>())!;
+    if (fresh.state !== 'running') return;
+    if (fresh.step === 'selfcheck' && Date.now() < ((JSON.parse(fresh.data) as DeployData).deadline ?? 0)) return;
     at = fresh.step;
     const token = await workingToken(env, edge).catch(() => null);
     if (!token) {

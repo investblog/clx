@@ -6,7 +6,7 @@ import { SELF_CHECK_CRON, WORKING_CRON } from '../edge/contract';
 import { SCHEMA } from '../edge/migrations';
 import { signAccess } from '../src/auth/jwt';
 import { checkTokens } from '../src/cf/connect';
-import { runOperations } from '../src/cf/deploy';
+import { runDeploy, runOperations } from '../src/cf/deploy';
 import { app } from '../src/index';
 import { sha256 } from '../src/lib/crypto';
 import type { Env } from '../src/types';
@@ -55,6 +55,23 @@ async function overdue() {
   const ops = (await env.DB.prepare("SELECT id, data FROM operations WHERE state = 'running'").all<{ id: string; data: string }>()).results;
   for (const op of ops) await env.DB.prepare('UPDATE operations SET data = ?, updated_at = 0 WHERE id = ?').bind(JSON.stringify({ ...JSON.parse(op.data), deadline: 1 }), op.id).run();
   return runOperations(env);
+}
+
+/** The database with runDeploy's first read of the operation stale, as a run that read it before
+ *  another moved it on would see it; every other statement is the real one. */
+function staleRead(db: D1Database, over: Record<string, unknown>): D1Database {
+  let used = false;
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop !== 'prepare') return Reflect.get(target, prop, target);
+      return (sql: string) => {
+        const real = target.prepare(sql);
+        if (used || sql !== 'SELECT * FROM operations WHERE id = ?') return real;
+        used = true;
+        return { bind: (...args: unknown[]) => ({ first: async () => ({ ...(await real.bind(...args).first<Record<string, unknown>>()), ...over }) }) };
+      };
+    },
+  });
 }
 
 async function ready(): Promise<string> {
@@ -394,6 +411,31 @@ describe('update (rollout)', () => {
     expect(edge()!.live).toBe(before);
     expect(edge()!.crons).toEqual([WORKING_CRON]);
     expect(await account(id)).toMatchObject({ state: 'ready', error: { code: 'self_check_timeout' }, operation: { kind: 'update', state: 'failed' } });
+  });
+
+  it('a run that read the operation before another advanced it does not fail the update just in its self-check', async () => {
+    const id = await ready();
+    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    const updated = edge()!.live;
+    const opId = (await env.DB.prepare("SELECT id FROM operations WHERE kind = 'update' AND state = 'running'").first<{ id: string }>())!.id;
+    // As a second run saw it before the first reached the self-check (rollout 06.11).
+    await runDeploy({ ...env, DB: staleRead(env.DB, { step: 'uploaded' }) }, opId);
+    expect(edge()!.live).toBe(updated);
+    expect(await account(id)).toMatchObject({ operation: { kind: 'update', state: 'running', step: 'selfcheck' } });
+    expect(await setupOk()).toMatchObject({ status: 200 });
+    expect(await account(id)).toMatchObject({ state: 'ready', edge: { bundle: EDGE_SHA256 }, operation: { kind: 'update', state: 'done' } });
+  });
+
+  it('nor undo an update a setup_ok ended while it waited for the lease', async () => {
+    const id = await ready();
+    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    const updated = edge()!.live;
+    const opId = (await env.DB.prepare("SELECT id FROM operations WHERE kind = 'update' AND state = 'running'").first<{ id: string }>())!.id;
+    expect(await setupOk()).toMatchObject({ status: 200 });
+    await runDeploy({ ...env, DB: staleRead(env.DB, { state: 'running', step: 'uploaded' }) }, opId);
+    expect(edge()!.live).toBe(updated);
+    expect(edge()!.crons).toEqual([WORKING_CRON]);
+    expect(await account(id)).toMatchObject({ state: 'ready', error: null, operation: { kind: 'update', state: 'done' } });
   });
 
   it('a return that Cloudflare refuses claims no bundle: the account asks for a reinstall', async () => {

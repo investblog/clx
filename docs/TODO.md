@@ -49,13 +49,30 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       when there is no room below, keeps to the viewport, and may be wider than its trigger. Take
       that behaviour over and check it in the new-link drawer, the account and site tables and at
       390 px.
-- [ ] **An update can be failed by a second run the moment it reaches the self-check** (rollout
+- [x] **An update can be failed by a second run the moment it reaches the self-check** (rollout
       06.11, one of 48: entered `selfcheck` at 09:36:07 with its deadline at 09:51:07, failed
       `self_check_timeout` at 09:36:11). `runDeploy` (`src/cf/deploy.ts`) checks "still within the
       deadline" against the operation it read before taking the lease. After the lease it reads
       the step again but not the deadline, so a run that waited for the lease while another
-      advanced the operation fails it at once. Fix: after the fresh read, return while
-      `at === 'selfcheck'` and the fresh `deadline` has not passed; a test with two runs.
+      advanced the operation fails it at once. The same stale read could mark failed an update
+      a `setup_ok` had just ended (its step `done` → "Unknown step" → undo: the version stays, the
+      operation and the account's error do not). Fixed 06.11: after the lease the fresh read is
+      checked again — not `running` → nothing; in its self-check before the fresh deadline →
+      nothing (two tests with a stale first read; both fail without it). Codex found two more of
+      the kind, older than this fix — the next two items.
+- [ ] **A run whose lease ran out can still write or undo the operation** (Codex, 06.11). The
+      lease lasts 120 s (`src/cf/deploy.ts`). If a Cloudflare call outlasts it, another run takes
+      the lease and finishes. The first run's error then is not `operation_in_progress`, so it
+      writes its stale `data` over the operation, or calls `undo`, which may deploy the previous
+      version or delete the worker and marks the operation failed. Before a retry or an undo,
+      check the lease is still this run's; make the operation's writes depend on the lease owner
+      and on `state = 'running'`.
+- [ ] **`confirmSetup` checks the operation before the lease and not again after it** (Codex,
+      06.11). Between its read and the lease, a timeout, `unconfirmed()` or a new operation can
+      change the row. The old `setup_ok` then still sets the working cron alone — for a new
+      upload that drops its self-check cron — and returns `ok` though its conditional update
+      changed nothing. Read the account and the operation again under the lease and compare the
+      deployment and the report before the Cloudflare call.
 - [ ] **A rollout's uploads retried 4–5 times each** (06.11): 47 updates started within three
       seconds, reached the self-check over 18 minutes, `attempts` 4–5, and `cf_calls` holds a single
       `503`. So the passing failures were clx.cx's own: likely the per-minute cron's batch of 20
