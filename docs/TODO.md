@@ -79,6 +79,19 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       operations run one after another in one invocation, against its subrequest or time limit.
       Find the error (the operation's step and what threw) and either start fewer at once in
       `/admin/edge/rollout` or let the cron take fewer a run.
+- [ ] **The link editor as a screen, not a drawer** (the owner, 06.11), after 301-ui's "Editor
+      Screen" (its StyleGuide; the TDS rule editor, a drawer until 23.10). Its rule: a record with a
+      home — a list it belongs to, an address worth linking, a form long enough to scroll — gets a
+      screen inside its list page; a quick add or a step without a home stays a drawer. In clx only
+      the link editor is such a record: up to 10 rules, each a row of countries, device, who, URL,
+      move and remove, squeezed into a 540 px drawer (`#/links/new` was a page until 10.10). The
+      screen: `#/links/new` and `#/links/<id>/edit`, Back returns, unsaved edits confirm; one rule
+      on one line where there is room; from 860 px of content (`@container`) a sticky summary
+      beside the form — what the link does in order ("search engines → /search, DE → /de, else
+      → /landing") and what will never happen (a rule without bots above a rule for bots that it
+      already takes, the same conditions twice); below 860 the summary sits above Save. The other
+      drawers stay: adding a site or a link host, the excluded paths, keys, top-ups and refunds,
+      partner payouts — short, with no home of their own.
 - [ ] **Remove buttons in drawers as a trash icon** (the owner, 06.11), as in 301-ui: an icon
       button with an `aria-label` instead of the word. Rows with several controls then have more
       room — the rule row in the new-link drawer is the first ("Remove" next to "↑").
