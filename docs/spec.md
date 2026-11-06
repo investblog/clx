@@ -208,8 +208,9 @@ Why:
   A failure in steps 1–4 deletes what this run created (but a workers.dev subdomain it gave the account, ADR 0027). A reinstall (`POST /v1/accounts/{id}/install`) over our
   own script is the same install: it keeps the database, and on failure returns to the script's
   previous version as an update does.
-- **Update** — still undone without its `setup_ok` (the cron of an existing script fired after
-  40–49 s each time measured): drift check → migrations → upload the new script with a new `deployment_id`, keeping
+- **Update** — still undone without its `setup_ok` within 15 minutes (the cron of an existing
+  script fired after 40–49 s on 05.10, but after 3.7–11.3 minutes in the 06.11 rollout to 47
+  accounts — `docs/cloudflare-facts.md`): drift check → migrations → upload the new script with a new `deployment_id`, keeping
   the key (`keep_bindings: ["secret_text"]`) → the self-check and working crons (as step 4) →
   self-check (as step 5) → the working cron alone. Before the upload clx.cx records the version serving now (`GET …/deployments`); if
   the cron or the self-check fail, that version is deployed again at 100%

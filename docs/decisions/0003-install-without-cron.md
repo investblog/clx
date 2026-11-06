@@ -11,7 +11,8 @@ date: 2026-10-05
 `/hook/setup` (`setup_ok`) and undo the install without it. Live installs (05.10.2026, five of
 them) showed the cron of a **new** script is unreliable: first runs after ~4.5, ~5.5 and ~6.5
 minutes, once at once and then not for 14 minutes, once not at all within 15 minutes. The cron of an
-**updated** script came within 40–49 s.
+**updated** script came within 40–49 s. (06.11.2026: in a rollout to 47 accounts it came after
+3.7–11.3 minutes, still within the update's 15 — `docs/cloudflare-facts.md`.)
 
 **Decision.** An install is `ready` once the script, its database and the cron are in place — the
 counter and its script need no cron. `setup_ok` only confirms; with none within 15 minutes the

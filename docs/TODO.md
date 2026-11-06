@@ -49,6 +49,19 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       when there is no room below, keeps to the viewport, and may be wider than its trigger. Take
       that behaviour over and check it in the new-link drawer, the account and site tables and at
       390 px.
+- [ ] **An update can be failed by a second run the moment it reaches the self-check** (rollout
+      06.11, one of 48: entered `selfcheck` at 09:36:07 with its deadline at 09:51:07, failed
+      `self_check_timeout` at 09:36:11). `runDeploy` (`src/cf/deploy.ts`) checks "still within the
+      deadline" against the operation it read before taking the lease. After the lease it reads
+      the step again but not the deadline, so a run that waited for the lease while another
+      advanced the operation fails it at once. Fix: after the fresh read, return while
+      `at === 'selfcheck'` and the fresh `deadline` has not passed; a test with two runs.
+- [ ] **A rollout's uploads retried 4–5 times each** (06.11): 47 updates started within three
+      seconds, reached the self-check over 18 minutes, `attempts` 4–5, and `cf_calls` holds a single
+      `503`. So the passing failures were clx.cx's own: likely the per-minute cron's batch of 20
+      operations run one after another in one invocation, against its subrequest or time limit.
+      Find the error (the operation's step and what threw) and either start fewer at once in
+      `/admin/edge/rollout` or let the cron take fewer a run.
 - [ ] **Remove buttons in drawers as a trash icon** (the owner, 06.11), as in 301-ui: an icon
       button with an `aria-label` instead of the word. Rows with several controls then have more
       room — the rule row in the new-link drawer is the first ("Remove" next to "↑").
