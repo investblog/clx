@@ -47,7 +47,7 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       and a user would have to start again. The next run passed. Retry `401` for longer (some
       30 s), still inside the request, and keep `401` after that final
       (`docs/cloudflare-facts.md`, Tokens).
-- [ ] **Dropdown menus in drawers and tables can be cut off** (the owner, 06.11). The menu of
+- [x] **Dropdown menus in drawers and tables can be cut off** (the owner, 06.11). The menu of
       `dropdown()` (`ui/pick.ts`) always opens down and as wide as its trigger
       (`dropdown__menu--fit-trigger`). Near the bottom of a drawer or a table, or inside an
       element with `overflow`, part of it hides. In a narrow trigger its items wrap: the rule
@@ -60,8 +60,9 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       Home/End move and Tab leaves. Escape in a menu or the zone suggestions closed the whole
       drawer (a modal `<dialog>` takes an uncancelled Escape as its close request); now only the
       menu. Checked live in the new-link drawer at 1707 px: the last rule's "Who" opens up, the
-      first one's down, no option wraps. The tables hold no dropdown. **Left:** the live check at
-      390 px (`chrome-devtools` did not answer that day).
+      first one's down, no option wraps. The tables hold no dropdown. At 390 px (`chrome-devtools`
+      `emulate`) the rule row is one column; every menu stays within 25–366 px, the first rule's
+      open down, the last one's up, none wraps.
 - [x] **An update can be failed by a second run the moment it reaches the self-check** (rollout
       06.11, one of 48: entered `selfcheck` at 09:36:07 with its deadline at 09:51:07, failed
       `self_check_timeout` at 09:36:11). `runDeploy` (`src/cf/deploy.ts`) checks "still within the
