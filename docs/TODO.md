@@ -54,7 +54,14 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       row's "Who" in the new-link drawer, 06.11. 301-ui solved this long ago: the menu opens up
       when there is no room below, keeps to the viewport, and may be wider than its trigger. Take
       that behaviour over and check it in the new-link drawer, the account and site tables and at
-      390 px.
+      390 px. Done 08.11: the placement rules came over from 301-ui (`ui/place.ts`, tests in
+      `test/place.test.ts`), the menu is `dropdown__menu--auto` (as wide as its longest option,
+      never narrower than the chip nor wider than the window less 32 px), placed again on resize,
+      Home/End move and Tab leaves. Escape in a menu or the zone suggestions closed the whole
+      drawer (a modal `<dialog>` takes an uncancelled Escape as its close request); now only the
+      menu. Checked live in the new-link drawer at 1707 px: the last rule's "Who" opens up, the
+      first one's down, no option wraps. The tables hold no dropdown. **Left:** the live check at
+      390 px (`chrome-devtools` did not answer that day).
 - [x] **An update can be failed by a second run the moment it reaches the self-check** (rollout
       06.11, one of 48: entered `selfcheck` at 09:36:07 with its deadline at 09:51:07, failed
       `self_check_timeout` at 09:36:11). `runDeploy` (`src/cf/deploy.ts`) checks "still within the

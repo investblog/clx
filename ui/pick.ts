@@ -3,6 +3,7 @@
 import { call } from './api';
 import { h, s } from './dom';
 import { t } from './i18n';
+import { type Band, menuOpensUp, menuShift } from './place';
 
 const chevron = () => s('svg', { class: 'icon btn-chip__chevron', 'aria-hidden': 'true' }, s('use', { href: '/icons.svg#i-mono-chevron-down' }));
 
@@ -13,18 +14,66 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') openNow?.();
 });
 
-/** A select of fixed options: a chip that opens a menu (301-ui `.dropdown`). */
+/** The window's vertical band, narrowed by every ancestor that clips overflow. */
+function clipBand(el: Element, viewportHeight: number): Band {
+  const band = { top: 0, bottom: viewportHeight };
+  for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(node);
+    if (overflowX === 'visible' && overflowY === 'visible') continue;
+    const rect = node.getBoundingClientRect();
+    band.top = Math.max(band.top, rect.top);
+    band.bottom = Math.min(band.bottom, rect.bottom);
+  }
+  return band;
+}
+
+const unplaceMenu = (menu: HTMLElement) => {
+  menu.classList.remove('dropdown__menu--up');
+  menu.style.translate = '';
+};
+
+/** Place an open menu (ui/place.ts): `.dropdown__menu--up` and a horizontal translate, set through
+ *  the CSSOM (the CSP's ban on style="" does not cover it). The previous placement is reset first,
+ *  or it is what gets measured. */
+function placeMenu(root: HTMLElement, menu: HTMLElement): void {
+  unplaceMenu(menu);
+  const menuRect = menu.getBoundingClientRect();
+  const triggerRect = root.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+  if (menuOpensUp(triggerRect, menuRect, clipBand(root, viewportHeight), viewportHeight)) menu.classList.add('dropdown__menu--up');
+  const shift = menuShift(triggerRect, menuRect, document.documentElement.clientWidth || window.innerWidth);
+  if (Math.abs(shift) >= 0.5) menu.style.translate = `${Math.round(shift)}px 0`;
+}
+
+/** The open dropdown's placement, done again when the window changes under it (a rotated phone, a
+ *  narrowed window), once a frame. */
+let placeNow: (() => void) | null = null;
+let queued = false;
+window.addEventListener('resize', () => {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => {
+    queued = false;
+    placeNow?.();
+  });
+});
+
+/** A select of fixed options: a chip that opens a menu (301-ui `.dropdown`). The menu is as wide as
+ *  its longest option, never narrower than the chip, and is placed when it opens (ui/place.ts). */
 export function dropdown(options: { value: string; label: string }[], opts: { id?: string; label?: string; value?: string; onChange?: (v: string) => void } = {}): { el: HTMLElement; value: () => string } {
   let current = options.find((o) => o.value === opts.value) ?? options[0]!;
   const text = h('span', { class: 'btn-chip__label' }, current.label);
   const trigger = h('button', { type: 'button', class: 'btn-chip btn-chip--dropdown dropdown__trigger', 'aria-haspopup': 'listbox', 'aria-expanded': 'false', ...(opts.id ? { id: opts.id } : {}), ...(opts.label ? { 'aria-label': opts.label } : {}) }, text, chevron());
-  const menu = h('div', { class: 'dropdown__menu dropdown__menu--fit-trigger', role: 'listbox' });
+  const menu = h('div', { class: 'dropdown__menu dropdown__menu--auto', role: 'listbox' });
   const root = h('div', { class: 'dropdown dropdown--block' }, trigger, menu);
+  const place = () => placeMenu(root, menu);
   const close = () => {
     root.classList.remove('dropdown--open');
     trigger.classList.remove('is-open');
     trigger.setAttribute('aria-expanded', 'false');
+    unplaceMenu(menu);
     if (openNow === close) openNow = null;
+    if (placeNow === place) placeNow = null;
   };
   const items = options.map((o) => {
     const item = h('button', { type: 'button', class: 'dropdown__item', role: 'option' }, o.label);
@@ -50,24 +99,32 @@ export function dropdown(options: { value: string; label: string }[], opts: { id
     trigger.classList.add('is-open');
     trigger.setAttribute('aria-expanded', 'true');
     openNow = close;
-    items.find((i) => i.o === current)?.item.focus();
+    placeNow = place;
+    place();
+    // The chosen option is scrolled to inside the menu (it scrolls past 320 px), not the page.
+    const chosen = items.find((i) => i.o === current)?.item;
+    chosen?.focus({ preventScroll: true });
+    if (chosen && (chosen.offsetTop < menu.scrollTop || chosen.offsetTop + chosen.offsetHeight > menu.scrollTop + menu.clientHeight)) menu.scrollTop = chosen.offsetTop - (menu.clientHeight - chosen.offsetHeight) / 2;
   });
   menu.addEventListener('click', (e) => e.stopPropagation());
-  // Focus leaving the dropdown (Tab) closes it; Escape returns the focus to the chip.
+  // Focus leaving the dropdown closes it. Escape returns the focus to the chip; so does Tab, which
+  // then goes on from the chip to the next field, not through the menu's options.
   root.addEventListener('focusout', (e) => {
     if (!root.contains(e.relatedTarget as Node | null)) close();
   });
   menu.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      // A drawer is a modal <dialog>: Escape is its close request unless the keydown is cancelled.
+      if (e.key === 'Escape') e.preventDefault();
       close();
       trigger.focus();
       return;
     }
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    e.preventDefault();
     const at = items.findIndex((i) => i.item === document.activeElement);
-    items[Math.max(0, Math.min(items.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))]?.item.focus();
+    const moves: Record<string, number> = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 };
+    if (!(e.key in moves)) return;
+    e.preventDefault();
+    items[Math.max(0, Math.min(items.length - 1, moves[e.key]!))]?.item.focus();
   });
   return { el: root, value: () => current.value };
 }
@@ -171,6 +228,10 @@ export function zoneHost(input: HTMLInputElement, account: () => string): { el: 
     } else if (e.key === 'Enter' && !menu.hidden && items[active]) {
       e.preventDefault();
       pick(items[active]!.dataset.value!);
+    } else if (e.key === 'Escape' && !menu.hidden) {
+      // Closes the suggestions only, not the drawer (its <dialog> closes on an uncancelled Escape).
+      e.preventDefault();
+      close();
     }
   });
   // The menu's items keep the focus off themselves (mousedown), so a blur means the reader left.

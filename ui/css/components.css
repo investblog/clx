@@ -1329,11 +1329,21 @@ a.stat-card {
   z-index: var(--z-dropdown, 20);
 }
 
-.dropdown__menu--fit-trigger {
+/* As wide as the longest option, never narrower than the trigger; ui/place.ts keeps it in the
+   window (301-ui `.field > .dropdown > .dropdown__menu--fit-trigger`). */
+.dropdown__menu--auto {
   left: 0;
-  width: 100%;
-  min-width: unset;
-  max-width: unset;
+  right: auto;
+  width: max-content;
+  min-width: 100%;
+  /* Never wider than the window less ui/place.ts's 16 px on each side (92vw is more below 400 px). */
+  max-width: min(var(--menu-max), calc(100vw - 32px));
+}
+
+/* Opened above the trigger when only the room above holds it (ui/place.ts). */
+.dropdown__menu--up {
+  top: auto;
+  bottom: calc(100% + var(--space-2));
 }
 
 .dropdown--open .dropdown__menu {
