@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-11-06
+updated: 2026-11-08
 ---
 
 # Backlog
@@ -41,6 +41,12 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
       before the MCP server (ADR 0023) handed it to agents.
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
+- [ ] **A connect can fail on a token Cloudflare has not spread yet** (`probe-install`, 08.11). The
+      new working token read the account, then answered D1 with `401` through all five retries
+      of `settled()` (`src/cf/connect.ts`, ~7.5 s in all); the connect failed `token_check_failed`
+      and a user would have to start again. The next run passed. Retry `401` for longer (some
+      30 s), still inside the request, and keep `401` after that final
+      (`docs/cloudflare-facts.md`, Tokens).
 - [ ] **Dropdown menus in drawers and tables can be cut off** (the owner, 06.11). The menu of
       `dropdown()` (`ui/pick.ts`) always opens down and as wide as its trigger
       (`dropdown__menu--fit-trigger`). Near the bottom of a drawer or a table, or inside an
@@ -102,7 +108,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       `scripts/rollout.mjs` prints. In `cf_calls` every change was sent once, so the failures
       threw on reads, D1 or clx.cx's code — a run cut by `waitUntil` reaches no `catch` and counts
       no attempt. **Closed by the next real rollout:** few or no failed runs, or a `last_error`
-      that names the cause.
+      that names the cause. The new path itself (the request starts, the cron runs) passed live
+      on 08.11: `probe-install`'s rollout of one account came back `ready`, its cron restored.
 - [ ] **The link editor as a screen, not a drawer** (the owner, 06.11), after 301-ui's "Editor
       Screen" (its StyleGuide; the TDS rule editor, a drawer until 23.10). Its rule: a record with a
       home — a list it belongs to, an address worth linking, a form long enough to scroll — gets a
