@@ -17,6 +17,9 @@ export function s(tag: string, attrs: Record<string, string | number> = {}, ...c
 
 const icon = (name: string) => s('svg', { class: 'icon', 'aria-hidden': 'true' }, s('use', { href: `/icons.svg#i-mono-${name}` }));
 
+/** 301-ui's icon button: the icon alone, its label for screen readers and as a tooltip. */
+export const iconButton = (name: string, label: string) => h('button', { type: 'button', class: 'btn-icon btn-icon--ghost btn-icon--sm', title: label, 'aria-label': label }, icon(name));
+
 /** 301-ui's copy button: an icon that turns into a green tick for two seconds once copied. */
 export function copyButton(text: string, label = t.common.copy): HTMLButtonElement {
   const btn = h('button', { type: 'button', class: 'btn-icon btn-icon--ghost btn-icon--sm', title: label, 'aria-label': label }, icon('copy'));

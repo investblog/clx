@@ -112,8 +112,8 @@ describe('no selector twice in a file', () => {
 describe('every icon exists in the sprite', () => {
   const sprite = new Set([...fs.readFileSync(path.join(ROOT, 'public', 'icons.svg'), 'utf8').matchAll(/<symbol id="i-mono-([\w-]+)"/gu)].map((m) => m[1]!));
   it('no reference to a missing icon', () => {
-    // icons.svg#i-mono-<name> in markup, icon('<name>') in the app's code.
-    const refs = [...markup.matchAll(/icons\.svg#i-mono-([\w-]+)|\bicon\('([\w-]+)'\)/gu)].map((m) => m[1] ?? m[2]!);
+    // icons.svg#i-mono-<name> in markup, icon('<name>') and iconButton('<name>', …) in the app's code.
+    const refs = [...markup.matchAll(/icons\.svg#i-mono-([\w-]+)|\bicon\('([\w-]+)'\)|\biconButton\('([\w-]+)'/gu)].map((m) => m[1] ?? m[2] ?? m[3]!);
     expect(refs.length).toBeGreaterThan(5);
     expect([...new Set(refs)].filter((r) => !sprite.has(r)).sort()).toEqual([]);
   });

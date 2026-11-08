@@ -116,9 +116,12 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       already takes, the same conditions twice); below 860 the summary sits above Save. The other
       drawers stay: adding a site or a link host, the excluded paths, keys, top-ups and refunds,
       partner payouts — short, with no home of their own.
-- [ ] **Remove buttons in drawers as a trash icon** (the owner, 06.11), as in 301-ui: an icon
+- [x] **Remove buttons in drawers as a trash icon** (the owner, 06.11), as in 301-ui: an icon
       button with an `aria-label` instead of the word. Rows with several controls then have more
-      room — the rule row in the new-link drawer is the first ("Remove" next to "↑").
+      room — the rule row in the new-link drawer is the first ("Remove" next to "↑"). Done 08.11:
+      `iconButton()` in `ui/dom.ts`, the rule row's remove and move-up are 301-ui's `delete` and
+      `chevron-up` (in `public/icons.svg`). The other removes — a host, a link, a site, the account —
+      are actions of a page behind a confirmation, not a row's control, and keep their word.
 - [x] **Rotation is not durable** (Codex, 10.10): `rotate()` in `src/cf/sites.ts` created the new
       Cloudflare route before it recorded the seed. Now the seed is recorded first (`sites.rotating`,
       migration 0014); a retry finishes the rotation and adopts the route, the cron undoes one left

@@ -5,7 +5,7 @@ import { ApiError, call, text, type Account, type LinkHost, type Me } from './ap
 import type { Site } from './sites';
 import { action, badge, cell, confirmAction, notice, pageHead, table, type Live, type Tone } from './accounts';
 import { openDrawer } from './dialog';
-import { codeBlock, h, hostName } from './dom';
+import { codeBlock, h, hostName, iconButton } from './dom';
 import { errorText, num, t, when } from './i18n';
 import { BOT_CATEGORIES, type BotCategory } from '../edge/bots';
 import { paged } from './pager';
@@ -152,10 +152,10 @@ function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } 
     );
     const who = whoPicker(c, r?.bots);
     const url = h('input', { class: 'input rule-row__url', placeholder: 'https://…', value: r?.url ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': c.target });
-    const remove = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, c.removeRule);
+    const remove = iconButton('delete', c.removeRule);
     // The first match wins and a rule without bots takes bots too: a new rule for bots must be
     // movable above the ones already there.
-    const up = h('button', { type: 'button', class: 'btn btn--ghost btn--sm', 'aria-label': c.moveUp, title: c.moveUp }, '↑');
+    const up = iconButton('chevron-up', c.moveUp);
     const row = { countries, device: device.value, bots: who.value, url, el: h('div', { class: 'rule-row' }, countries, device.el, who.el, h('span', { class: 'actions rule-row__acts' }, up, remove), url) };
     remove.addEventListener('click', () => {
       rows.splice(rows.indexOf(row), 1);
