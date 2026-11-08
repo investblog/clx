@@ -135,7 +135,9 @@ try {
   const before = (await cfAdmin('GET', `/accounts/${account}/workers/scripts/clx-edge/deployments`)).deployments[0].versions[0].version_id;
   const rollout = await clx('POST', '/admin/edge/rollout', session, { accounts: [accountId], force: true });
   step('admin rollout started', rollout.status === 202 && rollout.body.accounts?.[0]?.operation, JSON.stringify(rollout.body.accounts ?? rollout.body.error));
-  const updated = await poll(accountId, key, (a) => a.operation?.kind === 'update' && a.operation.state !== 'running');
+  // The per-minute cron takes the update up a minute or two after the rollout (§4), then its
+  // self-check cron may take minutes more.
+  const updated = await poll(accountId, key, (a) => a.operation?.kind === 'update' && a.operation.state !== 'running', 20);
   const after = (await cfAdmin('GET', `/accounts/${account}/workers/scripts/clx-edge/deployments`)).deployments[0].versions[0].version_id;
   step('update confirmed by the worker', updated.state === 'ready' && updated.operation?.state === 'done' && after !== before, `${updated.state} ${updated.operation?.state} ${JSON.stringify(updated.operation?.error)}`);
   step('working cron restored', JSON.stringify(await crons()) === JSON.stringify(['5 * * * *']));

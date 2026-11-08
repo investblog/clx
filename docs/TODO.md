@@ -95,7 +95,14 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       `503`. So the passing failures were clx.cx's own: likely the per-minute cron's batch of 20
       operations run one after another in one invocation, against its subrequest or time limit.
       Find the error (the operation's step and what threw) and either start fewer at once in
-      `/admin/edge/rollout` or let the cron take fewer a run.
+      `/admin/edge/rollout` or let the cron take fewer a run. Half done 08.11, by the hypothesis
+      (no logs read): the rollout request runs nothing itself (its `waitUntil` is cut 30 s after the
+      response), the cron takes 10 a run instead of 20 (D1 allows 1000 queries per invocation, a run
+      makes ~32), and each passing failure is kept in the operation's `last_error`, which
+      `scripts/rollout.mjs` prints. In `cf_calls` every change was sent once, so the failures
+      threw on reads, D1 or clx.cx's code — a run cut by `waitUntil` reaches no `catch` and counts
+      no attempt. **Closed by the next real rollout:** few or no failed runs, or a `last_error`
+      that names the cause.
 - [ ] **The link editor as a screen, not a drawer** (the owner, 06.11), after 301-ui's "Editor
       Screen" (its StyleGuide; the TDS rule editor, a drawer until 23.10). Its rule: a record with a
       home — a list it belongs to, an address worth linking, a form long enough to scroll — gets a

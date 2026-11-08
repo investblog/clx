@@ -42,11 +42,11 @@ async function start(ids) {
 /** Wait until none of the operations runs (the per-minute cron drives them), then say how each
  *  ended: the operation by its id, the account by its clx id — never by Cloudflare's, which a
  *  reconnected account shares with the one before. */
-async function settle(started, minutes = 20) {
+async function settle(started, minutes = 25) {
   const list = (xs) => xs.map((x) => `'${x}'`).join(', ');
   const end = Date.now() + minutes * 60_000;
   for (;;) {
-    const ops = d1(`SELECT id, state, step FROM operations WHERE id IN (${list(started.map((s) => s.operation))})`);
+    const ops = d1(`SELECT id, state, step, json_extract(data, '$.attempts') AS attempts, json_extract(data, '$.last_error') AS last_error FROM operations WHERE id IN (${list(started.map((s) => s.operation))})`);
     if (ops.every((o) => o.state !== 'running') || Date.now() > end) {
       const accounts = d1(`SELECT id, state, bundle FROM edge_accounts WHERE id IN (${list(started.map((s) => s.id))})`);
       return started.map((s) => ({ id: s.id, op: ops.find((o) => o.id === s.operation), account: accounts.find((a) => a.id === s.id) }));
@@ -60,7 +60,10 @@ function report(rows) {
     const ok = op?.state === 'done' && op.step === 'done' && account?.state === 'ready' && account.bundle === BUNDLE;
     if (!ok) bad++;
     const note = op?.state === 'running' ? ' — still running: the cron carries it on; see its row in operations (a new run would start a fresh update of an account it left on the old bundle)' : '';
-    console.log(`${ok ? 'ok  ' : 'FAIL'} ${id}: operation ${op ? `${op.state}/${op.step}` : 'missing'}, account ${account?.state ?? 'gone'}, bundle ${short(account?.bundle)}${note}`);
+    // A passing failure the operation went past, or that is holding it now: what threw, at which step.
+    const last = op?.last_error ? JSON.parse(op.last_error) : null;
+    const retried = op?.attempts ? `, failed runs ${op.attempts}${last ? `, last at ${last.step}: ${last.message}` : ''}` : '';
+    console.log(`${ok ? 'ok  ' : 'FAIL'} ${id}: operation ${op ? `${op.state}/${op.step}` : 'missing'}, account ${account?.state ?? 'gone'}, bundle ${short(account?.bundle)}${retried}${note}`);
   }
   return bad;
 }

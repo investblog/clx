@@ -1,6 +1,7 @@
 // Installing, updating and removing clx-edge in a connected account (docs/spec.md §4). An install
-// or an update is an operation of recorded steps (§15): it is started by a request, run right after
-// the answer, and resumed by the per-minute cron from its last recorded step if the run dies; one
+// or an update is an operation of recorded steps (§15): it is started by a request; an install is
+// run right after the answer, a rollout's update by the per-minute cron, which also resumes either
+// from its last recorded step if the run dies; one
 // operation at a time holds the account's lease. Its last step waits for the worker's `setup_ok`
 // (src/hook.ts), which sets the working cron; none within fifteen minutes and the operation is undone.
 //
@@ -30,6 +31,10 @@ export const SELF_CHECK_TIMEOUT = 15 * 60_000;
 const CRON_LIMIT = 5;
 /** Runs of one operation that may end in a passing failure before it is given up. */
 const MAX_ATTEMPTS = 10;
+/** Operations one per-minute cron runs, one after another. A run of an update makes ~32 D1
+ *  statements and ~10 Cloudflare calls (counted 08.11.2026); D1 allows 1000 queries per invocation
+ *  on Workers Paid, shared with the rest of the cron (docs/cloudflare-facts.md). */
+const RUNS_PER_CRON = 10;
 /** After a reinstall the previous worker key is accepted this long (§4). */
 const PREV_KEY_TTL = 86_400_000;
 
@@ -41,6 +46,8 @@ interface DeployData {
   /** the bundle this operation deploys */
   bundle: string;
   attempts?: number;
+  /** the last passing failure, kept for the operator: the next rollout tells what threw */
+  last_error?: { step: string; message: string; at: number };
   /** created by this operation: a rollback deletes these, and only these */
   d1_created?: boolean;
   script_created?: boolean;
@@ -467,7 +474,8 @@ async function unconfirmed(r: Run): Promise<void> {
 
 /**
  * Run an operation from its last recorded step as far as it goes now. Called right after the
- * request that started it, and by the per-minute cron for one that stalled or waits for setup_ok.
+ * request that started an install, and by the per-minute cron for the updates of a rollout and
+ * for an operation that stalled or waits for setup_ok.
  */
 export async function runDeploy(env: Env, opId: string): Promise<void> {
   const db = env.DB;
@@ -530,7 +538,9 @@ export async function runDeploy(env: Env, opId: string): Promise<void> {
     }
     r.data.attempts = (r.data.attempts ?? 0) + 1;
     if (passing(e) && r.data.attempts < MAX_ATTEMPTS) {
-      // A passing failure: the cron takes it up again next minute.
+      // A passing failure: the cron takes it up again next minute. What threw is kept: 06.11 the
+      // updates of a rollout were retried 4-5 times each with no log to say why.
+      r.data.last_error = { step: at, message: (e instanceof Error ? e.message : String(e)).slice(0, 300), at: Date.now() };
       await db.prepare("UPDATE operations SET data = ?, updated_at = ? WHERE id = ? AND state = 'running'").bind(JSON.stringify(r.data), Date.now(), opId).run();
       console.error('deploy', opId, at, e instanceof Error ? e.message : e);
     } else await undo(r, at, e);
@@ -601,9 +611,9 @@ export async function runOperations(env: Env, now = Date.now()): Promise<number>
     // A self-check still within its deadline needs nothing; leaving it out keeps the batch for
     // operations that do.
     await env.DB.prepare(
-      "SELECT id FROM operations WHERE state = 'running' AND kind IN ('install', 'update') AND updated_at < ?1 AND NOT (step = 'selfcheck' AND json_extract(data, '$.deadline') > ?2) ORDER BY updated_at LIMIT 20",
+      "SELECT id FROM operations WHERE state = 'running' AND kind IN ('install', 'update') AND updated_at < ?1 AND NOT (step = 'selfcheck' AND json_extract(data, '$.deadline') > ?2) ORDER BY updated_at LIMIT ?3",
     )
-      .bind(now - 60_000, now)
+      .bind(now - 60_000, now, RUNS_PER_CRON)
       .all<{ id: string }>()
   ).results;
   // One account's trouble never stops the others.

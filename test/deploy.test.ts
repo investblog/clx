@@ -57,6 +57,13 @@ async function overdue() {
   return runOperations(env);
 }
 
+/** A rollout as an admin starts it, then the cron's next run, which takes its operations up. */
+async function rollout(body: Record<string, unknown> = { force: true }) {
+  const r = await call('POST', '/admin/edge/rollout', { body });
+  await runOperations(env, Date.now() + 61_000);
+  return r;
+}
+
 /** The database with runDeploy's first read of the operation stale, as a run that read it before
  *  another moved it on would see it; every other statement is the real one. */
 function staleRead(db: D1Database, over: Record<string, unknown>): D1Database {
@@ -154,7 +161,7 @@ describe('install', () => {
     // An update still waits for a working token.
     expect(await setupOk()).toMatchObject({ status: 200 });
     await env.DB.prepare("UPDATE edge_accounts SET state = 'permission_error'").run();
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     expect((await account(id)).state).toBe('permission_error');
     expect(await env.DB.prepare("SELECT count(*) AS n FROM operations WHERE kind = 'update'").first<number>('n')).toBe(0);
   });
@@ -383,7 +390,7 @@ describe('update (rollout)', () => {
     expect((await call('POST', '/admin/edge/rollout', { body: { force: true, dry_run: true } })).body.accounts).toEqual([{ id, from: EDGE_SHA256 }]);
     const key = edge()!.secrets.get('EDGE_KEY')!;
     const before = edge()!.live;
-    const r = await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    const r = await rollout();
     expect(r.status).toBe(202);
     expect(edge()!.live).not.toBe(before);
     expect(edge()!.secrets.get('EDGE_KEY')).toBe(key);
@@ -393,10 +400,44 @@ describe('update (rollout)', () => {
     expect(edge()!.crons).toEqual([WORKING_CRON]);
   });
 
+  it('the rollout only starts the updates: the per-minute cron runs them, at most ten a run', async () => {
+    const id = await ready();
+    const before = edge()!.live;
+    const r = await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    expect(r.status).toBe(202);
+    expect(edge()!.live).toBe(before);
+    expect(await account(id)).toMatchObject({ operation: { kind: 'update', state: 'running', step: 'reserved' } });
+    // The cron leaves an operation started less than a minute ago, then takes it up.
+    expect(await runOperations(env)).toBe(0);
+    expect(await runOperations(env, Date.now() + 61_000)).toBe(1);
+    expect(edge()!.live).not.toBe(before);
+    expect(await account(id)).toMatchObject({ operation: { kind: 'update', state: 'running', step: 'selfcheck' } });
+    // Twelve waiting operations: ten are run (these, of no account, only end superseded).
+    for (let i = 0; i < 12; i++)
+      await env.DB.prepare("INSERT INTO operations (id, user_id, kind, cf_account_id, state, step, data, created_at, updated_at) VALUES (?, 1, 'update', ?, 'running', 'reserved', '{}', 0, 0)").bind(`waiting-${i}`, `none-${i}`).run();
+    expect(await runOperations(env)).toBe(10);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM operations WHERE id LIKE 'waiting-%' AND state = 'running'").first<number>('n')).toBe(2);
+  });
+
+  it('a passing failure is kept in the operation: its step and what threw', async () => {
+    await ready();
+    fakeCf.failOnce.add(`/accounts/${ACC}/workers/scripts/clx-edge/schedules`);
+    await rollout();
+    const op = (await env.DB.prepare("SELECT state, step, data FROM operations WHERE kind = 'update'").first<{ state: string; step: string; data: string }>())!;
+    expect(op).toMatchObject({ state: 'running', step: 'uploaded' });
+    const data = JSON.parse(op.data) as { attempts: number; last_error: { step: string; message: string; at: number } };
+    expect(data.attempts).toBe(1);
+    expect(data.last_error).toMatchObject({ step: 'uploaded', message: expect.stringContaining('/schedules → 503') });
+    expect(data.last_error.at).toBeGreaterThan(Date.now() - 60_000);
+    // The next run goes on from that step.
+    expect(await runOperations(env, Date.now() + 61_000)).toBe(1);
+    expect((await env.DB.prepare("SELECT step FROM operations WHERE kind = 'update'").first<{ step: string }>())!.step).toBe('selfcheck');
+  });
+
   it('an update with no room for a second cron keeps to the self-check alone until confirmed', async () => {
     await ready();
     fakeCf.foreignScript('a', 'x', ['fetch', 'scheduled'], ['1 * * * *', '2 * * * *', '3 * * * *', '4 * * * *']);
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     expect(edge()!.crons).toEqual([SELF_CHECK_CRON]);
     expect(await setupOk()).toMatchObject({ status: 200 });
     expect(edge()!.crons).toEqual([WORKING_CRON]);
@@ -405,7 +446,7 @@ describe('update (rollout)', () => {
   it('a failed update returns to the previous version and the working cron', async () => {
     const id = await ready();
     const before = edge()!.live;
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     expect(edge()!.live).not.toBe(before);
     await overdue();
     expect(edge()!.live).toBe(before);
@@ -415,7 +456,7 @@ describe('update (rollout)', () => {
 
   it('a run that read the operation before another advanced it does not fail the update just in its self-check', async () => {
     const id = await ready();
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     const updated = edge()!.live;
     const opId = (await env.DB.prepare("SELECT id FROM operations WHERE kind = 'update' AND state = 'running'").first<{ id: string }>())!.id;
     // As a second run saw it before the first reached the self-check (rollout 06.11).
@@ -428,7 +469,7 @@ describe('update (rollout)', () => {
 
   it('nor undo an update a setup_ok ended while it waited for the lease', async () => {
     const id = await ready();
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     const updated = edge()!.live;
     const opId = (await env.DB.prepare("SELECT id FROM operations WHERE kind = 'update' AND state = 'running'").first<{ id: string }>())!.id;
     expect(await setupOk()).toMatchObject({ status: 200 });
@@ -458,7 +499,7 @@ describe('update (rollout)', () => {
         await env.DB.prepare("UPDATE edge_accounts SET lease_owner = 'another-run', lease_until = ?").bind(Date.now() + 120_000).run();
         return r === 'steal' ? undefined : r;
       };
-      await call('POST', '/admin/edge/rollout', { body: { force: true } });
+      await rollout();
       const op = (await env.DB.prepare("SELECT state, step, data FROM operations WHERE kind = 'update'").first<{ state: string; step: string; data: string }>())!;
       const owner = (await env.DB.prepare('SELECT lease_owner FROM edge_accounts WHERE id = ?').bind(id).first<{ lease_owner: string }>())!.lease_owner;
       return { taken, after, op: { ...op, data: JSON.parse(op.data) }, before, owner };
@@ -492,7 +533,7 @@ describe('update (rollout)', () => {
       fakeCf.onCall = async (method, path) => {
         if (method === 'PUT' && script(path)) throw new Error('The operation was aborted due to timeout');
       };
-      await call('POST', '/admin/edge/rollout', { body: { force: true } });
+      await rollout();
       const row = (await env.DB.prepare('SELECT lease_owner, lease_until FROM edge_accounts WHERE id = ?').bind(id).first<{ lease_owner: string | null; lease_until: number | null }>())!;
       expect(row.lease_owner).not.toBeNull();
       expect(row.lease_until).toBeGreaterThan(Date.now() + 60_000);
@@ -507,7 +548,7 @@ describe('update (rollout)', () => {
         if (method === 'PUT' && script(path)) return answer(400);
         if (method === 'POST' && path.endsWith('/workers/scripts/clx-edge/deployments')) throw new Error('The operation was aborted due to timeout');
       };
-      await call('POST', '/admin/edge/rollout', { body: { force: true } });
+      await rollout();
       const op = (await env.DB.prepare("SELECT state, data FROM operations WHERE kind = 'update'").first<{ state: string; data: string }>())!;
       expect(op.state).toBe('failed');
       expect(JSON.parse(op.data).warnings).toContain('worker_version_not_undone');
@@ -533,13 +574,13 @@ describe('update (rollout)', () => {
 
   it("a setup_ok read before the lease is checked again under it: a late one takes nothing from the next update", async () => {
     const id = await ready();
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     const stale = (await env.DB.prepare('SELECT * FROM edge_accounts WHERE id = ?').bind(id).first<EdgeAccount>())!;
     const db = edge()!.bindings.find((b) => b.name === 'DB')?.id;
     const late = { deployment_id: binding('DEPLOYMENT_ID')!, bundle: binding('BUNDLE')!, schema: db ? fakeCf.schemaOf(db) : null };
     // That update times out and the next one starts before the late report is handled.
     await overdue();
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     expect(edge()!.crons).toEqual([SELF_CHECK_CRON, WORKING_CRON]);
     // As the hook read the account and the operation before the lease.
     expect(await confirmSetup({ ...env, DB: staleRead(env.DB, { state: 'running', step: 'selfcheck' }) }, stale, late)).toBe('mismatch');
@@ -550,7 +591,7 @@ describe('update (rollout)', () => {
 
   it('a return that Cloudflare refuses claims no bundle: the account asks for a reinstall', async () => {
     const id = await ready();
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     fakeCf.refuse.add(`POST /accounts/${ACC}/workers/scripts/clx-edge/deployments`);
     await overdue();
     expect(await account(id)).toMatchObject({ state: 'connected', edge: null, error: { code: 'self_check_timeout', warnings: expect.arrayContaining(['worker_version_not_undone', 'serving_unknown']) } });
@@ -558,7 +599,7 @@ describe('update (rollout)', () => {
 
   it('a return whose working cron is refused is not ready either', async () => {
     const id = await ready();
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     fakeCf.refuse.add(`PUT /accounts/${ACC}/workers/scripts/clx-edge/schedules`);
     await overdue();
     expect(await account(id)).toMatchObject({ state: 'connected', edge: null, error: { warnings: expect.arrayContaining(['cron_not_undone', 'serving_unknown']) } });
@@ -567,7 +608,7 @@ describe('update (rollout)', () => {
   it('a worker changed outside clx is resource_drift: not replaced, not deleted', async () => {
     const id = await ready();
     edge()!.code = 'export default { fetch() { return new Response("edited"); } }';
-    await call('POST', '/admin/edge/rollout', { body: { force: true } });
+    await rollout();
     expect(edge()!.code).toContain('edited');
     expect(await account(id)).toMatchObject({ state: 'resource_drift', error: { code: 'resource_drift', resource: 'worker' } });
     const gone = await call('DELETE', `/v1/accounts/${id}`);

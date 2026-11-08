@@ -1,6 +1,6 @@
 ---
 title: clx — Cloudflare behaviour checked live
-updated: 2026-10-31
+updated: 2026-11-08
 ---
 
 # Cloudflare behaviour checked live
@@ -123,6 +123,19 @@ something clx does with its token. The zone's own mail stays on an outside serve
 |---|---|---|
 | `GET /accounts/{id}/subscriptions` lists `r2_paid` when R2 is on; then `POST /accounts/{id}/r2/buckets {name}` makes a bucket at once (Global API Key). `PUT …/r2/buckets/{name}/lifecycle {rules: [{id, enabled: true, conditions: {prefix: ""}, deleteObjectsTransition: {condition: {type: "Age", maxAge: <seconds>}}}]}` sets expiry, and `GET` of it returns the rule as sent. | 01.11.2026 | ADR 0040 |
 | `wrangler deploy` binds an existing R2 bucket with a token that has no R2 right: it warns that it skips provisioning because it cannot check the bucket exists, and deploys; the Worker then writes to the bucket (the first backup run finished with no error). | 01.11.2026 | ADR 0040, `scripts/make-token.mjs` |
+
+## Limits of clx.cx's own worker (Workers Paid)
+
+The first four rows are **read in the documentation, not tried** (the limits and context pages,
+dated 29–30.10.2026); the last one is what the live D1 showed.
+
+| Fact | Checked | Used in |
+|---|---|---|
+| `waitUntil()` of an HTTP request runs at most **30 s after the response**; "this time limit is shared across all `waitUntil()` calls within the same request", and what has not settled by then is cancelled — a run cut there reaches no `catch`, its lease stays. The scheduled-handler page states no such limit: the promise `scheduled()` returns is waited for up to 15 minutes. | 08.11.2026 (docs) | `POST /admin/edge/rollout` runs nothing itself (§4) |
+| D1: **1000 queries per Worker invocation** on Paid (50 on Free); the page says a `batch()` counts as one (not tried; clx's test model of D1, `test/d1.ts`, counts each statement of it, the safer reading — the ~32 of an update run count every statement); past it a query fails with `Too many API requests by single Worker invocation`. | 08.11.2026 (docs) | `RUNS_PER_CRON` in `src/cf/deploy.ts` |
+| Subrequests per invocation: **10,000** on Paid (50 on Free); fetches and calls to D1, KV, R2 count. | 08.11.2026 (docs) | the same |
+| A Cron Trigger: **15 minutes** of wall time; CPU **30 s** for a trigger more often than hourly (Paid). | 08.11.2026 (docs) | the per-minute cron |
+| **The rollout of 06.11 in `cf_calls`** (47 accounts, ~340 changes): each update's migration, upload and two schedule writes were sent once, none was left unanswered (status 0), one schedule write got `503`. So its 4–5 failed runs per update threw on what `cf_calls` does not log — a read (`GET`), D1, or clx.cx's own code. The cron's changes went on across whole minutes, so its work in `waitUntil` was not cut at 30 s. | 08.11.2026 (live D1) | `last_error` of an operation |
 
 ## Reaching visitors in Russia (the site's Russian questions)
 

@@ -219,7 +219,9 @@ Why:
   deployments and the rollback work; after a rollback the script's code endpoint still shows the
   latest *uploaded* version, which is a clx bundle too, so the drift check holds. Rollout — by an
   admin command (`POST /admin/edge/rollout`, an admin's page session), to every installed account or
-  a list, with `dry_run`; the operations table holds each account's result. It is run by
+  a list, with `dry_run`; the operations table holds each account's result. The command only starts
+  the updates: the per-minute cron runs them, ten a run, and a run's passing failure is kept in its
+  operation (`last_error`: step, message, time). It is run by
   `scripts/rollout.mjs`: one account first, the rest only once its update is confirmed
   ([ADR 0032](./decisions/0032-edge-rollout-order.md)). Compatibility: the
   receiver accepts body version `v` of the current and the previous release.

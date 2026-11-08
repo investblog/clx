@@ -29,6 +29,12 @@ agreed way to roll out, so that new worker features can be added without anythin
   and the previous release (§4), so accounts not yet updated keep working while the rollout runs.
 - An account with no connection is not updated (its update would wait for a `setup_ok` that does not
   come); its user reinstalls it.
+- **The request only starts the updates; the per-minute cron runs them**, ten a run (08.11.2026).
+  Until then the request ran them one after another in its `waitUntil`, which Cloudflare cuts 30 s
+  after the response, mid-step and with the lease held; and the cron took twenty a run, against
+  D1's 1000 queries per invocation at ~32 a run. On 06.11 each of 47 updates failed 4–5 runs before
+  its self-check, and nothing said why: a run's passing failure is kept in its operation since
+  (`last_error`: step, message, time), and `scripts/rollout.mjs` prints it.
 
 ## Not done
 

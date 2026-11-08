@@ -7,7 +7,7 @@ import { SCHEMA } from '../edge/migrations';
 import RELEASED from '../edge/released.json';
 import { CfError } from './cf/api';
 import type { EdgeAccount } from './cf/connect';
-import { runDeploy, startDeploy } from './cf/deploy';
+import { startDeploy } from './cf/deploy';
 import type { Env } from './types';
 import { principalOf, requireSession } from './v1/auth';
 import { ApiError, errorBody, fail } from './v1/http';
@@ -36,8 +36,8 @@ admin.get('/edge/bundle-info', async (c) => {
 
 /**
  * Update installed accounts to the current bundle. `accounts` — clx account ids, or every ready
- * account not on it yet; `force` redeploys accounts already on it. The operations table holds
- * each account's result.
+ * account not on it yet; `force` redeploys accounts already on it. The request only starts the
+ * operations; the per-minute cron runs them (§4). The operations table holds each account's result.
  */
 admin.post('/edge/rollout', async (c) => {
   const principal = await adminOf(c);
@@ -57,11 +57,7 @@ admin.post('/edge/rollout', async (c) => {
       started.push({ id: a.id, from: a.bundle, error: e instanceof ApiError ? e.code : 'internal' });
     }
   }
-  // The first steps run now, one account after another; the per-minute cron carries on.
-  c.executionCtx.waitUntil(
-    (async () => {
-      for (const s of started) if (s.operation) await runDeploy(c.env, s.operation).catch((e: unknown) => console.error('rollout', s.id, e));
-    })(),
-  );
+  // None runs here: work left to waitUntil gets 30 s after the response, shared by every call of
+  // the request, and a run cut there stops mid-step with its lease held (06.11, 47 accounts).
   return c.json({ bundle: EDGE_SHA256, accounts: started }, 202);
 });
