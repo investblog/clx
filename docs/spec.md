@@ -471,7 +471,11 @@ Why:
   User-Agent), at least one of the three; the first match wins, otherwise the main target. Up to 10
   rules per link. A rule with `bots` takes only bots of those categories, never a browser; a rule
   without it takes bots as before — a rule for bots goes above the others. Only a redirect, no
-  block. A worker before it ignores `bots` and would send everyone to such a rule, so a rule with
+  block. A rule that one rule above it takes every visitor of (each of that one's conditions absent
+  or holding all of its own, both devices counting as none) is never used, so a list with one is
+  `409 rule_unreachable`, details `{field: "rules[j]", shadowed_by: i}` — pairs only, not several
+  rules covering one together; saved links are not checked again (`unreachable` in
+  `edge/contract.ts`, [ADR 0042](./decisions/0042-unreachable-rules.md)). A worker before it ignores `bots` and would send everyone to such a rule, so a rule with
   `bots` is `409 update_required` until the account's `bundle` is that release or later
   (`BOTS_SINCE`, as external sites, §5). In the worker's config a link's `rules` never holds a rule
   with `bots`; the whole ordered list goes in `all` (only when there is one), which only a worker
@@ -1036,7 +1040,7 @@ that adds a site and embeds its counter at build time.
 - **Errors** — `{ "error": { "code": "route_conflict", "message": "…", "details": {…} } }`, codes
   stable and listed in the contract: `invalid_request`, `not_found`, `limit_reached`,
   `idempotency_conflict`, `scope_required`, `key_already_issued`, `account_not_ready`, `route_conflict`, `name_taken`,
-  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `update_required`, `route_not_ours`, `link_host_in_use`, `link_host_not_ready`, `link_exists`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`, `paused`, `insufficient_balance`, `invoice_limit`, `payments_unavailable`, `balance_not_empty`, `below_minimum`, `invalid_address`. `429` has `Retry-After`.
+  `resource_drift`, `permission_error`, `revoked`, `cron_limit`, `self_check_timeout`, `credentials_missing`, `credentials_unreadable`, `zone_not_found`, `site_exists`, `site_not_active`, `update_required`, `route_not_ours`, `link_host_in_use`, `link_host_not_ready`, `link_exists`, `rule_unreachable`, `email_unconfirmed`, `invalid_password`, `bootstrap_lost`, `storage_limit`, `rate_limited`, `paused`, `insufficient_balance`, `invoice_limit`, `payments_unavailable`, `balance_not_empty`, `below_minimum`, `invalid_address`. `429` has `Retry-After`.
 - **Rate limits** — the rate limiting binding per key: 120 requests a minute (per location, a first
   line), breakdown reports within the 30 a minute of §8. Mutations count towards the clx.cx write
   budget (§8): one idempotency row + the change itself.
@@ -1064,7 +1068,7 @@ that adds a site and embeds its counter at build time.
 | `POST /v1/sites/{id}/rotate` | a new seed → new `<path>`, names and snippet (§5); the old path counts for 30 more days. An external site is not rotated (`400 invalid_request`) |
 | `DELETE /v1/sites/{id}` | remove the route; totals stay until the account is disconnected |
 | `POST /v1/link-hosts` `{site_id}` or `{account_id, host}`, `GET /v1/link-hosts?account_id=`, `GET`/`DELETE /v1/link-hosts/{id}` | link hosts, one per site if wished (§6) → `202`, poll `GET` until `active` and `synced`; `{site_id}` of an external site is `400 invalid_request` (its host is in no zone), and a site's collector host cannot be a link host |
-| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6); `paused_at` (§18); a rule with `bots` on an older worker → `409 update_required` |
+| `POST /v1/links`, `GET /v1/links`, `GET`/`PATCH`/`DELETE /v1/links/{id}` | links with their rules on a link host (`{link_host_id, url, code?, rules?}`, §6); `paused_at` (§18); a rule with `bots` on an older worker → `409 update_required`; a rule one above it takes whole → `409 rule_unreachable` (ADR 0042) |
 | `GET /v1/links/{id}/qr.svg` | the QR code |
 | `GET /v1/sites/{id}/report?period=`, `GET /v1/links/{id}/report?period=` | totals and series; `&breakdowns=1` adds the breakdowns (§7) |
 | `GET /v1/billing`, `POST /v1/billing/pro` `{on}` | balance, Pro, paid through, grace, the journal; Pro on or off (§18) |

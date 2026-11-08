@@ -553,7 +553,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
               "url"
             ],
             "minProperties": 2,
-            "description": "Matches when the visitor's country is in countries (if given), their device in devices (if\ngiven) and, if bots is given, the visitor is a bot of one of those categories (by its\nUser-Agent). At least one of the three. A rule with bots never takes a browser; a rule without\nit takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that\nknows it: on an older one the request is refused with update_required.\n",
+            "description": "Matches when the visitor's country is in countries (if given), their device in devices (if\ngiven) and, if bots is given, the visitor is a bot of one of those categories (by its\nUser-Agent). At least one of the three. A rule with bots never takes a browser; a rule without\nit takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that\nknows it: on an older one the request is refused with update_required. A rule that one rule\nabove it takes every visitor of (each of its conditions absent or holding all of this one's,\nboth devices counting as none) would never be used: the list is refused with 409\nrule_unreachable, details `{field: \"rules[j]\", shadowed_by: i}` — say DE above \"search bots\nin DE\", or any rule twice. Rules covered only by several above together are let through.\n",
             "additionalProperties": false,
             "properties": {
               "countries": {
@@ -665,7 +665,7 @@ export const SCHEMAS: Record<string, { description: string; inputSchema: Record<
               "url"
             ],
             "minProperties": 2,
-            "description": "Matches when the visitor's country is in countries (if given), their device in devices (if\ngiven) and, if bots is given, the visitor is a bot of one of those categories (by its\nUser-Agent). At least one of the three. A rule with bots never takes a browser; a rule without\nit takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that\nknows it: on an older one the request is refused with update_required.\n",
+            "description": "Matches when the visitor's country is in countries (if given), their device in devices (if\ngiven) and, if bots is given, the visitor is a bot of one of those categories (by its\nUser-Agent). At least one of the three. A rule with bots never takes a browser; a rule without\nit takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that\nknows it: on an older one the request is refused with update_required. A rule that one rule\nabove it takes every visitor of (each of its conditions absent or holding all of this one's,\nboth devices counting as none) would never be used: the list is refused with 409\nrule_unreachable, details `{field: \"rules[j]\", shadowed_by: i}` — say DE above \"search bots\nin DE\", or any rule twice. Rules covered only by several above together are let through.\n",
             "additionalProperties": false,
             "properties": {
               "countries": {

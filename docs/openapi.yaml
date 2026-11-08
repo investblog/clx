@@ -68,7 +68,9 @@ components:
                 object beyond the free plan's limits: it can be read and deleted, not changed).
                 Links: link_exists (the code is taken on that link host), link_host_not_ready (links go
                 on an active host only), link_host_in_use
-                (DELETE /v1/link-hosts/{id} while live links are on it). In a link host's `error`:
+                (DELETE /v1/link-hosts/{id} while live links are on it), rule_unreachable (a rule
+                that one above it takes every visitor of; details: field `rules[j]`, shadowed_by i).
+                In a link host's `error`:
                 dns_record_exists (the named host already has a DNS record — never taken over),
                 domain_taken (another worker's custom domain), domain_not_ours.
             message: { type: string }
@@ -176,7 +178,11 @@ components:
         given) and, if bots is given, the visitor is a bot of one of those categories (by its
         User-Agent). At least one of the three. A rule with bots never takes a browser; a rule without
         it takes bots too, so put a bots rule above the others. A bots rule needs a clx-edge that
-        knows it: on an older one the request is refused with update_required.
+        knows it: on an older one the request is refused with update_required. A rule that one rule
+        above it takes every visitor of (each of its conditions absent or holding all of this one's,
+        both devices counting as none) would never be used: the list is refused with 409
+        rule_unreachable, details `{field: "rules[j]", shadowed_by: i}` — say DE above "search bots
+        in DE", or any rule twice. Rules covered only by several above together are let through.
       additionalProperties: false
       properties:
         countries: { type: array, minItems: 1, maxItems: 250, items: { type: string, pattern: '^[A-Z]{2}$' } }

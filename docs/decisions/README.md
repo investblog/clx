@@ -47,3 +47,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0039](./0039-back-forward-cache.md) | A page restored from the back-forward cache is counted; every snippet changes once, the served scripts follow by SNIPPET_REV | 01.11.2026 | §5, §15 |
 | [0040](./0040-nightly-backup.md) | The nightly backup of D1 clx to R2: bucket clx-backups, 30 days, resumable a slice a minute, gzipped NDJSON chunks and a manifest | 01.11.2026 | §13 |
 | [0041](./0041-bot-rules.md) | Link rules by bot category: a redirect for bots of the listed categories (all seven), a rule without it takes bots too, refused on a clx-edge before BOTS_SINCE | 06.11.2026 | §1, §6, §10, §15 |
+| [0042](./0042-unreachable-rules.md) | A link rule that one rule above it takes every visitor of is refused: 409 rule_unreachable, pairs only, one function for the API and the editor | 08.11.2026 | §6 |

@@ -433,6 +433,47 @@ describe('links', () => {
     expect((await addLink({ url: 'https://example.org/', rules: Array.from({ length: 11 }, () => ({ devices: ['mobile'], url: 'https://example.org/m' })) })).body.error.details.field).toBe('rules');
   });
 
+  it('a rule no visitor can reach is refused: rule_unreachable, on add and on a change of rules (ADR 0042)', async () => {
+    const shadowed = [
+      { countries: ['DE'], url: 'https://example.org/de' },
+      { bots: ['search'], countries: ['DE'], url: 'https://example.org/s' },
+    ];
+    expect((await addLink({ url: 'https://example.org/', rules: shadowed })).body.error).toMatchObject({ code: 'rule_unreachable', details: { field: 'rules[1]', shadowed_by: 0 } });
+    const id = (await addLink({ code: 'promo', url: 'https://example.org/', rules: [shadowed[1]!, shadowed[0]!] })).body.link.id;
+    const r = await call('PATCH', `/v1/links/${id}`, { body: { rules: shadowed } });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatchObject({ code: 'rule_unreachable', details: { field: 'rules[1]', shadowed_by: 0 } });
+    // The link keeps its rules; a change without rules is not checked.
+    expect((await call('PATCH', `/v1/links/${id}`, { body: { url: 'https://example.org/b' } })).status).toBe(200);
+  });
+
+  it('a link saved with an unreachable rule before the check can still change its URL with its rules sent back as they are', async () => {
+    const shadowed = [
+      { countries: ['DE'], url: 'https://example.org/de' },
+      { bots: ['search'], countries: ['DE'], url: 'https://example.org/s' },
+    ];
+    const id = (await addLink({ code: 'old', url: 'https://example.org/', rules: [shadowed[0]!] })).body.link.id;
+    await env.DB.prepare('UPDATE links SET rules = ? WHERE id = ?').bind(JSON.stringify(shadowed), id).run();
+    // The editor sends the whole list back on a change of URL alone.
+    const r = await call('PATCH', `/v1/links/${id}`, { body: { url: 'https://example.org/b', rules: shadowed } });
+    expect(r.status).toBe(200);
+    expect(r.body.link).toMatchObject({ url: 'https://example.org/b', rules: shadowed });
+    // Sent back as the editor writes it: both devices as none, the bot categories in its order.
+    const stored = [
+      { countries: ['DE', 'AT'], devices: ['mobile', 'desktop'], url: 'https://example.org/de' },
+      { bots: ['social_preview', 'search'], countries: ['AT'], url: 'https://example.org/s' },
+    ];
+    await env.DB.prepare('UPDATE links SET rules = ? WHERE id = ?').bind(JSON.stringify(stored), id).run();
+    const back = [
+      { countries: ['AT', 'DE'], url: 'https://example.org/de' },
+      { countries: ['AT'], bots: ['search', 'social_preview'], url: 'https://example.org/s' },
+    ];
+    expect((await call('PATCH', `/v1/links/${id}`, { body: { url: 'https://example.org/c', rules: back } })).status).toBe(200);
+    // A changed list is checked: here one more rule, the dead one still there.
+    const more = [...shadowed, { devices: ['mobile'], url: 'https://example.org/m' }];
+    expect((await call('PATCH', `/v1/links/${id}`, { body: { rules: more } })).body.error).toMatchObject({ code: 'rule_unreachable', details: { field: 'rules[1]' } });
+  });
+
   it('a change of URL or rules reaches the worker; the code stays', async () => {
     const id = (await addLink({ code: 'promo', url: 'https://example.org/a' })).body.link.id;
     expect((await call('PATCH', `/v1/links/${id}`, { body: { code: 'other' } })).body.error.details.field).toBe('code');

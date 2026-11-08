@@ -21,6 +21,9 @@ const stateBadge = (s: string) => badge(label.accountState(s), STATE_TONE[s]);
 const adviceBadge = (level: string, paid = false) => badge(label.adviceLevel(level, paid), ADVICE_TONE[level]);
 export const notice = (text: string, tone: 'error' | 'success' | 'loading' | 'idle' = 'error') => h('div', { class: 'auth-status', 'data-type': tone, role: 'status' }, text);
 export function failure(e: unknown): string {
+  // Rules are numbered from 1 on the page, from 0 in the API (`rules[2]`).
+  const at = e instanceof ApiError && e.code === 'rule_unreachable' ? /^rules\[(\d+)\]$/u.exec(String(e.details.field)) : null;
+  if (at && e instanceof ApiError && typeof e.details.shadowed_by === 'number') return t.links.unreachable(Number(at[1]) + 1, e.details.shadowed_by + 1);
   if (e instanceof ApiError) return errorText(e.code, e.message);
   // The session ended mid-action: the router finds that out again and goes to the sign-in card.
   if (e instanceof SignedOut) {

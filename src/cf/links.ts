@@ -9,7 +9,7 @@
 // clx deletes only a custom domain it recorded and that still serves clx-edge (§4 ownership); a
 // host with someone's DNS record is refused by Cloudflare and never taken over.
 import { BOT_CATEGORIES, type BotCategory } from '../../edge/bots';
-import { CODE, linkHostKey, linkKey, type Device, type LinkConfig, type LinkRule } from '../../edge/contract';
+import { CODE, linkHostKey, linkKey, type Device, type LinkConfig, type LinkRule, unreachable } from '../../edge/contract';
 import { LIMITS, planOf } from '../limits';
 import type { Env, Principal } from '../types';
 import { fail, newId } from '../v1/http';
@@ -118,8 +118,9 @@ export function targetOf(v: unknown, field: string, linkHosts: string[]): { url:
 }
 
 /** Rules: up to the plan's limit, each with countries (ISO 3166 alpha-2), devices and/or bot
- *  categories, and a URL. A rule with `bots` needs a worker that knows them: see `refuseOldBots`. */
-export function rulesOf(v: unknown, plan: string, linkHosts: string[]): { rules: Rule[]; hosts: string[] } {
+ *  categories, and a URL. A rule with `bots` needs a worker that knows them: see `refuseOldBots`.
+ *  `kept` is the link's stored rules (a change): the same list sent back is not checked again. */
+export function rulesOf(v: unknown, plan: string, linkHosts: string[], kept?: string): { rules: Rule[]; hosts: string[] } {
   if (v === undefined) return { rules: [], hosts: [] };
   const max = LIMITS[planOf(plan)].rulesPerLink;
   if (!Array.isArray(v) || v.length > max) fail(400, 'invalid_request', `"rules" must be a list of at most ${max} rules.`, { field: 'rules' });
@@ -144,6 +145,16 @@ export function rulesOf(v: unknown, plan: string, linkHosts: string[]): { rules:
       url: target.url,
     };
   });
+  // The first match wins: a rule that one above it takes all the visitors of would never be used
+  // (ADR 0042). A link saved before is not checked again: the editor sends its rules back whole
+  // on a change of the URL alone.
+  // Compared as the worker reads them: lists as sets, both devices as none (the editor writes them
+  // so, and orders the bot categories its own way).
+  const sorted = <T>(x: T[] | undefined) => (x ? [...x].sort() : null);
+  const canon = (r: Rule) => JSON.stringify([sorted(r.countries), r.devices && DEVICES.every((d) => r.devices!.includes(d)) ? null : sorted(r.devices), sorted(r.bots), r.url]);
+  const same = kept !== undefined && JSON.stringify(rules.map(canon)) === JSON.stringify((JSON.parse(kept) as Rule[]).map(canon));
+  const dead = same ? undefined : unreachable(rules)[0];
+  if (dead) fail(409, 'rule_unreachable', `"rules[${dead.index}]" is never reached: "rules[${dead.by}]" above it takes every visitor it would.`, { field: `rules[${dead.index}]`, shadowed_by: dead.by });
   return { rules, hosts };
 }
 
@@ -431,7 +442,7 @@ export async function patchLink(env: Env, p: Principal, link: LinkRow, input: { 
   const db = env.DB;
   const hosts = await liveHosts(db, link.account_id);
   const target = input.url === undefined ? { url: link.url, host: link.url_host } : targetOf(input.url, 'url', hosts);
-  const checked = input.rules === undefined ? null : rulesOf(input.rules, p.plan, hosts);
+  const checked = input.rules === undefined ? null : rulesOf(input.rules, p.plan, hosts, link.rules);
   if (checked) refuseOldBots(checked.rules, (await db.prepare('SELECT bundle FROM edge_accounts WHERE id = ?').bind(link.account_id).first<{ bundle: string | null }>())?.bundle ?? null);
   const rules = checked ? JSON.stringify(checked.rules) : link.rules;
   // Every host the link leads to: checked again in the write, against hosts made meanwhile.

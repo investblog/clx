@@ -75,6 +75,27 @@ export function parseDestination(key: string): { rule: { countries: string[]; de
  *  it: it takes no browser, and a bot's click records no destination (ADR 0041) — yet it may share
  *  its key with a rule below it, which is the one the clicks took. */
 export const ruleOf = (rules: (Conditions & { bots?: unknown[]; url: string })[], key: string) => rules.findIndex((r) => !r.bots && destinationOf(r.url, r) === key);
+/** Whether rule `a`, put above `b`, takes every visitor `b` would (the worker's match, edge/worker.ts):
+ *  each of its conditions is absent (anyone) or holds all of `b`'s. Both devices are as good as
+ *  none; a list of bot categories never holds everyone, as `b` without `bots` takes browsers too. */
+function covers(a: LinkRule, b: LinkRule): boolean {
+  const within = <T>(outer: T[] | undefined, inner: T[] | undefined) => !outer || (!!inner && inner.every((v) => outer.includes(v)));
+  const devices = (r: LinkRule) => (r.devices && (['mobile', 'desktop'] as const).every((d) => r.devices!.includes(d)) ? undefined : r.devices);
+  return within(a.countries, b.countries) && within(devices(a), devices(b)) && within(a.bots, b.bots);
+}
+
+/** The rules no visitor can reach, each with the first rule above that takes all of its visitors
+ *  (ADR 0042). Only what one rule proves on its own: several rules covering one together are not
+ *  looked for, as in 301-ui. Shared by the API (`rule_unreachable`) and the editor. */
+export function unreachable(rules: LinkRule[]): { index: number; by: number }[] {
+  const out: { index: number; by: number }[] = [];
+  rules.forEach((b, j) => {
+    const by = rules.slice(0, j).findIndex((a) => covers(a, b));
+    if (by >= 0) out.push({ index: j, by });
+  });
+  return out;
+}
+
 /** A link code: 3–32 of `[A-Za-z0-9_-]`. */
 export const CODE = /^[A-Za-z0-9_-]{3,32}$/u;
 

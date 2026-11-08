@@ -134,7 +134,9 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       → /landing") and what will never happen (a rule without bots above a rule for bots that it
       already takes, the same conditions twice); below 860 the summary sits above Save. The other
       drawers stay: adding a site or a link host, the excluded paths, keys, top-ups and refunds,
-      partner payouts — short, with no home of their own.
+      partner payouts — short, with no home of their own. The API half of "never happens" is done
+      08.11: such a list is refused `409 rule_unreachable` (ADR 0042); the summary marks the same
+      rules from `unreachable()` in `edge/contract.ts` before Save.
 - [x] **Remove buttons in drawers as a trash icon** (the owner, 06.11), as in 301-ui: an icon
       button with an `aria-label` instead of the word. Rows with several controls then have more
       room — the rule row in the new-link drawer is the first ("Remove" next to "↑"). Done 08.11:
