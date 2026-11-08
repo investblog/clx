@@ -21,7 +21,7 @@ to the token clx actually holds.
 |---|---|---|
 | A bootstrap token with Account Settings Read + Account API Tokens Write can verify itself, read the permission-group catalog, list, create and delete the account's tokens. | 05.10.2026 | `src/cf/connect.ts` |
 | A token just created may answer `401`/`403` for a moment; a few short retries settle it. | 05.10.2026 | `settled()` in `src/cf/connect.ts` |
-| …but the moment can outlast them, and differ by service: once a new working token read `GET /accounts/{id}` and then answered `…/d1/database` with `401` (code `10000`) through all five retries of `settled()` (~7.5 s, 18:33:19 → 18:33:28 UTC); the connect failed `token_check_failed`. The next run, minutes later, passed. | 08.11.2026, `scripts/probe-install.mjs`, two runs | backlog: longer retries |
+| …but the moment can outlast them, and differ by service: once a new working token read `GET /accounts/{id}` and then answered `…/d1/database` with `401` (code `10000`) through all five retries of `settled()` (~7.5 s, 18:33:19 → 18:33:28 UTC); the connect failed `token_check_failed`. The next run, minutes later, passed. | 08.11.2026, `scripts/probe-install.mjs`, two runs | `settled()`: `401` retried up to 30 s (all checks together) since 08.11.2026 |
 | The creation answer carries the token's `policies`, so its rights can be compared with what was asked. | 05.10.2026 | `rightsMatch()` |
 | `401` = the token is gone; `403` = a right or a plan is missing on one resource. They are never mixed. | 05.10.2026 | `CfError.tokenState` |
 

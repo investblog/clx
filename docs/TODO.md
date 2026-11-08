@@ -41,12 +41,16 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
       before the MCP server (ADR 0023) handed it to agents.
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
-- [ ] **A connect can fail on a token Cloudflare has not spread yet** (`probe-install`, 08.11). The
+- [x] **A connect can fail on a token Cloudflare has not spread yet** (`probe-install`, 08.11). The
       new working token read the account, then answered D1 with `401` through all five retries
       of `settled()` (`src/cf/connect.ts`, ~7.5 s in all); the connect failed `token_check_failed`
       and a user would have to start again. The next run passed. Retry `401` for longer (some
       30 s), still inside the request, and keep `401` after that final
-      (`docs/cloudflare-facts.md`, Tokens).
+      (`docs/cloudflare-facts.md`, Tokens). Done 08.11: a `401` is retried, 0.5 s doubling, until
+      one deadline 30 s after the connect began, shared by all the checks; a `403` four times at most as
+      before (it may be a right truly missing), within the same deadline. One deadline, not one
+      per check: the request stays inside the minute an answer-less idempotency record counts as
+      running (Codex).
 - [x] **Dropdown menus in drawers and tables can be cut off** (the owner, 06.11). The menu of
       `dropdown()` (`ui/pick.ts`) always opens down and as wide as its trigger
       (`dropdown__menu--fit-trigger`). Near the bottom of a drawer or a table, or inside an

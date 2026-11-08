@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { checkTokens } from '../src/cf/connect';
+import { checkTokens, SETTLE } from '../src/cf/connect';
 import { seal } from '../src/lib/crypto';
 import { app } from '../src/index';
 import { signAccess } from '../src/auth/jwt';
@@ -11,6 +11,11 @@ let env: Env;
 let dispose: () => Promise<void>;
 beforeAll(async () => ({ env, dispose } = await testEnv()));
 afterAll(() => dispose());
+// The token checks' retries wait 1, 2, … ms here instead of 0.5, 1, … s, and 2 s in all instead of
+// 30 (SETTLE).
+const settle = { ...SETTLE };
+beforeAll(() => void Object.assign(SETTLE, { firstMs: 1, budgetMs: 2000 }));
+afterAll(() => void Object.assign(SETTLE, settle));
 
 useFakeCloudflare();
 
@@ -190,6 +195,63 @@ describe('connecting a Cloudflare account', () => {
     expect(r.body.error.code).toBe('token_check_failed');
     expect(clxTokens()).toHaveLength(0);
     expect(await env.DB.prepare('SELECT count(*) AS n FROM edge_accounts').first('n')).toBe(0);
+  });
+
+  // 08.11.2026: a new token read the account, then D1 answered it 401 through all five tries of
+  // the old retries (docs/cloudflare-facts.md, Tokens).
+  it('a working token a service accepts only after a while (401 six times) still connects', async () => {
+    let tries = 0;
+    fakeCf.onCall = async (method, path) => {
+      if (method !== 'GET' || !path.endsWith('/d1/database') || ++tries > 6) return;
+      return Response.json({ success: false, errors: [{ code: 10000, message: 'Authentication error' }] }, { status: 401 });
+    };
+    const r = await connectAs(await session(1), 'k8');
+    expect(r.status).toBe(202);
+    expect(tries).toBeGreaterThanOrEqual(7);
+    expect(clxTokens()).toHaveLength(1);
+  });
+
+  it('a 401 that lasts is retried only until one deadline for all the checks, then token_check_failed', async () => {
+    // D1 settles 0.8 s in (its retries reach it at ~1 s); the scripts check after it never does,
+    // and gets what is left of the 2 s from the connect's start — a budget per check would give it
+    // 2 s of its own.
+    const no401 = () => Response.json({ success: false, errors: [{ code: 10000, message: 'Authentication error' }] }, { status: 401 });
+    const d1: number[] = [];
+    const scripts: number[] = [];
+    let d1Ok = 0;
+    fakeCf.onCall = async (method, path) => {
+      if (method !== 'GET') return;
+      if (path.endsWith('/d1/database')) {
+        d1.push(Date.now());
+        if (Date.now() - d1[0]! < 800) return no401();
+        d1Ok ||= Date.now();
+        return;
+      }
+      if (path.endsWith('/workers/scripts')) {
+        scripts.push(Date.now());
+        return no401();
+      }
+    };
+    const start = Date.now();
+    const r = await connectAs(await session(1), 'k10');
+    expect(r.body.error.code).toBe('token_check_failed');
+    expect(d1Ok).toBeGreaterThan(0);
+    expect(scripts.length).toBeGreaterThan(3);
+    expect(scripts.at(-1)! - scripts[0]!).toBeGreaterThan(300);
+    expect(scripts.at(-1)! - start).toBeLessThan(SETTLE.budgetMs + 300);
+    expect(clxTokens()).toHaveLength(0);
+  });
+
+  it('a 403 is retried as briefly as before: five tries, then permission_error', async () => {
+    let tries = 0;
+    fakeCf.onCall = async (method, path) => {
+      if (method !== 'GET' || !path.endsWith('/d1/database')) return;
+      tries++;
+      return Response.json({ success: false, errors: [{ code: 10000, message: 'Forbidden' }] }, { status: 403 });
+    };
+    const r = await connectAs(await session(1), 'k9');
+    expect(r.body.account).toMatchObject({ state: 'permission_error', error: { path: expect.stringContaining('/d1/database'), status: 403 } });
+    expect(tries).toBe(5);
   });
 
   it('a 403 on a check keeps the token and says permission_error with the endpoint (§3 item 6)', async () => {

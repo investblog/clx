@@ -191,14 +191,27 @@ export async function step(db: D1Database, edgeId: string, owner: string, opId: 
   if (!held!.meta.changes) fail(409, 'operation_in_progress', 'This operation was taken over by a newer request.');
 }
 
-/** Cloudflare can take a moment to accept a token it has just made: a few short retries. */
-async function settled<T>(call: () => Promise<T>): Promise<T> {
+/** `settled()`'s first wait, doubled on each retry, and the time from a connect's start within
+ *  which its checks may still be retried; tests shorten both. */
+export const SETTLE = { firstMs: 500, budgetMs: 30_000 };
+
+/**
+ * Cloudflare can take a while to accept a token it has just made, and longer on some services than
+ * on others: on 08.11.2026 a new token read the account, then D1 answered it `401` for over 7.5 s
+ * (docs/cloudflare-facts.md, Tokens). So a `401` is retried until `until` — one deadline for all
+ * the checks, SETTLE.budgetMs after the connect began, which keeps the request inside the minute an
+ * answer-less idempotency record counts as running (src/v1/idempotency.ts). A `403`, which may as
+ * well be a right the account truly lacks, is retried four times at most, as before, and only
+ * within the same deadline.
+ */
+async function settled<T>(call: () => Promise<T>, until: number): Promise<T> {
   for (let i = 0; ; i++) {
     try {
       return await call();
     } catch (e) {
-      if (i >= 4 || !(e instanceof CfError) || (e.status !== 401 && e.status !== 403)) throw e;
-      await new Promise((r) => setTimeout(r, 500 * 2 ** i));
+      const left = until - Date.now();
+      if (!(e instanceof CfError) || left <= 0 || !(e.status === 401 || (e.status === 403 && i < 4))) throw e;
+      await new Promise((r) => setTimeout(r, Math.min(SETTLE.firstMs * 2 ** i, left)));
     }
   }
 }
@@ -396,9 +409,10 @@ export async function connect(env: Env, p: Principal, cfAccountId: string, boots
     //    right or a plan is missing on one resource — the token stays and the account says so.
     if (!rightsMatch(made.policies, cfAccountId, accountGroups, zoneGroups)) fail(502, 'token_rights_mismatch', 'Cloudflare made the working token with other rights or resources than asked for.');
     const working = made.value!;
+    const until = now + SETTLE.budgetMs;
     const probe = async <T>(call: () => Promise<T>): Promise<T | null> => {
       try {
-        return await settled(call);
+        return await settled(call, until);
       } catch (e) {
         if (e instanceof CfError && e.status === 403) {
           data.permission_error ??= { path: e.path, status: e.status, codes: e.codes };
