@@ -48,3 +48,7 @@ only the link editor is such a record.
 - An editor's address can be bookmarked and shared within an account; a bookmark of the old
   `#/links/new`, which opened the list, now opens the editor.
 - Leaving inside the app with unsaved edits puts one extra entry in the history when the user stays.
+- Chrome's own Back button skips a history entry the page put back without a user's click (its
+  history manipulation intervention). After "stay", Back may then land on the editor again with no
+  question, or ask once more; the edits are never dropped without asking. A script's
+  `history.back()` asks every time — a check of the guard uses that, not the browser's button.
