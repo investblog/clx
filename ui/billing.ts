@@ -275,7 +275,7 @@ export async function billingPage(me: Me, live: Live, redraw: () => void): Promi
             // Notes are the system's own English but for an operator's correction, which is shown as written.
             b.journal.map((j) => h('tr', {}, cell(when(j.at)), cell(j.type === 'charge' && j.day ? c.chargeOf(dayText(j.day)) : ((c.entry as Record<string, string>)[j.type] ?? j.type)), cell(usd(j.amount_micro_usd)), cell(j.type === 'adjustment' ? (j.note ?? '') : '', 'low'))),
           )
-        : h('div', { class: 'card empty-state' }, h('p', {}, c.noJournal)),
+        : h('div', { class: 'card empty-state empty-state--compact' }, h('p', {}, c.noJournal)),
     ),
   );
 }

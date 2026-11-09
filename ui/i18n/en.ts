@@ -19,6 +19,7 @@ export const en: Dict = {
     leaveTitle: 'Leave without saving?',
     leaveBody: 'The changes on this page are not saved and will be lost.',
     leave: 'Leave',
+    planName: (plan: string) => (plan === 'api' ? 'Pro' : plan === 'free' ? 'Free' : plan),
   },
   titles: {
     signIn: 'Sign in',

@@ -1148,6 +1148,13 @@ th[aria-sort] .th-sort .icon {
   text-align: center;
 }
 
+/* A section's empty list under the page's own content (a journal), as in 301-ui: the 400px floor
+   is for a page whose list is all it holds. */
+.empty-state.empty-state--compact {
+  min-height: 0;
+  padding-block: var(--space-5);
+}
+
 .empty-state .stack,
 .empty-state .stack--md {
   align-items: center;

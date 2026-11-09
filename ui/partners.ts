@@ -125,7 +125,7 @@ export async function partnersPage(live: Live, redraw: () => void): Promise<HTML
               ),
             ),
           )
-        : h('div', { class: 'card empty-state' }, h('p', {}, c.noJournal)),
+        : h('div', { class: 'card empty-state empty-state--compact' }, h('p', {}, c.noJournal)),
     ),
   );
 }

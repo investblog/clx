@@ -99,7 +99,7 @@ function newSiteDrawer(me: Me, accounts: Account[], go: (hash: string) => void):
           go(`#/sites/${r.site.id}`);
         }),
       ),
-      h('p', { class: 'muted text-sm' }, c.planLimit(me.plan, me.limits.sites)),
+      h('p', { class: 'muted text-sm' }, c.planLimit(t.common.planName(me.plan), me.limits.sites)),
     );
   });
 }

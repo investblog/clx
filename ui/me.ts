@@ -44,7 +44,7 @@ export function mePage(me: Me, signedOut: (message: string) => void, redraw: () 
       { class: 'card stack stack--sm' },
       rows([
         [t.me.address, h('span', {}, `${me.user.email} `, h('span', { class: `badge badge--${me.user.email_confirmed ? 'success' : 'warning'}` }, me.user.email_confirmed ? t.me.confirmed : t.me.unconfirmed))],
-        [t.me.plan, me.plan],
+        [t.me.plan, t.common.planName(me.plan)],
       ]),
       me.user.email_confirmed
         ? null

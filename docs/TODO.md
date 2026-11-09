@@ -41,6 +41,14 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       before outside integrators rely on it, and document both objects in openapi.yaml. Done 11.10,
       before the MCP server (ADR 0023) handed it to agents.
 - [ ] Scan a link's QR code with a phone → a click with source `qr` (stage 5's check).
+- [ ] One real top-up of each kind — crypto through Trybit and Telegram Stars (§18): real money,
+      so only the owner. The tests and the Trybit test postback cover the code, not a paid invoice.
+- [ ] Connect the MCP server (§15, ADR 0023) with a real client, e.g. `claude mcp add --transport
+      http clx https://clx.cx/mcp --header "Authorization: Bearer clx_…"`. `scripts/probe-mcp.mjs`
+      passed live on 11.10; that checks the protocol, not a client's handling of it.
+- [ ] Optional: the DNS-AID record `_mcp._agents.clx.cx` (the deploy token has no DNS rights) and
+      the entry `cx.clx/mcp` in the official MCP registry (`mcp-publisher`, the domain proved by
+      `/.well-known/mcp-registry-auth`).
 - [x] **A connect can fail on a token Cloudflare has not spread yet** (`probe-install`, 08.11). The
       new working token read the account, then answered D1 with `401` through all five retries
       of `settled()` (`src/cf/connect.ts`, ~7.5 s in all); the connect failed `token_check_failed`
@@ -177,6 +185,17 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] A page restored from the back-forward cache (Back after a click) is counted — `pageshow` with
       `persisted`, zone and external sites alike; every snippet's bytes changed once, the served scripts
       re-sent by SNIPPET_REV (owner's call 01.11, ADR 0039).
+Known and not fixed — each visible, none loses money by itself; found while building (23–30.10):
+- An invoice made at Trybit whose id clx never wrote (the Worker ended between the two) stays
+  there unseen. Whether Trybit refuses a second invoice with the same `order_id` is not checked.
+- Telegram Stars: a handler that lived past a minute credits the payment while the one that took it
+  over, having read the invoice before that, finds it past its grace (`src/billing/stars.ts`): the
+  payment goes to review and the support group is told "not credited (expired) — refund the
+  stars", though the invoice is paid by this very charge. The balance is right; before refunding a
+  Stars review, check that its invoice is not `paid` with the same charge id.
+- The bot's `/link` offers every working link host, also one of an account on pause (§18); the API
+  refuses the link and the bot shows its refusal.
+
 Left as they are (owner, 19.10.2026) — not worth their cost now; reopened only if a real case needs one:
 - `over` from "pushes reporting write failures" (§8): the heartbeat carries the worker's error
   text only, with no clean sign of a failed D1 write. `over` already comes from writes at the

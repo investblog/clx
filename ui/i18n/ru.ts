@@ -19,6 +19,8 @@ export const ru = {
     leaveTitle: 'Уйти без сохранения?',
     leaveBody: 'Изменения на этой странице не сохранены и пропадут.',
     leave: 'Уйти',
+    // The paid plan is `api` in the API (§15) and Pro on the site and the Balance page (ADR 0034).
+    planName: (plan: string) => (plan === 'api' ? 'Pro' : plan === 'free' ? 'Free' : plan),
   },
   titles: {
     signIn: 'Вход',

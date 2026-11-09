@@ -307,7 +307,7 @@ export async function linkEditorPage(me: Me, id: string | null, path: string, li
         { class: 'link-editor__grid' },
         form,
         shown.el,
-        h('div', { class: 'stack stack--sm link-editor__save' }, h('div', { class: 'actions' }, save, h('a', { class: 'btn btn--ghost', href: away }, t.common.cancel)), link ? null : h('p', { class: 'muted text-sm' }, c.planLimit(me.plan, me.limits.links))),
+        h('div', { class: 'stack stack--sm link-editor__save' }, h('div', { class: 'actions' }, save, h('a', { class: 'btn btn--ghost', href: away }, t.common.cancel)), link ? null : h('p', { class: 'muted text-sm' }, c.planLimit(t.common.planName(me.plan), me.limits.links))),
       ),
     ),
   );
