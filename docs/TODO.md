@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 # Backlog
@@ -122,7 +122,7 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       no attempt. **Closed by the next real rollout:** few or no failed runs, or a `last_error`
       that names the cause. The new path itself (the request starts, the cron runs) passed live
       on 08.11: `probe-install`'s rollout of one account came back `ready`, its cron restored.
-- [ ] **The link editor as a screen, not a drawer** (the owner, 06.11), after 301-ui's "Editor
+- [x] **The link editor as a screen, not a drawer** (the owner, 06.11), after 301-ui's "Editor
       Screen" (its StyleGuide; the TDS rule editor, a drawer until 23.10). Its rule: a record with a
       home — a list it belongs to, an address worth linking, a form long enough to scroll — gets a
       screen inside its list page; a quick add or a step without a home stays a drawer. In clx only
@@ -136,7 +136,9 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       drawers stay: adding a site or a link host, the excluded paths, keys, top-ups and refunds,
       partner payouts — short, with no home of their own. The API half of "never happens" is done
       08.11: such a list is refused `409 rule_unreachable` (ADR 0042); the summary marks the same
-      rules from `unreachable()` in `edge/contract.ts` before Save.
+      rules from `unreachable()` in `edge/contract.ts` before Save. Done 09.11 (ADR 0043), with a
+      fix found on the way: a rule for both devices, as the API takes it, was shown as "any device"
+      and sent without, so with no other condition it no longer saved; now it is kept as it is.
 - [x] **Remove buttons in drawers as a trash icon** (the owner, 06.11), as in 301-ui: an icon
       button with an `aria-label` instead of the word. Rows with several controls then have more
       room — the rule row in the new-link drawer is the first ("Remove" next to "↑"). Done 08.11:

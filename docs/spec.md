@@ -843,6 +843,10 @@ Pages:
   last 7 closed days as a sparkline that opens its report; a site whose counter has counted a view
   opens at its report, one still to install at its snippet (`views_7d`, `views_today`, `counted` of `GET /v1/sites`).
 - **Links:** the link hosts (one per site at a click), a list of links with 7-day clicks, create and edit, rules, QR (SVG).
+  The link editor is a screen ([ADR 0043](./decisions/0043-link-editor-screen.md)): `#/links/new`
+  and `#/links/<id>/edit`, Back returns, leaving with unsaved edits asks first; from 860 px of the
+  editor a pinned summary beside the form (above Save when narrower) says what the link does in
+  order and marks a rule with no condition yet or one a rule above takes all of (ADR 0042).
 - **Report** of a site and of a link — "today", 7, 30 days. Hours arrive up to an hour late, so
   "today" is labelled "as of HH:00 UTC"; visitors — "sum of daily uniques". Tiles, the series and
   the breakdowns are drawn by `affiliate-charts` ([ADR 0016](./decisions/0016-brand-and-report-charts.md)).

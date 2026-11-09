@@ -7,7 +7,8 @@ import { h, s } from './dom';
 import { appPath, asLocale, homePath, pageLocale, setLocale, t } from './i18n';
 import { signInPath } from './next';
 import { billingPage } from './billing';
-import { linkPage, linksPage } from './links';
+import { dropEdits, holding, release } from './leave';
+import { linkEditorPage, linkPage, linksPage } from './links';
 import { partnersPage } from './partners';
 import { mePage, unconfirmedBanner } from './me';
 import { reportPage } from './report';
@@ -53,6 +54,7 @@ function drawShell(current?: Section): void {
   const nav = h('nav', { class: 'shell-nav', 'aria-label': 'clx' }, ...NAV.map(([id, href]) => h('a', { href, ...(id === current ? { 'aria-current': 'page' } : {}) }, t.shell.nav[id])));
   const out = h('button', { type: 'button', class: 'btn-close', 'aria-label': t.shell.signOut, title: t.shell.signOut }, icon('log-out'));
   out.addEventListener('click', async () => {
+    if (!(await dropEdits())) return;
     out.disabled = true;
     const ok = await logout();
     out.disabled = false;
@@ -88,10 +90,14 @@ const go = (hash: string) => {
 };
 
 /** The page for the address: #/ accounts, #/connect, #/accounts/<id>, #/sites, #/sites/<id>,
- *  #/links, #/links/<id>, the reports …/<id>/report, #/keys, #/me. Adding is a drawer on the lists. */
+ *  #/links, #/links/<id>, the link editor #/links/new and #/links/<id>/edit (ADR 0043), the reports
+ *  …/<id>/report, #/keys, #/me. Adding a site or a link host is a drawer on its list. */
 async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, string]> {
   const live = () => mine === seq;
   const redraw = (message?: string) => {
+    // A page no longer shown redraws nothing: a late answer of its action would draw over the
+    // page now shown (an editor with unsaved edits, ADR 0043).
+    if (!live()) return;
     flash = message ?? '';
     void route();
   };
@@ -102,13 +108,17 @@ async function page(me: Me, path: string, mine: number): Promise<[HTMLElement, s
   if (path === '/billing') return [await billingPage(me, live, () => redraw()), t.titles.billing];
   if (path === '/partners') return [await partnersPage(live, () => redraw()), t.titles.partners];
   if (path === '/me') return [mePage(me, signedOut, () => redraw()), t.titles.me];
-  // #/sites/new and #/links/new were pages before the drawers: a bookmark of one opens the list.
+  // #/sites/new was a page before the drawer: a bookmark of it opens the list.
   if (path === '/sites' || path === '/sites/new') return [await sitesPage(me, go), t.titles.sites];
   const report = path.match(/^\/(sites|links)\/([\w-]+)\/report(?:\?p=([\w]+))?$/u);
   if (report) return [await reportPage(report[1] as 'sites' | 'links', report[2]!, report[3] ?? 'today'), t.titles.report];
   const site = path.match(/^\/sites\/([\w-]+)$/u);
   if (site) return [await sitePage(site[1]!, live, redraw), t.titles.site];
-  if (path === '/links' || path === '/links/new') return [await linksPage(me, go, () => redraw()), t.titles.links];
+  if (path === '/links') return [await linksPage(() => redraw()), t.titles.links];
+  // Before #/links/<id>: "new" is a code's shape too.
+  if (path === '/links/new') return [await linkEditorPage(me, null, path, live, go), t.titles.newLink];
+  const edit = path.match(/^\/links\/([\w-]+)\/edit$/u);
+  if (edit) return [await linkEditorPage(me, edit[1]!, path, live, go), t.links.editTitle];
   const link = path.match(/^\/links\/([\w-]+)$/u);
   if (link) return [await linkPage(link[1]!, live, redraw), t.titles.link];
   return [await accountsPage(me), t.titles.accounts];
@@ -128,7 +138,30 @@ async function publicPage(path: string): Promise<[HTMLElement, string] | 'moved'
   return null;
 }
 
+let asking = false;
+
 async function route(): Promise<void> {
+  const path = location.hash.replace(/^#/u, '') || '/';
+  // Unsaved edits on the page shown (ADR 0043). The address has already moved: it goes back while
+  // the user decides, as on 301-ui's editor screen, and leaving after all steps over the entry put
+  // back. Before anything below: the dialog closing and a newer `seq` would end the page asking.
+  const held = holding();
+  // The editor's own address again (a late redraw): nothing to draw anew, the edits stay.
+  if (held === path) return;
+  if (held !== null) {
+    history.pushState(null, '', `#${held}`);
+    if (asking) return; // Back again while the question is open: it is still the one asked
+    asking = true;
+    const leave = await dropEdits();
+    asking = false;
+    if (!leave) return;
+    // The editor is no longer the page shown from here, not only once Back lands: a Save
+    // answering meanwhile must not lead elsewhere.
+    ++seq;
+    history.back();
+    return;
+  }
+  release();
   const mine = ++seq;
   // A dialog or drawer belongs to the page it was opened on: leaving the page (Back, a link) closes
   // it, so it cannot act for a page no longer there. Before any await: a page that redraws itself
@@ -136,7 +169,6 @@ async function route(): Promise<void> {
   for (const d of document.querySelectorAll<HTMLDialogElement>('dialog[open]')) d.close();
   // So is its work on the loading bar: the page drawn next says again whether it has any.
   pageBusy(false);
-  const path = location.hash.replace(/^#/u, '') || '/';
   // A public page speaks the address's language, so that is the language while it is drawn; a
   // signed-in page switches to the account's below, once /v1/me has answered.
   setLocale(pageLocale);
@@ -191,6 +223,7 @@ document.getElementById('lang-dd')?.addEventListener('click', async (e) => {
   const dd = a.closest('details');
   const to = asLocale(a.dataset.locale ?? '');
   if (to === pageLocale) return void dd?.removeAttribute('open');
+  if (!(await dropEdits())) return void dd?.removeAttribute('open');
   try {
     await call('PATCH', '/v1/me', { locale: to });
   } catch (err) {

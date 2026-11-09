@@ -4,7 +4,8 @@
 @font-face{font-family:"Onest";font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/onest-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 @font-face{font-family:"Onest";font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/onest-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
 @font-face{font-family:"Onest";font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/onest-cyrillic.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
-:root{--page-gutter-desktop:var(--space-5);--page-gutter-mobile:var(--space-4);--gutter:var(--page-gutter-desktop)}
+/* --topbar-h: the sticky header's height, for what pins under it (the link editor's summary). */
+:root{--page-gutter-desktop:var(--space-5);--page-gutter-mobile:var(--space-4);--gutter:var(--page-gutter-desktop);--topbar-h:3.5rem}
 @media (max-width:768px){:root{--gutter:var(--page-gutter-mobile)}}
 body{font-size:var(--fs-body);line-height:var(--lh-body);overflow-x:clip}
 h2{font-size:var(--fs-xl);margin:var(--space-5) 0 var(--space-3)}
@@ -130,6 +131,29 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .rule-row__acts{flex-wrap:nowrap}
 .rule-row__url{grid-column:1/-1}
 @media (max-width:560px){.rule-row{grid-template-columns:1fr}}
+/* The link editor, a screen (ui/links.ts, ADR 0043; 301-ui's Editor Screen). Its own width decides,
+   not the window's: from 860 px the summary sits beside the form, pinned under the header and
+   scrolling inside itself; narrower, it stands above Save. Where the form is 640 px wide a rule is
+   one row — countries, device, who, address, actions — every rule on the same columns (subgrid). */
+.link-editor{container:link-editor/inline-size}
+.link-editor__grid{display:grid;gap:var(--space-5);grid-template-areas:"form" "summary" "save"}
+.link-editor__form{grid-area:form;min-width:0;container:rules/inline-size}
+.link-editor__summary{grid-area:summary;min-width:0}
+.link-editor__save{grid-area:save}
+@container link-editor (min-width:860px){
+  .link-editor__grid{grid-template-columns:minmax(0,1fr) minmax(260px,320px);grid-template-areas:"form summary" "save summary";align-items:start}
+  .link-editor__summary{position:sticky;top:calc(var(--topbar-h) + var(--space-3));max-height:calc(100dvh - var(--topbar-h) - 2 * var(--space-3));overflow-y:auto}
+}
+@container rules (min-width:640px){
+  .rule-list{display:grid;grid-template-columns:minmax(72px,.7fr) auto auto minmax(0,2fr) auto;gap:var(--space-2)}
+  .rule-row{grid-column:1/-1;grid-template-columns:subgrid}
+  .rule-row__url{grid-column:4;grid-row:1}
+  .rule-row__acts{grid-column:5;grid-row:1}
+}
+.rule-steps{display:grid;gap:var(--space-2);margin:0;padding-left:1.25em}
+.rule-steps__url{color:var(--text-muted);overflow-wrap:anywhere}
+.rule-steps__dead::marker{color:var(--warning)}
+.rule-steps__mark{display:block;color:var(--warning);font-size:var(--fs-sm)}
 .qr-card .qr{width:200px;height:200px;image-rendering:pixelated;background:#fff}
 
 /* Pages of stage 6b: sign-up, reset. */

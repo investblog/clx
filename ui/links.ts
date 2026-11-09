@@ -1,5 +1,5 @@
 // Pages of stages 5b–5c (docs/spec.md §10): short links — the link hosts (one per site, ADR 0024), the list with
-// 7-day clicks, adding and editing a link (drawers), and a link's page with its URL, QR code and
+// 7-day clicks, the link editor (a screen, ADR 0043), and a link's page with its URL, QR code and
 // delete. Every action is a /v1 call.
 import { ApiError, call, text, type Account, type LinkHost, type Me } from './api';
 import type { Site } from './sites';
@@ -8,8 +8,10 @@ import { openDrawer } from './dialog';
 import { codeBlock, h, hostName, iconButton } from './dom';
 import { errorText, num, t, when } from './i18n';
 import { BOT_CATEGORIES, type BotCategory } from '../edge/bots';
+import { guardLeave, release } from './leave';
 import { paged } from './pager';
 import { dropdown, zoneHost } from './pick';
+import { ruleSteps } from './rule-steps';
 
 export interface Rule {
   countries?: string[];
@@ -112,7 +114,7 @@ function hostsCard(hosts: LinkHost[], accounts: Account[], sites: Site[], redraw
 
 /** Who a rule takes: anyone, any bot, bots of one category — or, for a rule the API wrote, the
  *  categories it has, kept as they are (ADR 0041). */
-function whoPicker(c: typeof t.links, bots: BotCategory[] | undefined): { el: HTMLElement; value: () => BotCategory[] | undefined } {
+function whoPicker(c: typeof t.links, bots: BotCategory[] | undefined, onChange: () => void): { el: HTMLElement; value: () => BotCategory[] | undefined } {
   const names = t.report.names.bots as Record<string, string>;
   const set = bots ? [...new Set(bots)] : [];
   const custom = set.length > 1 && set.length < BOT_CATEGORIES.length;
@@ -124,7 +126,7 @@ function whoPicker(c: typeof t.links, bots: BotCategory[] | undefined): { el: HT
       ...BOT_CATEGORIES.map((b) => ({ value: b, label: c.bot(names[b] ?? b) })),
       ...(custom ? [{ value: 'custom', label: c.bot(set.map((b) => names[b] ?? b).join(', ')) }] : []),
     ],
-    { label: c.who, value: picked },
+    { label: c.who, value: picked, onChange },
   );
   return {
     el: who.el,
@@ -135,22 +137,29 @@ function whoPicker(c: typeof t.links, bots: BotCategory[] | undefined): { el: HT
   };
 }
 
-/** The rules editor: one row per rule, the first match wins (§6). */
-function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } {
+const BOTH: Rule['devices'] = ['mobile', 'desktop'];
+
+/** The rules editor: one row per rule, the first match wins (§6). `onChange` hears what no `input`
+ *  event carries: a picked option, a rule added, removed or moved. */
+function rulesEditor(initial: Rule[], onChange: () => void): { el: HTMLElement; value: () => Rule[] } {
   const c = t.links;
-  const list = h('div', { class: 'stack stack--sm' });
+  const list = h('div', { class: 'stack stack--sm rule-list' });
   const rows: { countries: HTMLInputElement; device: () => string; bots: () => BotCategory[] | undefined; url: HTMLInputElement; el: HTMLElement }[] = [];
   const add = (r?: Rule) => {
     const countries = h('input', { class: 'input', placeholder: 'DE, AT', value: r?.countries?.join(', ') ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': c.countries });
+    // Both devices, as the API may have written them, are kept as they are: shown as "any device"
+    // and sent without, a rule with no other condition would no longer save (400).
+    const both = !!r?.devices && BOTH!.every((d) => r.devices!.includes(d));
     const device = dropdown(
       [
         { value: '', label: c.anyDevice },
         { value: 'mobile', label: c.mobile },
         { value: 'desktop', label: c.desktop },
+        ...(both ? [{ value: 'both', label: c.bothDevices }] : []),
       ],
-      { label: c.device, value: r?.devices?.length === 1 ? r.devices[0]! : '' },
+      { label: c.device, value: both ? 'both' : r?.devices?.length === 1 ? r.devices[0]! : '', onChange },
     );
-    const who = whoPicker(c, r?.bots);
+    const who = whoPicker(c, r?.bots, onChange);
     const url = h('input', { class: 'input rule-row__url', placeholder: 'https://…', value: r?.url ?? '', autocomplete: 'off', spellcheck: 'false', 'aria-label': c.target });
     const remove = iconButton('delete', c.removeRule);
     // The first match wins and a rule without bots takes bots too: a new rule for bots must be
@@ -160,60 +169,151 @@ function rulesEditor(initial: Rule[]): { el: HTMLElement; value: () => Rule[] } 
     remove.addEventListener('click', () => {
       rows.splice(rows.indexOf(row), 1);
       row.el.remove();
+      onChange();
     });
     up.addEventListener('click', () => {
       const i = rows.indexOf(row);
       if (i < 1) return;
       rows.splice(i - 1, 0, ...rows.splice(i, 1));
       rows[i]!.el.before(row.el);
+      onChange();
     });
     rows.push(row);
     list.append(row.el);
   };
   initial.forEach(add);
   const more = h('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, c.addRule);
-  more.addEventListener('click', () => add());
+  more.addEventListener('click', () => {
+    add();
+    onChange();
+  });
   return {
     el: h('div', { class: 'stack stack--sm' }, h('div', { class: 'field-label' }, c.rulesLabel), list, h('div', {}, more)),
     value: () =>
       rows.map((r) => {
         const countries = [...new Set(r.countries.value.toUpperCase().split(/[\s,]+/u).filter(Boolean))];
         const bots = r.bots();
-        return { ...(countries.length ? { countries } : {}), ...(r.device() ? { devices: [r.device() as 'mobile' | 'desktop'] } : {}), ...(bots ? { bots } : {}), url: r.url.value.trim() };
+        const device = r.device();
+        const devices = device === 'both' ? BOTH : device ? [device as 'mobile' | 'desktop'] : undefined;
+        return { ...(countries.length ? { countries } : {}), ...(devices ? { devices } : {}), ...(bots ? { bots } : {}), url: r.url.value.trim() };
       }),
   };
 }
 
-function newLinkDrawer(me: Me, hosts: LinkHost[], go: (hash: string) => void): void {
+/** A rule's conditions in words, as the editor names them: "DE, AT · phone · bot: Search engines". */
+function conditions(r: Rule): string {
   const c = t.links;
-  openDrawer(c.add, (close) => {
-    const host = dropdown(hosts.map((lh) => ({ value: lh.id, label: lh.host })), { id: 'link-account' });
-    const code = h('input', { class: 'input', id: 'link-code', placeholder: c.codePlaceholder, autocomplete: 'off', spellcheck: 'false' });
-    const url = h('input', { class: 'input', id: 'link-url', required: '', placeholder: 'https://example.com/landing', autocomplete: 'off', spellcheck: 'false' });
-    const rules = rulesEditor([]);
-    return h(
-      'div',
-      { class: 'stack stack--md' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-account' }, c.linkHost), host.el),
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-code' }, c.code), code, h('p', { class: 'field-hint' }, c.codeHint)),
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-url' }, c.url), url),
-      rules.el,
-      h(
-        'div',
-        { class: 'actions' },
-        action(c.create, 'btn--primary', async (key) => {
-          if (!url.value.trim()) throw new ApiError(400, 'invalid_request', c.needUrl);
-          const r = await call<{ link: Link }>('POST', '/v1/links', { link_host_id: host.value(), url: url.value.trim(), rules: rules.value(), ...(code.value.trim() ? { code: code.value.trim() } : {}) }, key);
-          close();
-          go(`#/links/${r.link.id}`);
-        }),
-      ),
-      h('p', { class: 'muted text-sm' }, c.planLimit(me.plan, me.limits.links)),
-    );
-  });
+  const names = t.report.names.bots as Record<string, string>;
+  const device = !r.devices ? null : BOTH!.every((d) => r.devices!.includes(d)) ? c.bothDevices : r.devices[0] === 'mobile' ? c.mobile : c.desktop;
+  const bots = !r.bots ? null : BOT_CATEGORIES.every((b) => r.bots!.includes(b)) ? c.anyBot : c.bot(r.bots.map((b) => names[b] ?? b).join(', '));
+  return [r.countries?.join(', '), device, bots].filter(Boolean).join(' · ');
 }
 
-export async function linksPage(me: Me, go: (hash: string) => void, redraw: () => void): Promise<HTMLElement> {
+/** What the link does, in order, from the draft Save sends (301-ui's editor summary: the result,
+ *  not the settings): each rule and where it leads, marked when it has no condition yet or a rule
+ *  above takes all of it (ui/rule-steps.ts, the API's own check), then everyone else. */
+function summary(): { el: HTMLElement; update: (rules: Rule[], url: string) => void } {
+  const c = t.links;
+  const list = h('ol', { class: 'rule-steps' });
+  const to = (url: string) => h('span', { class: 'rule-steps__url' }, url || c.noUrl);
+  return {
+    el: h('section', { class: 'card stack stack--sm link-editor__summary', 'aria-live': 'polite' }, h('h3', { class: 'h4' }, c.summary), list),
+    update: (rules, url) => {
+      const steps = ruleSteps(rules);
+      list.replaceChildren(
+        ...rules.map((r, i) => {
+          const s = steps[i]!;
+          const mark = s.empty ? c.stepEmpty : s.by !== undefined ? c.stepDead(s.by + 1) : null;
+          return h('li', mark ? { class: 'rule-steps__dead' } : {}, h('span', {}, conditions(r) || '—'), ' → ', to(r.url), mark ? h('span', { class: 'rule-steps__mark' }, mark) : null);
+        }),
+        h('li', {}, h('span', {}, rules.length ? c.otherwise : c.everyone), ' → ', to(url)),
+      );
+    },
+  };
+}
+
+/** Hosts a link can go on: working ones (the API says link_host_not_ready otherwise), and not of a
+ *  paused account (409 paused, §18). */
+const liveHosts = (hosts: LinkHost[], accounts: Account[]) => hosts.filter((lh) => lh.state === 'active' && !accounts.find((a) => a.id === lh.account_id)?.paused_at);
+
+/**
+ * The link editor, a screen of its own (ADR 0043, 301-ui's Editor Screen): a new link at
+ * #/links/new, a link's address and rules at #/links/<id>/edit (the code stays — it is printed in
+ * QR). The summary sits beside the form where there is room. Leaving with unsaved edits asks first
+ * (ui/leave.ts); Save leads to the link's page.
+ */
+export async function linkEditorPage(me: Me, id: string | null, path: string, live: Live, go: (hash: string) => void): Promise<HTMLElement> {
+  const c = t.links;
+  const back = (href: string, text: string) => h('p', {}, h('a', { href }, text));
+  let link: Link | null = null;
+  let hosts: LinkHost[] = [];
+  if (id) {
+    link = (await call<{ link: Link }>('GET', `/v1/links/${id}`)).link;
+    if (link.state === 'deleted') return h('div', { class: 'stack stack--md' }, back(`#/links/${id}`, c.back), pageHead(c.editTitle), notice(c.deleted, 'idle'));
+  } else {
+    const [{ accounts }, { link_hosts }] = await Promise.all([call<{ accounts: Account[] }>('GET', '/v1/accounts'), call<{ link_hosts: LinkHost[] }>('GET', '/v1/link-hosts')]);
+    hosts = liveHosts(link_hosts, accounts);
+    // A bookmark of #/links/new opens it with nothing to put a link on.
+    if (!hosts.length) return h('div', { class: 'stack stack--md' }, back('#/links', c.back), pageHead(t.titles.newLink), h('div', { class: 'card empty-state' }, h('p', {}, accounts.some(usable) ? c.needHostFirst : c.noAccount)));
+  }
+  const host = link ? null : dropdown(hosts.map((lh) => ({ value: lh.id, label: lh.host })), { id: 'link-account' });
+  const code = h('input', { class: 'input', id: 'link-code', placeholder: c.codePlaceholder, autocomplete: 'off', spellcheck: 'false' });
+  const url = h('input', { class: 'input', id: 'link-url', required: '', placeholder: 'https://example.com/landing', value: link?.url ?? '', autocomplete: 'off', spellcheck: 'false' });
+  const shown = summary();
+  const rules = rulesEditor(link?.rules ?? [], () => shown.update(rules.value(), url.value.trim()));
+  // What Save sends; the summary and the unsaved-edits check read the same.
+  const draft = () => ({ ...(host ? { link_host_id: host.value(), ...(code.value.trim() ? { code: code.value.trim() } : {}) } : {}), url: url.value.trim(), rules: rules.value() });
+  const form = h(
+    'div',
+    { class: 'stack stack--md link-editor__form' },
+    host ? h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-account' }, c.linkHost), host.el) : null,
+    host ? h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-code' }, c.code), code, h('p', { class: 'field-hint' }, c.codeHint)) : null,
+    h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-url' }, c.url), url),
+    rules.el,
+  );
+  form.addEventListener('input', () => shown.update(rules.value(), url.value.trim()));
+  shown.update(rules.value(), url.value.trim());
+  const saved = JSON.stringify(draft());
+  // Only for the page the router will show: an editor whose loading outlived its route would
+  // guard the page shown instead with a draft no one sees.
+  if (live()) guardLeave(path, () => JSON.stringify(draft()) !== saved);
+  const away = link ? `#/links/${link.id}` : '#/links';
+  const save = action(link ? c.save : c.create, 'btn--primary', async (key) => {
+    const d = draft();
+    if (!d.url) throw new ApiError(400, 'invalid_request', c.needUrl);
+    // What is typed while the request runs would not be what was saved: the form waits.
+    form.inert = true;
+    let done: Link;
+    try {
+      done = link ? (await call<{ link: Link }>('PATCH', `/v1/links/${link.id}`, d, key)).link : (await call<{ link: Link }>('POST', '/v1/links', d, key)).link;
+    } finally {
+      form.inert = false;
+    }
+    // Left meanwhile (the leaving was confirmed): the guard and the address are another page's now.
+    if (!live()) return;
+    release();
+    go(`#/links/${done.id}`);
+  });
+  return h(
+    'div',
+    { class: 'stack stack--md' },
+    back(away, link ? `← ${link.short_url ?? link.code}` : c.back),
+    pageHead(link ? c.editTitle : t.titles.newLink),
+    h(
+      'div',
+      { class: 'link-editor' },
+      h(
+        'div',
+        { class: 'link-editor__grid' },
+        form,
+        shown.el,
+        h('div', { class: 'stack stack--sm link-editor__save' }, h('div', { class: 'actions' }, save, h('a', { class: 'btn btn--ghost', href: away }, t.common.cancel)), link ? null : h('p', { class: 'muted text-sm' }, c.planLimit(me.plan, me.limits.links))),
+      ),
+    ),
+  );
+}
+
+export async function linksPage(redraw: () => void): Promise<HTMLElement> {
   const c = t.links;
   const [{ links }, { accounts: all }, { link_hosts: hosts }, { sites: allSites }] = await Promise.all([
     call<{ links: Link[] }>('GET', '/v1/links'),
@@ -224,11 +324,8 @@ export async function linksPage(me: Me, go: (hash: string) => void, redraw: () =
   const accounts = all.filter(usable);
   // A link host is made under a site's own host: an external site (§5) has none in a zone.
   const sites = allSites.filter((s) => s.state !== 'deleted' && s.kind === 'zone' && !s.paused_at && accounts.some((a) => a.id === s.account_id && !a.paused_at));
-  // Links go on a working host only (the API says link_host_not_ready otherwise), and not of a paused
-  // account (409 paused, §18).
-  const live = hosts.filter((lh) => lh.state === 'active' && !all.find((a) => a.id === lh.account_id)?.paused_at);
-  const add = h('button', { type: 'button', class: 'btn btn--primary' }, c.add);
-  add.addEventListener('click', () => newLinkDrawer(me, live, go));
+  const live = liveHosts(hosts, all);
+  const add = h('a', { class: 'btn btn--primary', href: '#/links/new' }, c.add);
   const empty = !accounts.length ? c.noAccount : !live.length ? c.needHostFirst : c.empty;
   return h(
     'div',
@@ -251,30 +348,6 @@ export async function linksPage(me: Me, go: (hash: string) => void, redraw: () =
       : h('div', { class: 'card empty-state' }, h('p', {}, empty)),
     accounts.length ? hostsCard(hosts, accounts, sites, redraw) : null,
   );
-}
-
-/** Editing what can change: where the link leads and its rules; the code stays (it is printed in QR). */
-function editLinkDrawer(l: Link, redraw: () => void): void {
-  const c = t.links;
-  openDrawer(c.editTitle, (close) => {
-    const url = h('input', { class: 'input', id: 'link-url', value: l.url, autocomplete: 'off', spellcheck: 'false' });
-    const rules = rulesEditor(l.rules);
-    return h(
-      'div',
-      { class: 'stack stack--md' },
-      h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'link-url' }, c.url), url),
-      rules.el,
-      h(
-        'div',
-        { class: 'actions' },
-        action(c.save, 'btn--primary', async (key) => {
-          await call('PATCH', `/v1/links/${l.id}`, { url: url.value.trim(), rules: rules.value() }, key);
-          close();
-          redraw();
-        }),
-      ),
-    );
-  });
 }
 
 /** The QR code: the SVG clx.cx builds, shown and saved as a data: URL (the CSP allows data: images). */
@@ -307,8 +380,7 @@ export async function linkPage(id: string, live: Live, redraw: (message?: string
     poll();
   }
   const deleted = l.state === 'deleted';
-  const edit = h('button', { type: 'button', class: 'btn btn--ghost' }, c.edit);
-  edit.addEventListener('click', () => editLinkDrawer(l, redraw));
+  const edit = h('a', { class: 'btn btn--ghost', href: `#/links/${l.id}/edit` }, c.edit);
   return h(
     'div',
     { class: 'stack stack--md' },
