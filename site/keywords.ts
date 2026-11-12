@@ -66,15 +66,15 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
   },
   // The free QR code tools (ADR 0045): the demand is almost all for SVG (the old qrcgen.com's searches).
   '/qr-code-generator': {
-    en: { primary: 'free SVG QR code generator', keywords: ['QR code generator online', 'SVG QR codes in the browser', 'QR code maker without sign-up', 'vector QR code generator'], tags: ['QR codes', 'tools'] },
-    ru: { primary: 'генератор QR-кодов в SVG', keywords: ['бесплатный генератор QR-кодов', 'QR-код онлайн без регистрации', 'векторный QR-код', 'создание QR-кода в браузере'], tags: ['QR-коды', 'инструменты'] },
+    en: { primary: 'free SVG QR code generator', keywords: ['QR code generator online', 'SVG QR codes in the browser', 'QR code maker without sign-up', 'vector QR code generator', 'QR code for sending links to phones'], tags: ['QR codes', 'tools'] },
+    ru: { primary: 'генератор QR-кодов в SVG', keywords: ['бесплатный генератор QR-кодов', 'QR-код онлайн без регистрации', 'векторный QR-код', 'создание QR-кода в браузере', 'QR-код для передачи ссылки на телефон'], tags: ['QR-коды', 'инструменты'] },
   },
   '/qr-code-api': {
     en: { primary: 'free QR code API', keywords: ['QR code generator API', 'SVG QR code REST API', 'QR codes over HTTP', 'QR image API without a key'], tags: ['QR codes', 'developers', 'API'] },
   },
   '/qr-code-extension': {
-    en: { primary: 'QR code generator extension', keywords: ['QR code browser extension', 'Chrome QR code extension', 'side panel QR code maker'], tags: ['QR codes', 'browser extension'] },
-    ru: { primary: 'расширение-генератор QR-кодов', keywords: ['расширение для браузера с QR-кодами', 'QR-код в боковой панели', 'расширение для создания QR-кодов'], tags: ['QR-коды', 'расширение для браузера'] },
+    en: { primary: 'QR code generator extension', keywords: ['QR code browser extension', 'Chrome QR code extension', 'side panel QR code maker', 'sending the current page to your phone'], tags: ['QR codes', 'browser extension'] },
+    ru: { primary: 'расширение-генератор QR-кодов', keywords: ['расширение для браузера с QR-кодами', 'QR-код в боковой панели', 'расширение для создания QR-кодов', 'открытая страница на телефоне по QR-коду'], tags: ['QR-коды', 'расширение для браузера'] },
   },
   '/agents': {
     en: { primary: 'MCP server for short links', keywords: ['link shortener for AI agents', 'analytics MCP server', 'agent-ready URL shortener'], tags: ['AI agents', 'developers'] },

@@ -51,6 +51,7 @@ const GENERATOR = {
       h: 'Questions',
       items: [
         ['Is the generator free?', 'Yes, with no sign-up and no limit on how many codes you make: they are drawn in your browser. The API at qr.clx.cx needs no key either.'],
+        ['How do I open a page from my computer on my phone?', `Paste the page’s address here and point the phone’s camera at the code: the page opens on the phone, with no sending the link to yourself and no account. The browser extension does it in one click — it shows the code of the page you are on.`],
         ['Is there a browser extension?', `Yes, a free one: ${EXTENSION_NAME}, for Chrome, Firefox and Edge. In a side panel it makes a QR code for the page you are on or for any text — an SVG, a link and snippets to embed, as here — and sends nothing anywhere.`],
         ['Do QR codes made here expire?', 'No. A QR code holds its text itself; it works as long as what it points to does. The image link works as long as the API does.'],
         ['Which error correction should I choose?', 'M for screens and most print; Q or H for print that may get scratched or a logo laid over it. Higher levels make the code denser.'],
@@ -80,6 +81,7 @@ const GENERATOR = {
       h: 'Вопросы',
       items: [
         ['Генератор бесплатный?', 'Да, без регистрации и без ограничения числа кодов: они рисуются в вашем браузере. API qr.clx.cx тоже работает без ключа.'],
+        ['Как открыть страницу с компьютера на телефоне?', 'Вставьте сюда адрес страницы и наведите на код камеру телефона — страница откроется на телефоне, без пересылки ссылки самому себе и без входа в аккаунт. Расширение для браузера делает это в один клик: оно сразу показывает код открытой страницы.'],
         ['Есть расширение для браузера?', `Да, бесплатное: ${EXTENSION_NAME} для Chrome, Firefox и Edge. В боковой панели оно делает QR-код для открытой страницы или любого текста — SVG, ссылку и код для вставки, как здесь, — и ничего никуда не отправляет.`],
         ['QR-коды отсюда перестают работать?', 'Нет. QR-код хранит текст в себе и работает, пока работает то, куда он ведёт. Ссылка на картинку работает, пока работает API.'],
         ['Какую коррекцию ошибок выбрать?', 'M — для экранов и большинства печати; Q или H — для печати, которую могут поцарапать, или если поверх кладётся логотип. Чем выше уровень, тем плотнее код.'],
@@ -221,7 +223,7 @@ const EXTENSION = {
     lead: `${EXTENSION_NAME} is a free browser extension that makes a QR code in a side panel — for the page you are on or for any text — as a small SVG, with a link and snippets to embed it. It sends nothing anywhere.`,
     install: 'Install',
     blocks: [
-      ['Getting started', ['Click the extension’s icon: its side panel opens (a sidebar in Firefox).', 'With “Auto-generate on open”, it shows a QR code for the current page at once.', 'Copy the share link, copy or download the SVG, or take a snippet from the Embed tab.']],
+      ['Getting started', ['Click the extension’s icon: its side panel opens (a sidebar in Firefox).', 'With “Auto-generate on open”, it shows a QR code for the current page at once.', 'To open the same page on your phone, point the phone’s camera at the code: no sending the link to yourself.', 'Copy the share link, copy or download the SVG, or take a snippet from the Embed tab.']],
       ['Generate', ['Current page — the address of the active tab; press refresh after you move to another page.', `Custom input — any URL or text, up to ${MAX_DATA.toLocaleString('en')} characters (an emoji counts two).`, 'Size: 125, 200, 250 or 300 px. ECC (error correction): L 7%, M 15%, Q 25%, H 30% — higher is sturdier but denser.', 'Copy Share Link — a link to the image on the QR code API, with the text in it; there is none for text over 2,048 characters. Copy SVG and Download SVG work for any code.']],
       ['Embed', ['Snippets with the same link: HTML <img>, HTML <object>, Markdown, React and Vue — Copy Snippet, or Copy Canonical URL for the link alone.', 'Links copied with versions before 1.1.0 had no text in them and no longer work: copy them again from History.']],
       ['History and settings', ['A code is saved to History when you press Copy Share Link on the Generate tab: its text, the time, size and ECC. Clear all removes it.', 'Settings: default size and ECC, Auto-generate on open, History limit (25, 50 or 100), the theme.', 'History and settings stay in your browser (storage.local) and are not synced.']],
@@ -237,7 +239,7 @@ const EXTENSION = {
     lead: `${EXTENSION_NAME} — бесплатное расширение для браузера: QR-код в боковой панели для открытой страницы или любого текста, лёгким SVG, со ссылкой и готовым кодом для вставки. Оно ничего никуда не отправляет.`,
     install: 'Установить',
     blocks: [
-      ['Начало', ['Нажмите значок расширения — откроется боковая панель (в Firefox — боковая колонка).', 'С настройкой «Авто-генерация при открытии» она сразу покажет QR-код текущей страницы.', 'Скопируйте ссылку, скопируйте или скачайте SVG, либо возьмите сниппет на вкладке «Код».']],
+      ['Начало', ['Нажмите значок расширения — откроется боковая панель (в Firefox — боковая колонка).', 'С настройкой «Авто-генерация при открытии» она сразу покажет QR-код текущей страницы.', 'Чтобы открыть ту же страницу на телефоне, наведите на код камеру телефона — не нужно пересылать ссылку самому себе.', 'Скопируйте ссылку, скопируйте или скачайте SVG, либо возьмите сниппет на вкладке «Код».']],
       ['Создать', ['«Текущая страница» — адрес активной вкладки; после перехода на другую страницу нажмите кнопку обновления.', `«Свой текст» — любой адрес или текст, до ${MAX_DATA.toLocaleString('ru')} символов (эмодзи считается за два).`, 'Размер: 125, 200, 250 или 300 px. ECC (коррекция ошибок): L 7%, M 15%, Q 25%, H 30% — выше уровень, прочнее код, но плотнее.', '«Скопировать ссылку» — ссылка на картинку в API QR-кодов, с текстом внутри; для текста длиннее 2048 символов её нет. «Скопировать SVG» и «Скачать SVG» работают для любого кода.']],
       ['Код', ['Сниппеты с той же ссылкой: HTML <img>, HTML <object>, Markdown, React и Vue — «Скопировать сниппет» или «Скопировать URL», если нужна только ссылка.', 'Ссылки, скопированные в версиях до 1.1.0, не содержали текста и больше не работают: скопируйте их заново из истории.']],
       ['История и настройки', ['Код попадает в историю, когда вы нажимаете «Скопировать ссылку» на вкладке «Создать»: текст, время, размер и ECC. «Очистить» удаляет историю.', 'Настройки: размер и уровень ECC по умолчанию, «Авто-генерация при открытии», «Лимит истории» (25, 50 или 100), тема.', 'История и настройки хранятся в вашем браузере (storage.local) и не синхронизируются.']],
