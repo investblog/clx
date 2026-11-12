@@ -24,10 +24,12 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
 - [x] The QR API on `qr.clx.cx` (ADR 0044, live since 12.11): its pages built 12.11 (ADR 0045) —
       the generator, the API's documentation, the extension, their privacy policy; /privacy and
       /abuse name it; the MIT notice of `@spintax/qr-svg` at the end of `/qr.js`.
-- [ ] The owner: the QR pages' addresses and texts (the legal ones included), then `pnpm run deploy`
-      and `deploy-ru.mjs`; whether the extension's Opera listing exists (its old link answered 404
-      on 12.11). Its name is chosen (ADR 0045). After the deploy: the extension's release with the
-      new name and links, then the old site's domain forwarded to `/qr-code-generator`.
+- [x] The QR pages live on clx.cx and ru.clx.cx (12.11), checked live: every page, the redirects
+      from `clx.cx/ru/…`, the generator in a browser on both hosts (no request while typing, the
+      download equal to the API's image), `scripts/probe-qr.mjs` 22/22. The extension is "SVG QR
+      Code Generator" (ADR 0045); no Opera listing — its store takes no new extensions.
+- [ ] The extension's release with the new name and links to these pages, then the old site's
+      domain forwarded to `/qr-code-generator`.
 - [x] A way to ask for the `api` plan: `/support` in the bot (§17, ADR 0031), named on /agents, /api,
       auth.md, the pricing page and the keys page (19.10).
 - [x] The Telegram bot (§17, ADR 0030): @clxcxbot on `POST /hook/telegram`, live 16.10 (the
