@@ -30,6 +30,8 @@ export interface LayoutInput {
   body: string;
   /** schema.org nodes for the page's JSON-LD (site/build.ts `structuredData`). */
   jsonLd?: Record<string, unknown>[];
+  /** A script of this page alone, loaded after /site.js: `/qr.js` (the QR code generator). */
+  script?: string;
   /** A copy kept on clx.cx for its sign-in card while the page itself is on the Russian host
    *  (ADR 0030): never indexed, its canonical the real page. */
   stub?: boolean;
@@ -144,7 +146,7 @@ export function footer(locale: Locale): string {
 }
 
 export function layout(input: LayoutInput): string {
-  const { page, locale, title, description, body, jsonLd, stub } = input;
+  const { page, locale, title, description, body, jsonLd, stub, script } = input;
   const indexed = page.indexed && !stub;
   const head = [
     '<meta charset="UTF-8" />',
@@ -169,6 +171,7 @@ export function layout(input: LayoutInput): string {
     '<link rel="stylesheet" href="/app.css" />',
     '<script src="/theme.js"></script>',
     '<script src="/site.js" defer></script>',
+    script ? `<script src="${script}" defer></script>` : '',
   ].filter(Boolean);
   return `<!doctype html>
 <html lang="${LOCALES[locale].htmlLang}" data-theme="dark">

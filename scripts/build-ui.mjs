@@ -15,9 +15,13 @@ const common = { bundle: true, minify: true, format: 'iife', target: 'es2022', l
 const licence = fs.readFileSync('node_modules/affiliate-charts/LICENSE', 'utf8').trim();
 await build({ ...common, entryPoints: ['ui/main.ts'], outfile: 'public/app.js', footer: { js: `/*! affiliate-charts\n${licence}\n*/` } });
 await build({ ...common, entryPoints: ['site/client.ts'], outfile: 'public/site.js' });
+// The QR code generator's own script (site/qr.ts, ADR 0045) bundles @spintax/qr-svg (MIT): its licence
+// goes with it, in full.
+const qrLicence = fs.readFileSync('node_modules/@spintax/qr-svg/LICENSE', 'utf8').trim();
+await build({ ...common, entryPoints: ['site/qr.ts'], outfile: 'public/qr.js', footer: { js: `/*! @spintax/qr-svg\n${qrLicence}\n*/` } });
 // The fonts are static files next to the stylesheet (public/fonts), not something to bundle.
 await build({ bundle: true, minify: true, legalComments: 'none', logLevel: 'warning', external: ['/fonts/*'], entryPoints: ['ui/css/index.css'], outfile: 'public/app.css' });
-console.log('public/app.js, public/site.js, public/app.css built');
+console.log('public/app.js, public/site.js, public/qr.js, public/app.css built');
 execFileSync(process.execPath, ['site/build.ts'], { stdio: 'inherit' });
 // The Open Graph cards of the pages just written (scripts/build-og.mjs reads them).
 execFileSync(process.execPath, ['scripts/build-og.mjs'], { stdio: 'inherit' });
@@ -27,6 +31,6 @@ const { RU_ORIGIN } = await import('../site/urls.ts');
 const { STATIC_FILES } = await import('../site/pages.ts');
 if (RU_ORIGIN) {
   const out = process.env.CLX_RU_OUT || 'dist-ru';
-  for (const f of ['app.css', 'site.js', ...STATIC_FILES.filter((x) => x !== '_headers')]) fs.cpSync(`public/${f}`, `${out}/${f}`);
+  for (const f of ['app.css', 'site.js', 'qr.js', ...STATIC_FILES.filter((x) => x !== '_headers')]) fs.cpSync(`public/${f}`, `${out}/${f}`);
   console.log(`${out}/: the Russian host's files copied`);
 }

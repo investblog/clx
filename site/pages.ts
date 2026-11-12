@@ -35,7 +35,7 @@ export interface PageDef {
   slug: string;
   locales: readonly Locale[];
   /** Key in `Strings.foot`: the page is linked from the footer. */
-  foot?: 'how' | 'openSource' | 'agents' | 'api' | 'privacy' | 'terms';
+  foot?: 'how' | 'openSource' | 'qr' | 'agents' | 'api' | 'privacy' | 'terms';
   /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
   nav?: 'analytics' | 'links' | 'generators' | 'pricing' | 'faq';
   /** A comparison page (site/compare.ts), linked from the footer of each language under that
@@ -69,6 +69,14 @@ export const SITE_PAGES: readonly PageDef[] = [
   // How it runs and the code, from the footer (site/products.ts).
   { slug: '/how-it-works', locales: ALL_LOCALES, foot: 'how', indexed: true, priority: 0.7, changefreq: 'monthly' },
   { slug: '/open-source', locales: ALL_LOCALES, foot: 'openSource', indexed: true, priority: 0.6, changefreq: 'monthly' },
+  // The free QR code generator and its API on qr.clx.cx (site/qr-pages.ts, ADRs 0044, 0045): the
+  // generator and the browser extension in both languages (the extension speaks both), the generator in
+  // every footer; the API in English, like /api; their privacy policy a legal page of its own, the
+  // address the extension's stores show.
+  { slug: '/qr-code-generator', locales: ALL_LOCALES, foot: 'qr', indexed: true, priority: 0.8, changefreq: 'monthly' },
+  { slug: '/qr-code-api', locales: ['en'], indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/qr-code-extension', locales: ALL_LOCALES, indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/qr-code-privacy', locales: ALL_LOCALES, legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   // For agents and integrators; English only — the reader is a program (site/agents.ts, site/api.ts).
   { slug: '/agents', locales: ['en'], foot: 'agents', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },

@@ -64,6 +64,18 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
     en: { primary: 'open source URL shortener', keywords: ['open source website analytics', 'AGPL-licensed link shortener', 'self-hostable web analytics'], tags: ['open source'] },
     ru: { primary: 'система учета визитов с открытым кодом', keywords: ['открытый исходный код clx', 'сокращатель ссылок с открытым кодом', 'аналитика с открытым исходным кодом', 'свободная лицензия AGPL'], tags: ['открытый код'] },
   },
+  // The free QR code tools (ADR 0045): the demand is almost all for SVG (the old qrcgen.com's searches).
+  '/qr-code-generator': {
+    en: { primary: 'free SVG QR code generator', keywords: ['QR code generator online', 'SVG QR codes in the browser', 'QR code maker without sign-up', 'vector QR code generator'], tags: ['QR codes', 'tools'] },
+    ru: { primary: 'генератор QR-кодов в SVG', keywords: ['бесплатный генератор QR-кодов', 'QR-код онлайн без регистрации', 'векторный QR-код', 'создание QR-кода в браузере'], tags: ['QR-коды', 'инструменты'] },
+  },
+  '/qr-code-api': {
+    en: { primary: 'free QR code API', keywords: ['QR code generator API', 'SVG QR code REST API', 'QR codes over HTTP', 'QR image API without a key'], tags: ['QR codes', 'developers', 'API'] },
+  },
+  '/qr-code-extension': {
+    en: { primary: 'QR code generator extension', keywords: ['QR code browser extension', 'Chrome QR code extension', 'side panel QR code maker'], tags: ['QR codes', 'browser extension'] },
+    ru: { primary: 'расширение-генератор QR-кодов', keywords: ['расширение для браузера с QR-кодами', 'QR-код в боковой панели', 'расширение для создания QR-кодов'], tags: ['QR-коды', 'расширение для браузера'] },
+  },
   '/agents': {
     en: { primary: 'MCP server for short links', keywords: ['link shortener for AI agents', 'analytics MCP server', 'agent-ready URL shortener'], tags: ['AI agents', 'developers'] },
   },

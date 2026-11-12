@@ -170,7 +170,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       ],
     },
     faqKey: 'links',
-    more: [['The visit counter on the same worker', '/analytics'], ['clx vs Bitly', '/bitly-alternative'], ['How it works', '/how-it-works']],
+    more: [['The visit counter on the same worker', '/analytics'], ['clx vs Bitly', '/bitly-alternative'], ['A free QR code generator', '/qr-code-generator'], ['How it works', '/how-it-works']],
     final: 'Shorten links on your own domain',
     card: {
       short: 'k7q.example.com/spring',
@@ -232,7 +232,7 @@ const LINKS: Record<Locale, ProductText & { card: LinkCard }> = {
       ],
     },
     faqKey: 'links',
-    more: [['Счётчик посещений на том же воркере', '/analytics'], ['Вместо Яндекс Кликера', '/clck-alternative'], ['Как это работает', '/how-it-works']],
+    more: [['Счётчик посещений на том же воркере', '/analytics'], ['Вместо Яндекс Кликера', '/clck-alternative'], ['Бесплатный генератор QR-кодов', '/qr-code-generator'], ['Как это работает', '/how-it-works']],
     final: 'Сокращайте ссылки на своём домене',
     card: {
       short: 'k7q.example.com/spring',

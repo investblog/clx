@@ -31,7 +31,7 @@ for (const p of SITE_PAGES) for (const l of p.locales) if (hostOf(l) === 'main')
 if (RU_ORIGIN) expected.add('ru/signin.html');
 const markdown = SITE_PAGES.filter((p) => p.markdown).map((p) => markdownFile(p.slug));
 const agentFiles = ['llms.txt', 'auth.md', '.well-known/auth.md', '.well-known/api-catalog', '.well-known/agent-skills/index.json', '.well-known/mcp/server-card.json', '.well-known/mcp/server-cards.json', 'openapi.yaml', 'openapi.json', ...markdown];
-for (const f of [...expected, 'app.js', 'site.js', 'app.css', 'robots.txt', 'sitemap.xml', 'keywords.json', ...STATIC_FILES, ...agentFiles]) if (!exists(f)) problems.push(`missing public/${f}`);
+for (const f of [...expected, 'app.js', 'site.js', 'qr.js', 'app.css', 'robots.txt', 'sitemap.xml', 'keywords.json', ...STATIC_FILES, ...agentFiles]) if (!exists(f)) problems.push(`missing public/${f}`);
 
 for (const config of ['wrangler.example.jsonc', 'wrangler.jsonc'].filter((f) => fs.existsSync(f))) {
   const text = fs.readFileSync(config, 'utf8');

@@ -1,0 +1,66 @@
+<h1 class="h3">Privacy of the QR code tools</h1>
+<p class="muted text-sm">Version of 12 November 2026.</p>
+<p>
+  This policy covers clx's free QR code tools: the <a href="/qr-code-generator">QR code generator</a>
+  on this site, the QR code API at <code>qr.clx.cx</code> and the browser extension
+  (<a href="/qr-code-extension">its page</a>). None of them has accounts, cookies, ads or analytics.
+  The policy of clx accounts is <a href="/privacy">another page</a>.
+</p>
+
+<h2 class="h4">The generator on this site</h2>
+<p>
+  The QR code is drawn in your browser. What you type is not sent anywhere: the page makes no request
+  with it. The image link and the HTML it shows are built in the browser too; they reach the API only
+  when someone opens them. The generator keeps nothing of what you type and sets no cookie; what the
+  site itself keeps — the theme, a partner's code from a link — is on <a href="/privacy">clx's privacy page</a>.
+</p>
+
+<h2 class="h4">The API at qr.clx.cx</h2>
+<p>
+  The API receives a request when a link to it is opened — by you, or by the browser of anyone who
+  views a page or an e-mail that shows such an image. The request carries the text to encode, the
+  size, the error correction and the margin, and, like every request on the web, the viewer's IP
+  address, browser (User-Agent) and often the page it came from (Referer). The API:
+</p>
+<ul>
+  <li>uses the text only to draw the image and to check the link's hash;</li>
+  <li>keeps no logs of requests and stores no image; only the answers of <code>/qr.inline</code> stay in Cloudflare's cache for 24 hours, keyed by their full address, and then expire;</li>
+  <li>does not count, profile or follow anyone.</li>
+</ul>
+<p>
+  A QR code is not a secret: anyone who has its link, or scans it, reads its text. Do not encode
+  passwords or other secrets.
+</p>
+
+<h2 class="h4">The browser extension</h2>
+<p>
+  From version 1.1.0 the extension makes no network requests at all: codes and share links are made in
+  the browser. Versions before 1.1.0 sent the text of every code they made to the API at its old
+  address, qr.qrcgen.com. The extension's permissions:
+</p>
+<ul>
+  <li>side panel — to show its window;</li>
+  <li>storage — to keep your settings (theme, default size and error correction, history limit, auto-generate) and the history of codes whose link you copied, in your browser only;</li>
+  <li>active tab and tabs — to read the address of the current page, to make its code.</li>
+</ul>
+<p>Nothing the extension keeps leaves your browser or is synced; uninstalling it removes it.</p>
+
+<h2 class="h4">Who processes the data</h2>
+<p>
+  The API and this site's English pages run on Cloudflare (Workers), and the Russian pages
+  (ru.clx.cx) on GitHub Pages; each handles the requests it serves as their host, under its own
+  policy. We add no analytics of Cloudflare's or anyone else's; we see only the counts of
+  requests and errors that Cloudflare shows to every account, without their content. No data is sold
+  or shared with anyone else.
+</p>
+
+<h2 class="h4">Children</h2>
+<p>The QR code tools collect no personal information on purpose, of anyone, children included, and keep nothing beyond the 24-hour <code>/qr.inline</code> cache described above; what a request carries by itself is described there too.</p>
+
+<h2 class="h4">Changes and questions</h2>
+<p>
+  A change to this policy changes its date above. Questions: through the contact form linked at the
+  foot of every page, or as an issue in the API's repository,
+  <a href="https://github.com/investblog/qr-generator">github.com/investblog/qr-generator</a>.
+  Abuse of a QR code: <a href="/abuse">how to report it</a>.
+</p>

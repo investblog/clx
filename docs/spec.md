@@ -1135,8 +1135,9 @@ that adds a site and embeds its counter at build time.
 clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site-and-app.md)).
 - **Addresses.** The site at the root: `/`, `/analytics`, `/short-links`, `/for-site-generators`, `/pricing`,
   `/how-it-works`, `/open-source`, `/vs-301`,
-  `/faq`, `/privacy`, `/terms`, `/abuse` in English (`/short-links` shows its example link's flows
-  as the app draws them, ADR 0019), the same
+  `/faq`, `/privacy`, `/terms`, `/abuse`, the QR code tools (`/qr-code-generator`,
+  `/qr-code-extension`, `/qr-code-api`, `/qr-code-privacy`, below) in English (`/short-links` shows its example link's flows
+  as the app draws them, ADR 0019), the same — `/qr-code-api` aside —
   in Russian on `ru.clx.cx` (`/`, `/privacy`, …; no trailing slash; `clx.cx/ru/<page>` redirects), see
   "The Russian host" below. The app at `/app` (and
   `/ru/app`, ADRs 0015, 0017) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
@@ -1146,8 +1147,12 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   `scripts/deploy-qr.mjs`): `/qr/<preset>/<sha256>.svg?data=&ecc=&q=`, `/qr.svg` (302 to it),
   `/qr.inline`. Not the product's worker, no bindings, no logs; the link QR `/v1/links/{id}/qr.svg`
   is separate (§6). Images embedded on other sites bring their viewers' requests to it, so the privacy
-  and abuse pages cover it before the extension links there; the generator's pages and the API's
-  documentation are pages of this site (the next step of the move).
+  and abuse pages cover it before the extension links there. Its pages on this site
+  ([ADR 0045](./decisions/0045-qr-tools-pages.md)): `/qr-code-generator` (English and Russian, in
+  every footer; drawn in the browser by its own script `/qr.js` with `@spintax/qr-svg`, the typed text never sent,
+  the code's link on the API built there), `/qr-code-extension` (both), `/qr-code-api` (English) and
+  their privacy policy `/qr-code-privacy` (both, a legal page). No call to sign up on them; clx is a
+  card and a link to `/short-links`.
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
   canonical and hreflang (with `x-default` on English), the sitemap, robots.txt, the header's menu
   and the footer all derive from it. The language comes from the address only. On a phone the menu

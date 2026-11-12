@@ -6,5 +6,5 @@ import { fileFor, hostOf } from './urls.ts';
 
 export function ruHostFiles(): string[] {
   const pages = SITE_PAGES.flatMap((p) => p.locales.filter((l) => hostOf(l) === 'ru').map((l) => fileFor(p.slug, l)));
-  return [...pages, 'CNAME', '.nojekyll', 'robots.txt', 'sitemap.xml', 'app.css', 'site.js', ...STATIC_FILES.filter((f) => f !== '_headers')];
+  return [...pages, 'CNAME', '.nojekyll', 'robots.txt', 'sitemap.xml', 'app.css', 'site.js', 'qr.js', ...STATIC_FILES.filter((f) => f !== '_headers')];
 }

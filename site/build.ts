@@ -14,6 +14,7 @@ import { home } from './home.ts';
 import { faqGroups, faqPage } from './faq.ts';
 import { analyticsPage, generatorsPage, howPage, linksPage, openSourcePage, pricingPage } from './products.ts';
 import { bitlyPage, clckPage, liveinternetPage, parentPage, plausiblePage } from './compare.ts';
+import { apiPage as qrApiPage, extensionPage, generatorPage, generatorQuestions } from './qr-pages.ts';
 import { KEYWORDS } from './keywords.ts';
 import { escapeHtml, footer, header, layout } from './layout.ts';
 import { alternatesFor, appFileFor, appPathFor, fileFor, hostOf, pathFor, renderingOn, RU_ORIGIN, urlFor, type Host } from './urls.ts';
@@ -44,6 +45,8 @@ const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; descrip
 // The comparison pages have one language each (site/pages.ts).
 const COMPARE_PAGES: Record<string, () => { title: string; description: string; body: string }> = { '/bitly-alternative': bitlyPage, '/plausible-alternative': plausiblePage, '/clck-alternative': clckPage, '/liveinternet-alternative': liveinternetPage };
 const PARENT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/vs-301': parentPage };
+// The free QR code tools (site/qr-pages.ts, ADR 0045); the generator brings its own script, /qr.js.
+const QR_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string; script?: string }> = { '/qr-code-generator': generatorPage, '/qr-code-api': () => qrApiPage(), '/qr-code-extension': extensionPage };
 
 const AGENT_PAGES: Record<string, () => { title: string; description: string; body: string }> = {
   '/agents': () => ({ title: 'clx for AI agents', description: "How an AI agent sets up clx for a person: connect their Cloudflare account, add sites and embed the counter, make short links and QR codes, read reports — through the API.", body: agentsBody() }),
@@ -75,13 +78,20 @@ function structuredData(page: PageDef, locale: Locale, content: { title: string;
     ];
   const name = page.nav ? STRINGS[locale].nav[page.nav] : content.title.split(' — ')[0]!;
   const crumbs = { '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'clx', item: home }, { '@type': 'ListItem', position: 2, name, item: urlFor(page.slug, locale) }] };
+  // The generator is a tool of its own: a free web application, with its questions.
+  if (page.slug === '/qr-code-generator')
+    return [
+      crumbs,
+      { '@type': 'WebApplication', name: content.title.split(' — ')[0], url: urlFor(page.slug, locale), description: content.description, applicationCategory: 'UtilitiesApplication', operatingSystem: 'Web', browserRequirements: 'Requires JavaScript', inLanguage: lang, offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, publisher: { '@id': `${ORIGIN}/#org` } },
+      { '@type': 'FAQPage', inLanguage: lang, mainEntity: generatorQuestions(locale).map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
+    ];
   if (page.slug !== '/faq') return [crumbs];
   const questions = faqGroups(locale).flatMap((g) => g.items);
   return [crumbs, { '@type': 'FAQPage', inLanguage: lang, mainEntity: questions.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }];
 }
 
 function render(page: PageDef, locale: Locale, stub = false): { html: string; title: string; description?: string } {
-  const content: { title: string; description?: string; body: string } | null = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(locale) ?? null);
+  const content: { title: string; description?: string; body: string; script?: string } | null = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(locale) ?? QR_PAGES[page.slug]?.(locale) ?? null);
   if (!content) throw new Error(`no template for ${page.slug}`);
   const html = layout({ page, locale, ...content, stub, jsonLd: page.indexed ? structuredData(page, locale, content) : undefined });
   return { html, title: content.title, description: content.description };

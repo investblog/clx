@@ -1,6 +1,7 @@
 // The site's addresses and pages (site/, docs/spec.md §16): one table, one URL function, and what
 // the generator prints from them.
 import { execFileSync } from 'node:child_process';
+import { createHash, webcrypto } from 'node:crypto';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -46,7 +47,7 @@ describe('generated pages', () => {
   // generator does not write (the scripts, the hand-written files) is read from public/; anything
   // else must come from this build.
   const out = 'temp/site-test-off';
-  const notGenerated = new Set([...STATIC_FILES, 'site.js', 'app.js', 'app.css']);
+  const notGenerated = new Set([...STATIC_FILES, 'site.js', 'qr.js', 'app.js', 'app.css']);
   const read = (f: string) => fs.readFileSync(`${notGenerated.has(f) ? 'public' : out}/${f}`, 'utf8');
   beforeAll(() => {
     fs.rmSync(out, { recursive: true, force: true });
@@ -91,7 +92,7 @@ describe('generated pages', () => {
         else {
           expect(a, a).toMatch(/^[\p{Script=Cyrillic}\p{Script=Latin}\p{N} '-]+$/u);
           expect(a.split(' ').filter((w) => /\p{Script=Cyrillic}/u.test(w)).length, a).toBeGreaterThanOrEqual(1);
-          for (const w of a.split(/[ -]/u).filter((x) => /\p{Script=Latin}/u.test(x))) expect(['clx', 'Cloudflare', 'Workers', 'LiveInternet', 'QR', 'AGPL', 'API'], a).toContain(w);
+          for (const w of a.split(/[ -]/u).filter((x) => /\p{Script=Latin}/u.test(x))) expect(['clx', 'Cloudflare', 'Workers', 'LiveInternet', 'QR', 'SVG', 'AGPL', 'API'], a).toContain(w);
         }
       }
     }
@@ -185,7 +186,7 @@ describe('generated pages', () => {
     for (const [path, main] of mains) {
       const lang = path === '/ru' || path.startsWith('/ru/') ? 'ru' : 'en';
       for (const [, href, hash] of main.matchAll(/<a [^>]*?href="(\/[^"#?]*)(?:#([^"]*))?"/gu)) {
-        if (/^\/(agents|api)$|\.(yaml|json|md)$|\/app$/u.test(href!)) continue;
+        if (/^\/(agents|api|qr-code-api)$|\.(yaml|json|md)$|\/app$/u.test(href!)) continue;
         const page = SITE_PAGES.find((p) => p.locales.includes(lang) && pathFor(p.slug, lang) === href);
         expect(page, `${path} → ${href}`).toBeDefined();
         // A fragment: a group of /faq, or a form of the home page's sign-in card.
@@ -609,6 +610,78 @@ describe('generated pages', () => {
     const expected = new Set(data.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`${x},${y}`] : []))));
     expect(drawn.size).toBeGreaterThan(100);
     expect([...drawn].sort()).toEqual([...expected].sort());
+  });
+
+  it('the QR code tools (ADR 0045): the generator in every footer, its script on its page alone, lengths, nothing inline', () => {
+    for (const l of ['en', 'ru'] as const) {
+      expect(read(fileFor('/', l)).match(/<footer[\s\S]*<\/footer>/u)![0]).toContain(`<a href="${pathFor('/qr-code-generator', l)}">`);
+      const html = read(fileFor('/qr-code-generator', l));
+      expect(html).toContain('<script src="/qr.js" defer></script>');
+      expect(html).toContain('"@type":"WebApplication"');
+      // The page shows a code before its script runs: the one the API draws for the sample.
+      expect(html.match(/<div id="qr-preview" class="qr-tool__preview">(<svg[\s\S]*?<\/svg>)/u)![1]).toBe(QR.renderSvg(QR.generateMatrix('https://example.com', { ecc: 'M' }), { quiet: 2, size: 250 }));
+      // clx is a line at the end, not the page's call: no sign-up in it.
+      expect(html.match(/<main[\s\S]*?<\/main>/u)![0]).not.toContain('#register');
+    }
+    for (const p of SITE_PAGES)
+      for (const l of p.locales) {
+        const html = read(fileFor(p.slug, l));
+        if (p.slug !== '/qr-code-generator') expect(html, `${l}${p.slug}`).not.toContain('/qr.js');
+        if (!p.slug.startsWith('/qr-code-')) continue;
+        expect(html.match(/<main[\s\S]*?<\/main>/u)![0], `${l}${p.slug}`).not.toMatch(/style=|<style|<script/u);
+        expect(html.match(/<title>([^<]*)<\/title>/u)![1]!.length, `${l}${p.slug}`).toBeLessThanOrEqual(60);
+        if (p.legal) continue;
+        const description = html.match(/<meta name="description" content="([^"]*)"/u)![1]!.replaceAll('&#39;', "'");
+        expect(description.length, `${l}${p.slug}`).toBeGreaterThanOrEqual(120);
+        expect(description.length, `${l}${p.slug}`).toBeLessThanOrEqual(160);
+      }
+    // The legal pages name the API's host; qr.js carries the library's licence.
+    for (const f of ['privacy.html', 'abuse.html', 'qr-code-privacy.html', 'ru/privacy.html', 'ru/abuse.html', 'ru/qr-code-privacy.html']) expect(read(f), f).toContain('qr.clx.cx');
+    expect(read('qr.js')).toMatch(/\/\*! @spintax\/qr-svg\nMIT License/u);
+  });
+
+  it('qr.js draws the code and builds the API link in the browser, sends nothing, and never shows a stale link', async () => {
+    const el = (value = '') => ({ value, textContent: '', innerHTML: '', disabled: true, dataset: {} as Record<string, string>, on: {} as Record<string, () => void>, addEventListener(type: string, fn: () => void) { this.on[type] = fn; }, replaceChildren() { this.innerHTML = ''; } });
+    const ids = ['qr-form', 'qr-data', 'qr-size', 'qr-ecc', 'qr-quiet', 'qr-preview', 'qr-status', 'qr-link', 'qr-embed', 'qr-download', 'qr-copy-svg', 'qr-copy-link', 'qr-copy-embed'];
+    const els = Object.fromEntries(ids.map((id) => [id, el()]));
+    els['qr-form']!.dataset.t = JSON.stringify({ empty: 'empty', tooLong: 'long', noFit: 'nofit', ready: 'ready {bytes}', copied: 'copied', failed: 'failed', alt: 'QR code' });
+    Object.assign(els['qr-data']!, { value: '  https://example.com/a?b=1&c=(x)  ' });
+    Object.assign(els['qr-size']!, { value: 'sq300' });
+    Object.assign(els['qr-ecc']!, { value: 'H' });
+    Object.assign(els['qr-quiet']!, { value: '4' });
+    let fetched = 0;
+    // The second hash (the text "first" below) finishes last: an unguarded page would show its link.
+    let digests = 0;
+    const crypto = { subtle: { digest: (alg: string, bytes: Uint8Array) => new Promise((r) => setTimeout(r, digests++ === 1 ? 40 : 0)).then(() => webcrypto.subtle.digest(alg, bytes)) } };
+    const document = { getElementById: (id: string) => els[id] ?? null };
+    vm.runInNewContext(read('qr.js'), { document, crypto, TextEncoder, Uint8Array, fetch: () => fetched++, setTimeout });
+    const settle = () => new Promise((r) => setTimeout(r, 80));
+    await settle();
+    const data = 'https://example.com/a?b=1&c=(x)';
+    const hash = createHash('sha256').update(`${data}|p=sq300|ecc=H|q=4|fg=000|bg=fff|r=v1`).digest('hex');
+    const url = `https://qr.clx.cx/qr/sq300/${hash}.svg?data=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1%26c%3D%28x%29&ecc=H&q=4`;
+    expect(els['qr-link']!.textContent).toBe(url);
+    expect(els['qr-embed']!.textContent).toBe(`<img src="${url.replaceAll('&', '&amp;')}" width="300" height="300" alt="QR code">`);
+    expect(els['qr-preview']!.innerHTML).toBe(QR.renderSvg(QR.generateMatrix(data, { ecc: 'H' }), { quiet: 4, size: 300 }));
+    expect([els['qr-download'], els['qr-copy-svg'], els['qr-copy-link'], els['qr-copy-embed']].map((b) => b!.disabled)).toEqual([false, false, false, false]);
+    // Text that does not fit: nothing of the old code stays.
+    els['qr-data']!.value = '€'.repeat(1500);
+    els['qr-form']!.on.input!();
+    await settle();
+    expect([els['qr-preview']!.innerHTML, els['qr-link']!.textContent, els['qr-embed']!.textContent, els['qr-status']!.textContent]).toEqual(['', '', '', 'nofit']);
+    expect(els['qr-copy-link']!.disabled).toBe(true);
+    // Two edits in a row: the link is the last text's, whichever hash finishes first.
+    els['qr-data']!.value = 'first';
+    els['qr-form']!.on.input!();
+    els['qr-data']!.value = 'second';
+    els['qr-form']!.on.input!();
+    await settle();
+    expect(els['qr-link']!.textContent).toContain('?data=second&');
+    els['qr-data']!.value = 'a'.repeat(2049);
+    els['qr-form']!.on.input!();
+    await settle();
+    expect([els['qr-link']!.textContent, els['qr-status']!.textContent]).toEqual(['', 'long']);
+    expect(fetched).toBe(0);
   });
 
   it('the app has a page per language, which sets the language until sign-in (ADR 0015)', () => {

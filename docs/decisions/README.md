@@ -50,3 +50,4 @@ decision is changed by a new record that supersedes the old one, not by editing 
 | [0042](./0042-unreachable-rules.md) | A link rule that one rule above it takes every visitor of is refused: 409 rule_unreachable, pairs only, one function for the API and the editor | 08.11.2026 | §6 |
 | [0043](./0043-link-editor-screen.md) | The link editor is a screen: #/links/new and #/links/<id>/edit, unsaved edits ask first, a summary from the API's own unreachable(), both devices kept | 09.11.2026 | §10 |
 | [0044](./0044-qr-api-on-qr-clx-cx.md) | The free QR API lives on qr.clx.cx as a worker of its own, `clx-qr`, deployed from qr-generator at a pinned commit; no bindings, no logs | 12.11.2026 | §1, §6, §8, §11, §16 |
+| [0045](./0045-qr-tools-pages.md) | The QR code tools' pages: the generator drawn in the browser by its own `/qr.js` (nothing sent), the API and extension documented, a privacy policy of their own, no sign-up call | 12.11.2026 | §16 |

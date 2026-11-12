@@ -7,6 +7,7 @@
 // must equal the reference's byte for byte. Read-only: GET and one POST, nothing is created.
 // Prints one line per check and exits 1 if any failed.
 import { createHash } from 'node:crypto';
+import QR from '@spintax/qr-svg';
 
 const BASE = (process.argv[2] || 'https://qr.clx.cx').replace(/\/$/u, '');
 const REF = process.argv[3]?.replace(/\/$/u, '');
@@ -77,6 +78,23 @@ const over = { data: '€'.repeat(2048), preset: 'sq250', ecc: 'L', q: 2 };
 await check('2,048 × 3 bytes (URL ~18.5 KB): over the QR capacity', canonical(over), { status: 500 });
 await check('POST → 404', canonical(p), { status: 404 }, { method: 'POST' });
 await check('unknown path → 404', '/', { status: 404 });
+
+// The generator page (site/qr.ts, ADR 0045) draws with @spintax/qr-svg and promises the API's image
+// byte for byte: every preset, every level, several margins.
+const W = { sq125: 125, sq200: 200, sq250: 250, sq300: 300 };
+const parity = [['https://example.com/a', 'sq125', 'L', 0], ['hello', 'sq200', 'M', 2], ['Привет, мир! € 😀', 'sq250', 'Q', 4], ['€'.repeat(400), 'sq300', 'H', 16]];
+for (const [data, preset, ecc, q] of parity) {
+  const name = `same SVG as @spintax/qr-svg (${preset}, ${ecc}, q=${q})`;
+  try {
+    const body = await (await fetch(BASE + canonical({ data, preset, ecc, q }))).text();
+    const local = QR.renderSvg(QR.generateMatrix(data, { ecc }), { quiet: q, size: W[preset] });
+    console.log(`${body === local ? 'ok  ' : 'FAIL'} ${name}`);
+    if (body !== local) failed++;
+  } catch (e) {
+    console.log(`FAIL ${name}: ${e.message}`);
+    failed++;
+  }
+}
 
 console.log(failed ? `${failed} check(s) failed` : 'all checks passed');
 process.exit(failed ? 1 : 0);
