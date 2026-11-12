@@ -1148,11 +1148,16 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   `/qr.inline`. Not the product's worker, no bindings, no logs; the link QR `/v1/links/{id}/qr.svg`
   is separate (§6). Images embedded on other sites bring their viewers' requests to it, so the privacy
   and abuse pages cover it before the extension links there. Its pages on this site
-  ([ADR 0045](./decisions/0045-qr-tools-pages.md)): `/qr-code-generator` (English and Russian, in
-  every footer; drawn in the browser by its own script `/qr.js` with `@spintax/qr-svg`, the typed text never sent,
-  the code's link on the API built there), `/qr-code-extension` (both), `/qr-code-api` (English) and
-  their privacy policy `/qr-code-privacy` (both, a legal page). No call to sign up on them; clx is a
-  card and a link to `/short-links`.
+  ([ADR 0045](./decisions/0045-qr-tools-pages.md)): `/qr-code-generator` (in every footer; drawn in
+  the browser by its own script `/qr.js` with `@spintax/qr-svg`, the typed text never sent, the
+  code's link on the API built there), `/qr-code-extension`, `/qr-code-api` (English) and their
+  privacy policy `/qr-code-privacy` (a legal page). No call to sign up on them; clx is a card and a
+  link to `/short-links`. The generator, the extension's page and the policy are in the extension's
+  seven languages ([ADR 0046](./decisions/0046-qr-pages-in-the-extensions-languages.md)): English,
+  Russian, and German, Spanish, French, Brazilian Portuguese and Turkish on clx.cx under their prefix
+  (`/de/qr-code-generator`, `/pt-br/…`). Those five have no other page: their header has no menu;
+  the three pages link one another and the language switch in their language, and every other link
+  (the brand, sign-in, the footer's other pages, `/short-links`, `/privacy`) leads to the English page.
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
   canonical and hreflang (with `x-default` on English), the sitemap, robots.txt, the header's menu
   and the footer all derive from it. The language comes from the address only. On a phone the menu

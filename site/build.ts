@@ -8,7 +8,7 @@ import path from 'node:path';
 import TurndownService from 'turndown';
 import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, mcpServerCard, skillMd } from './agents.ts';
 import { apiBody, apiJson, loadOpenapi } from './api.ts';
-import { ALL_LOCALES, LOCALES, ORIGIN, REPO, SITE_PAGES, markdownFile, type Locale, type PageDef } from './pages.ts';
+import { ALL_LOCALES, LOCALES, ORIGIN, QR_LOCALES, REPO, SITE_PAGES, isSiteLocale, markdownFile, siteLocaleOf, type Locale, type PageDef, type PageLocale } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
 import { faqGroups, faqPage } from './faq.ts';
@@ -17,7 +17,7 @@ import { bitlyPage, clckPage, liveinternetPage, parentPage, plausiblePage } from
 import { apiPage as qrApiPage, extensionPage, generatorPage, generatorQuestions } from './qr-pages.ts';
 import { KEYWORDS } from './keywords.ts';
 import { escapeHtml, footer, header, layout } from './layout.ts';
-import { alternatesFor, appFileFor, appPathFor, fileFor, hostOf, pathFor, renderingOn, RU_ORIGIN, urlFor, type Host } from './urls.ts';
+import { alternatesFor, appFileFor, appPathFor, fileFor, hostOf, pagePathFor, pathFor, renderingOn, RU_ORIGIN, urlFor, type Host } from './urls.ts';
 
 /** clx.cx's files (Workers Static Assets), and the Russian host's when it has its own (ADR 0030):
  *  a directory GitHub Pages serves (scripts/deploy-ru.mjs). Set by env for a test build. */
@@ -27,10 +27,10 @@ const outOf = (host: Host) => (host === 'ru' ? RU_OUT : OUT);
 const here = import.meta.dirname;
 const openapi = loadOpenapi(path.join(here, '..'));
 
-function legal(page: PageDef, locale: Locale): { title: string; body: string } {
+function legal(page: PageDef, locale: PageLocale): { title: string; body: string } {
   // A link to a page of the site is written by its slug (`/abuse`) and becomes the page in this
   // language, on its host (site/urls.ts).
-  const html = fs.readFileSync(path.join(here, 'legal', locale, `${page.slug.slice(1)}.html`), 'utf8').replace(/href="(\/[^"]*)"/gu, (_, slug: string) => `href="${pathFor(slug, locale)}"`);
+  const html = fs.readFileSync(path.join(here, 'legal', locale, `${page.slug.slice(1)}.html`), 'utf8').replace(/href="(\/[^"]*)"/gu, (_, slug: string) => `href="${pagePathFor(slug, locale)}"`);
   const h1 = html.match(/<h1[^>]*>([^<]+)<\/h1>/u)?.[1];
   if (!h1) throw new Error(`site/legal/${locale}${page.slug}.html has no <h1>`);
   return { title: `${h1} — clx`, body: `<article class="narrow legal">\n${html}</article>` };
@@ -46,7 +46,7 @@ const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; descrip
 const COMPARE_PAGES: Record<string, () => { title: string; description: string; body: string }> = { '/bitly-alternative': bitlyPage, '/plausible-alternative': plausiblePage, '/clck-alternative': clckPage, '/liveinternet-alternative': liveinternetPage };
 const PARENT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/vs-301': parentPage };
 // The free QR code tools (site/qr-pages.ts, ADR 0045); the generator brings its own script, /qr.js.
-const QR_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string; script?: string }> = { '/qr-code-generator': generatorPage, '/qr-code-api': () => qrApiPage(), '/qr-code-extension': extensionPage };
+const QR_PAGES: Record<string, (locale: PageLocale) => { title: string; description: string; body: string; script?: string }> = { '/qr-code-generator': generatorPage, '/qr-code-api': () => qrApiPage(), '/qr-code-extension': extensionPage };
 
 const AGENT_PAGES: Record<string, () => { title: string; description: string; body: string }> = {
   '/agents': () => ({ title: 'clx for AI agents', description: "How an AI agent sets up clx for a person: connect their Cloudflare account, add sites and embed the counter, make short links and QR codes, read reports — through the API.", body: agentsBody() }),
@@ -57,9 +57,9 @@ const AGENT_PAGES: Record<string, () => { title: string; description: string; bo
  * The page's schema.org nodes: the site, its maker and the product on the home page; every other page
  * a breadcrumb from home; /faq its questions (the same lists the pages show).
  */
-function structuredData(page: PageDef, locale: Locale, content: { title: string; description?: string }): Record<string, unknown>[] {
+function structuredData(page: PageDef, locale: PageLocale, content: { title: string; description?: string }): Record<string, unknown>[] {
   const lang = LOCALES[locale].htmlLang;
-  const home = urlFor('/', locale);
+  const home = urlFor('/', siteLocaleOf(locale));
   if (page.slug === '/')
     return [
       { '@type': 'Organization', '@id': `${ORIGIN}/#org`, name: 'clx', url: ORIGIN, logo: `${ORIGIN}/apple-touch-icon.png`, sameAs: [REPO] },
@@ -76,7 +76,7 @@ function structuredData(page: PageDef, locale: Locale, content: { title: string;
         publisher: { '@id': `${ORIGIN}/#org` },
       },
     ];
-  const name = page.nav ? STRINGS[locale].nav[page.nav] : content.title.split(' — ')[0]!;
+  const name = page.nav ? STRINGS[siteLocaleOf(locale)].nav[page.nav] : content.title.split(' — ')[0]!;
   const crumbs = { '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'clx', item: home }, { '@type': 'ListItem', position: 2, name, item: urlFor(page.slug, locale) }] };
   // The generator is a tool of its own: a free web application, with its questions.
   if (page.slug === '/qr-code-generator')
@@ -86,12 +86,19 @@ function structuredData(page: PageDef, locale: Locale, content: { title: string;
       { '@type': 'FAQPage', inLanguage: lang, mainEntity: generatorQuestions(locale).map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
     ];
   if (page.slug !== '/faq') return [crumbs];
-  const questions = faqGroups(locale).flatMap((g) => g.items);
+  const questions = faqGroups(siteLocaleOf(locale)).flatMap((g) => g.items);
   return [crumbs, { '@type': 'FAQPage', inLanguage: lang, mainEntity: questions.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }];
 }
 
-function render(page: PageDef, locale: Locale, stub = false): { html: string; title: string; description?: string } {
-  const content: { title: string; description?: string; body: string; script?: string } | null = page.slug === '/' ? home(locale) : page.slug === '/404' ? notFound(locale) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(locale) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(locale) ?? QR_PAGES[page.slug]?.(locale) ?? null);
+function render(page: PageDef, locale: PageLocale, stub = false): { html: string; title: string; description?: string } {
+  // Only the QR code tools' pages and their policy are in the QR-only languages (ADR 0046).
+  const site = (): Locale => {
+    if (!isSiteLocale(locale)) throw new Error(`${page.slug} has no template in ${locale}`);
+    return locale;
+  };
+  const content: { title: string; description?: string; body: string; script?: string } | null =
+    QR_PAGES[page.slug]?.(locale) ??
+    (page.slug === '/' ? home(site()) : page.slug === '/404' ? notFound(site()) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(site()) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(site()) ?? null));
   if (!content) throw new Error(`no template for ${page.slug}`);
   const html = layout({ page, locale, ...content, stub, jsonLd: page.indexed ? structuredData(page, locale, content) : undefined });
   return { html, title: content.title, description: content.description };
@@ -221,4 +228,4 @@ if (RU_ORIGIN) {
   write('_redirects', `/ru ${RU_ORIGIN}/ 301\n/ru/ ${RU_ORIGIN}/ 301\n${ruPages.map((p) => `/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`).join('\n')}\n`);
 } else fs.rmSync(path.join(OUT, '_redirects'), { force: true });
 
-console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, the app in each, robots.txt, sitemap.xml${RU_ORIGIN ? `; Russian on ${RU_ORIGIN} (${RU_OUT}/)` : ''}`);
+console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')} (the QR tools also in ${QR_LOCALES.filter((l) => !isSiteLocale(l)).join(', ')}), the app in ${ALL_LOCALES.join(', ')}, robots.txt, sitemap.xml${RU_ORIGIN ? `; Russian on ${RU_ORIGIN} (${RU_OUT}/)` : ''}`);

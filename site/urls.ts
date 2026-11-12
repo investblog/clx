@@ -10,7 +10,7 @@
 // (https://ru.clx.cx), Russian pages live there, without the `/ru` prefix, and a link between the
 // two hosts is absolute. The app and the sign-in card stay on clx.cx (`/ru/app`, `/ru/signin#login`): they
 // need the API. Without it everything is on clx.cx, as before.
-import { APP_PATH, LOCALES, ORIGIN, type Locale } from './pages.ts';
+import { APP_PATH, LOCALES, ORIGIN, SITE_PAGES, type Locale, type PageLocale } from './pages.ts';
 
 /** Set to 'https://ru.clx.cx' once that host serves the Russian pages (both builds then agree). */
 const RU_LIVE: string | null = 'https://ru.clx.cx';
@@ -21,7 +21,7 @@ export const RU_ORIGIN: string | null = RU_ENV === 'off' ? null : RU_ENV || RU_L
 
 export type Host = 'main' | 'ru';
 /** The host a language's pages are on. */
-export const hostOf = (locale: Locale): Host => (locale === 'ru' && RU_ORIGIN ? 'ru' : 'main');
+export const hostOf = (locale: PageLocale): Host => (locale === 'ru' && RU_ORIGIN ? 'ru' : 'main');
 export const originOf = (host: Host): string => (host === 'ru' ? RU_ORIGIN! : ORIGIN);
 
 /** The host of the page being written: links to its own host are paths, to the other — URLs. */
@@ -31,21 +31,30 @@ export const renderingHost = (): Host => rendering;
 const link = (host: Host, path: string): string => (host === rendering ? path : `${originOf(host)}${path}`);
 
 /** The language's prefix on clx.cx: '' for English, `/ru` for Russian. */
-const mainPrefix = (locale: Locale): string => (locale === 'en' ? '' : `/${locale}`);
+const mainPrefix = (locale: PageLocale): string => (locale === 'en' ? '' : `/${locale}`);
 /** The prefix on the language's own host: none on the Russian host. */
-export const prefixFor = (locale: Locale): string => (hostOf(locale) === 'ru' ? '' : mainPrefix(locale));
+export const prefixFor = (locale: PageLocale): string => (hostOf(locale) === 'ru' ? '' : mainPrefix(locale));
 
 /** The path on the page's own host: `/privacy`, `/ru/privacy`, `/`, `/ru` (or `/privacy`, `/` on ru.clx.cx). */
-export function localPathFor(slug: string, locale: Locale): string {
+export function localPathFor(slug: string, locale: PageLocale): string {
   const prefix = prefixFor(locale);
   if (slug === '/') return prefix || '/';
   return `${prefix}${slug}`;
 }
 
-export const urlFor = (slug: string, locale: Locale): string => `${originOf(hostOf(locale))}${localPathFor(slug, locale)}`;
+export const urlFor = (slug: string, locale: PageLocale): string => `${originOf(hostOf(locale))}${localPathFor(slug, locale)}`;
 
 /** A link to the page from the page being written: a path on the same host, else the full URL. */
-export const pathFor = (slug: string, locale: Locale): string => link(hostOf(locale), localPathFor(slug, locale));
+export const pathFor = (slug: string, locale: PageLocale): string => link(hostOf(locale), localPathFor(slug, locale));
+
+/** The language a link from a page in `locale` reaches a page of the table in: `locale` if the page
+ *  has it, else English (a QR-only language's links to the rest of the site, ADR 0046). */
+export const linkLocale = (slug: string, locale: PageLocale): PageLocale => {
+  const page = SITE_PAGES.find((p) => p.slug === slug);
+  return page && !page.locales.includes(locale) && page.locales.includes('en') ? 'en' : locale;
+};
+/** A link to a page of the table in a language, or to its English page if it lacks that language. */
+export const pagePathFor = (slug: string, locale: PageLocale): string => pathFor(slug, linkLocale(slug, locale));
 
 /** The app of a language (ADR 0015): `/app`, `/ru/app` — the language until the person signs in.
  *  Always on clx.cx. */
@@ -62,7 +71,7 @@ export const authPathFor = (locale: Locale, tab: AuthTab): string => link('main'
 
 /** The file in its host's output: `index.html`, `ru.html`, `privacy.html`, `ru/privacy.html` (or
  *  `index.html`, `privacy.html` in the Russian host's own directory). */
-export function fileFor(slug: string, locale: Locale): string {
+export function fileFor(slug: string, locale: PageLocale): string {
   const prefix = prefixFor(locale);
   if (slug === '/') return prefix ? `${prefix.slice(1)}.html` : 'index.html';
   return `${prefix ? `${prefix.slice(1)}/` : ''}${slug.slice(1)}.html`;
@@ -72,7 +81,7 @@ export function fileFor(slug: string, locale: Locale): string {
 export const appFileFor = (locale: Locale): string => `${mainPrefix(locale) ? `${mainPrefix(locale).slice(1)}/` : ''}${APP_PATH.slice(1)}.html`;
 
 /** The page's Open Graph card (scripts/build-og.mjs draws it): `/og/en/home.png`, `/og/ru/pricing.png`. */
-export const ogImagePath = (slug: string, locale: Locale): string => `/og/${locale}/${slug === '/' ? 'home' : slug.slice(1)}.png`;
+export const ogImagePath = (slug: string, locale: PageLocale): string => `/og/${locale}/${slug === '/' ? 'home' : slug.slice(1)}.png`;
 
 export interface Alternate {
   hreflang: string;
@@ -83,7 +92,7 @@ export interface Alternate {
  * The page's `<link rel="alternate">`: every language it has, plus `x-default` on the English one.
  * The same list makes the language switch, so the switch cannot offer a language the page lacks.
  */
-export function alternatesFor(slug: string, locales: readonly Locale[]): Alternate[] {
+export function alternatesFor(slug: string, locales: readonly PageLocale[]): Alternate[] {
   const list: Alternate[] = [];
   if (locales.includes('en')) list.push({ hreflang: 'x-default', href: urlFor(slug, 'en') });
   for (const locale of locales) list.push({ hreflang: LOCALES[locale].htmlLang, href: urlFor(slug, locale) });

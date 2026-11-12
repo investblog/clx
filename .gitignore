@@ -49,6 +49,12 @@ public/qr.js
 public/app.css
 public/*.html
 public/ru/
+# the QR pages in the extension's other languages (ADR 0046)
+public/de/
+public/es/
+public/fr/
+public/pt-br/
+public/tr/
 public/robots.txt
 public/sitemap.xml
 public/keywords.json

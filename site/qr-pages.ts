@@ -5,12 +5,11 @@
 // worker's (github.com/investblog/qr-generator at the commit scripts/deploy-qr.mjs pins) and was
 // measured on qr.clx.cx (scripts/probe-qr.mjs, docs/cloudflare-facts.md).
 import { escapeHtml, seeAlso } from './layout.ts';
-import type { Locale } from './pages.ts';
-import { API, MAX_DATA, PRESETS, svgFor } from './qr-core.ts';
-import { pathFor } from './urls.ts';
-
-/** The extension's name in the stores (its _locales), chosen 12.11 (ADR 0045). */
-export const EXTENSION_NAME = 'SVG QR Code Generator';
+import type { PageLocale } from './pages.ts';
+import { API, EXTENSION_NAME, MAX_DATA, PRESETS, svgFor } from './qr-core.ts';
+import { QR_TEXT } from './qr-i18n/index.ts';
+import type { ExtensionText, GeneratorText } from './qr-text.ts';
+import { pagePathFor, pathFor } from './urls.ts';
 /** Its listings, by store id (the slugs carry the old name and may stay): the browser, its icon in
  *  /icons.svg, the store's name and the listing. No Opera: its store takes no new extensions. */
 const STORES: { browser: string; icon: string; store: string; url: string }[] = [
@@ -31,7 +30,7 @@ const code = (s: string) => `<pre><code>${escapeHtml(s)}</code></pre>`;
 
 const SAMPLE = 'https://example.com';
 
-const GENERATOR = {
+const GENERATOR: Record<PageLocale, GeneratorText> = {
   en: {
     title: 'Free SVG QR code generator, no sign-up — clx',
     description: 'Make a QR code as a small SVG in your browser: pick the size and error correction, download it, or copy a link to the image for your page. Free, no sign-up.',
@@ -51,7 +50,7 @@ const GENERATOR = {
       h: 'Questions',
       items: [
         ['Is the generator free?', 'Yes, with no sign-up and no limit on how many codes you make: they are drawn in your browser. The API at qr.clx.cx needs no key either.'],
-        ['How do I open a page from my computer on my phone?', `Paste the page’s address here and point the phone’s camera at the code: the page opens on the phone, with no sending the link to yourself and no account. The browser extension does it in one click — it shows the code of the page you are on.`],
+        ['How do I open a page from my computer on my phone?', 'Paste the page’s address here, scan the code with the phone’s camera and tap the link that appears: the page opens on the phone — no sending the link to yourself, no account. The browser extension spares you the pasting: it makes the code of the page you are on.'],
         ['Is there a browser extension?', `Yes, a free one: ${EXTENSION_NAME}, for Chrome, Firefox and Edge. In a side panel it makes a QR code for the page you are on or for any text — an SVG, a link and snippets to embed, as here — and sends nothing anywhere.`],
         ['Do QR codes made here expire?', 'No. A QR code holds its text itself; it works as long as what it points to does. The image link works as long as the API does.'],
         ['Which error correction should I choose?', 'M for screens and most print; Q or H for print that may get scratched or a logo laid over it. Higher levels make the code denser.'],
@@ -81,7 +80,7 @@ const GENERATOR = {
       h: 'Вопросы',
       items: [
         ['Генератор бесплатный?', 'Да, без регистрации и без ограничения числа кодов: они рисуются в вашем браузере. API qr.clx.cx тоже работает без ключа.'],
-        ['Как открыть страницу с компьютера на телефоне?', 'Вставьте сюда адрес страницы и наведите на код камеру телефона — страница откроется на телефоне, без пересылки ссылки самому себе и без входа в аккаунт. Расширение для браузера делает это в один клик: оно сразу показывает код открытой страницы.'],
+        ['Как открыть страницу с компьютера на телефоне?', 'Вставьте сюда адрес страницы, отсканируйте код камерой телефона и нажмите появившуюся ссылку — страница откроется на телефоне, без пересылки ссылки самому себе и без входа в аккаунт. Расширение для браузера избавляет от вставки: оно делает код открытой страницы.'],
         ['Есть расширение для браузера?', `Да, бесплатное: ${EXTENSION_NAME} для Chrome, Firefox и Edge. В боковой панели оно делает QR-код для открытой страницы или любого текста — SVG, ссылку и код для вставки, как здесь, — и ничего никуда не отправляет.`],
         ['QR-коды отсюда перестают работать?', 'Нет. QR-код хранит текст в себе и работает, пока работает то, куда он ведёт. Ссылка на картинку работает, пока работает API.'],
         ['Какую коррекцию ошибок выбрать?', 'M — для экранов и большинства печати; Q или H — для печати, которую могут поцарапать, или если поверх кладётся логотип. Чем выше уровень, тем плотнее код.'],
@@ -91,12 +90,18 @@ const GENERATOR = {
     },
     ext: { link: 'Бесплатное расширение для браузера →', group: `Установить ${EXTENSION_NAME}` },
     more: [['Короткие ссылки с QR-кодами', '/short-links'], ['Расширение для браузера', '/qr-code-extension'], ['Конфиденциальность QR-инструментов', '/qr-code-privacy']] as [string, string][],
+    api: 'API qr.clx.cx (English)',
   },
+  de: QR_TEXT.de.generator,
+  es: QR_TEXT.es.generator,
+  fr: QR_TEXT.fr.generator,
+  'pt-br': QR_TEXT['pt-br'].generator,
+  tr: QR_TEXT.tr.generator,
 };
 
 const options = (items: [string, string][], selected: string) => items.map(([v, label]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
 
-export function generatorPage(locale: Locale): Page {
+export function generatorPage(locale: PageLocale): Page {
   const g = GENERATOR[locale];
   const first = svgFor(SAMPLE, 'sq250', 'M', 2)!;
   const bytes = new TextEncoder().encode(first).length;
@@ -123,7 +128,7 @@ export function generatorPage(locale: Locale): Page {
     <noscript><p>${escapeHtml(g.out.noscript)} ${en('/qr-code-api', 'qr.clx.cx')}</p></noscript>
   </div>
 </section>`;
-  const more = locale === 'en' ? seeAlso(g.more, locale) : `<p class="see-also">${g.more.map(([name, slug]) => `<a href="${pathFor(slug, locale)}">${escapeHtml(name)} →</a>`).join('')}${en('/qr-code-api', 'API qr.clx.cx (English) →')}</p>`;
+  const more = locale === 'en' ? seeAlso(g.more, locale) : `<p class="see-also">${g.more.map(([name, slug]) => `<a href="${pagePathFor(slug, locale)}">${escapeHtml(name)} →</a>`).join('')}${en('/qr-code-api', `${g.api ?? 'API qr.clx.cx'} →`)}</p>`;
   const body = `<section class="hero qr-hero">
   <h1>${escapeHtml(g.h1)}</h1>
   <p class="lead">${escapeHtml(g.lead)}</p>
@@ -142,7 +147,7 @@ ${tool}
 }
 
 /** The generator's questions, for its FAQPage JSON-LD (site/build.ts). */
-export const generatorQuestions = (locale: Locale): [string, string][] => GENERATOR[locale].faq.items;
+export const generatorQuestions = (locale: PageLocale): [string, string][] => GENERATOR[locale].faq.items;
 
 export function apiPage(): Page {
   const example = 'https://example.com';
@@ -216,21 +221,22 @@ ${code(`<!-- HTML -->
   return { title: 'QR code API: free SVG QR codes over HTTP — clx', description: 'A free API for QR codes as small SVG images: no key, no account, nothing stored. Endpoints, parameters, the canonical URL and its hash, limits, errors.', body };
 }
 
-const EXTENSION = {
+const EXTENSION: Record<PageLocale, ExtensionText> = {
   en: {
     title: 'QR code generator browser extension — clx',
     description: 'A free browser extension that makes SVG QR codes in a side panel for the page you are on or any text: download, copy, share a link or an embed snippet.',
     lead: `${EXTENSION_NAME} is a free browser extension that makes a QR code in a side panel — for the page you are on or for any text — as a small SVG, with a link and snippets to embed it. It sends nothing anywhere.`,
     install: 'Install',
     blocks: [
-      ['Getting started', ['Click the extension’s icon: its side panel opens (a sidebar in Firefox).', 'With “Auto-generate on open”, it shows a QR code for the current page at once.', 'To open the same page on your phone, point the phone’s camera at the code: no sending the link to yourself.', 'Copy the share link, copy or download the SVG, or take a snippet from the Embed tab.']],
+      ['Getting started', ['Click the extension’s icon: its side panel opens (a sidebar in Firefox).', 'With “Auto-generate on open”, it shows a QR code for the current page at once.', 'To open the same page on your phone, scan the code with the phone’s camera and tap the link that appears: no sending the link to yourself.', 'Copy the share link, copy or download the SVG, or take a snippet from the Embed tab.']],
       ['Generate', ['Current page — the address of the active tab; press refresh after you move to another page.', `Custom input — any URL or text, up to ${MAX_DATA.toLocaleString('en')} characters (an emoji counts two).`, 'Size: 125, 200, 250 or 300 px. ECC (error correction): L 7%, M 15%, Q 25%, H 30% — higher is sturdier but denser.', 'Copy Share Link — a link to the image on the QR code API, with the text in it; there is none for text over 2,048 characters. Copy SVG and Download SVG work for any code.']],
       ['Embed', ['Snippets with the same link: HTML <img>, HTML <object>, Markdown, React and Vue — Copy Snippet, or Copy Canonical URL for the link alone.', 'Links copied with versions before 1.1.0 had no text in them and no longer work: copy them again from History.']],
       ['History and settings', ['A code is saved to History when you press Copy Share Link on the Generate tab: its text, the time, size and ECC. Clear all removes it.', 'Settings: default size and ECC, Auto-generate on open, History limit (25, 50 or 100), the theme.', 'History and settings stay in your browser (storage.local) and are not synced.']],
-      ['Privacy and permissions', ['From version 1.1.0 the extension makes no network requests: codes and links are made in the browser. Earlier versions sent each code’s text to the old API.', 'A share link carries its text: whoever opens it or scans the code can read it.', 'Permissions: side panel (its window; Firefox has a sidebar and needs none), storage (settings and history), active tab and tabs (the address of the current page).']],
+      ['Privacy and permissions', ['From version 1.1.0 the extension makes no network requests: codes and links are made in the browser. Earlier versions sent each code’s text to the old API.', 'A share link carries its text: whoever opens it or scans the code can read it.', 'Permissions: side panel (its window; Firefox has a sidebar and needs none), storage (settings and history), tabs (the address of the current page).']],
     ] as [string, string[]][],
     more: 'The policy in full: ',
     policy: 'privacy of the QR tools',
+    api: 'The QR code API it links to:',
     also: [['QR code generator on the web', '/qr-code-generator']] as [string, string][],
   },
   ru: {
@@ -239,19 +245,25 @@ const EXTENSION = {
     lead: `${EXTENSION_NAME} — бесплатное расширение для браузера: QR-код в боковой панели для открытой страницы или любого текста, лёгким SVG, со ссылкой и готовым кодом для вставки. Оно ничего никуда не отправляет.`,
     install: 'Установить',
     blocks: [
-      ['Начало', ['Нажмите значок расширения — откроется боковая панель (в Firefox — боковая колонка).', 'С настройкой «Авто-генерация при открытии» она сразу покажет QR-код текущей страницы.', 'Чтобы открыть ту же страницу на телефоне, наведите на код камеру телефона — не нужно пересылать ссылку самому себе.', 'Скопируйте ссылку, скопируйте или скачайте SVG, либо возьмите сниппет на вкладке «Код».']],
+      ['Начало', ['Нажмите значок расширения — откроется боковая панель (в Firefox — боковая колонка).', 'С настройкой «Авто-генерация при открытии» она сразу покажет QR-код текущей страницы.', 'Чтобы открыть ту же страницу на телефоне, отсканируйте код камерой телефона и нажмите появившуюся ссылку — не нужно пересылать её самому себе.', 'Скопируйте ссылку, скопируйте или скачайте SVG, либо возьмите сниппет на вкладке «Код».']],
       ['Создать', ['«Текущая страница» — адрес активной вкладки; после перехода на другую страницу нажмите кнопку обновления.', `«Свой текст» — любой адрес или текст, до ${MAX_DATA.toLocaleString('ru')} символов (эмодзи считается за два).`, 'Размер: 125, 200, 250 или 300 px. ECC (коррекция ошибок): L 7%, M 15%, Q 25%, H 30% — выше уровень, прочнее код, но плотнее.', '«Скопировать ссылку» — ссылка на картинку в API QR-кодов, с текстом внутри; для текста длиннее 2048 символов её нет. «Скопировать SVG» и «Скачать SVG» работают для любого кода.']],
       ['Код', ['Сниппеты с той же ссылкой: HTML <img>, HTML <object>, Markdown, React и Vue — «Скопировать сниппет» или «Скопировать URL», если нужна только ссылка.', 'Ссылки, скопированные в версиях до 1.1.0, не содержали текста и больше не работают: скопируйте их заново из истории.']],
       ['История и настройки', ['Код попадает в историю, когда вы нажимаете «Скопировать ссылку» на вкладке «Создать»: текст, время, размер и ECC. «Очистить» удаляет историю.', 'Настройки: размер и уровень ECC по умолчанию, «Авто-генерация при открытии», «Лимит истории» (25, 50 или 100), тема.', 'История и настройки хранятся в вашем браузере (storage.local) и не синхронизируются.']],
-      ['Приватность и разрешения', ['С версии 1.1.0 расширение не делает сетевых запросов: коды и ссылки создаются в браузере. Прежние версии отправляли текст каждого кода старому API.', 'Ссылка несёт свой текст: его прочтёт любой, кто её откроет или отсканирует код. Картинки по ссылкам рисует API на Cloudflare — из России они могут не открываться без VPN; SVG из расширения работает везде.', 'Разрешения: боковая панель (окно расширения; в Firefox — боковая колонка, разрешение не нужно), хранилище (настройки и история), активная вкладка и вкладки (адрес текущей страницы).']],
+      ['Приватность и разрешения', ['С версии 1.1.0 расширение не делает сетевых запросов: коды и ссылки создаются в браузере. Прежние версии отправляли текст каждого кода старому API.', 'Ссылка несёт свой текст: его прочтёт любой, кто её откроет или отсканирует код. Картинки по ссылкам рисует API на Cloudflare — из России они могут не открываться без VPN; SVG из расширения работает везде.', 'Разрешения: боковая панель (окно расширения; в Firefox — боковая колонка, разрешение не нужно), хранилище (настройки и история), вкладки (адрес текущей страницы).']],
     ] as [string, string[]][],
     more: 'Политика целиком: ',
     policy: 'конфиденциальность QR-инструментов',
+    api: 'API, на который ведут его ссылки:',
     also: [['Генератор QR-кодов на сайте', '/qr-code-generator']] as [string, string][],
   },
+  de: QR_TEXT.de.extension,
+  es: QR_TEXT.es.extension,
+  fr: QR_TEXT.fr.extension,
+  'pt-br': QR_TEXT['pt-br'].extension,
+  tr: QR_TEXT.tr.extension,
 };
 
-export function extensionPage(locale: Locale): Page {
+export function extensionPage(locale: PageLocale): Page {
   const x = EXTENSION[locale];
   const stores = storeButtons('store');
   const body = `<article class="doc">
@@ -260,7 +272,7 @@ export function extensionPage(locale: Locale): Page {
 <h2>${escapeHtml(x.install)}</h2>
 <p class="actions">${stores}</p>
 ${x.blocks.map(([h, items]) => `<h2>${escapeHtml(h)}</h2>\n<ul>${items.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`).join('\n')}
-<p>${escapeHtml(x.more)}<a href="${pathFor('/qr-code-privacy', locale)}">${escapeHtml(x.policy)}</a>. ${locale === 'en' ? 'The QR code API it links to:' : 'API, на который ведут его ссылки:'} ${en('/qr-code-api', 'qr.clx.cx')}.</p>
+<p>${escapeHtml(x.more)}<a href="${pathFor('/qr-code-privacy', locale)}">${escapeHtml(x.policy)}</a>. ${escapeHtml(x.api)} ${en('/qr-code-api', 'qr.clx.cx')}.</p>
 ${seeAlso(x.also, locale)}
 </article>`;
   return { title: x.title, description: x.description, body };

@@ -2,9 +2,9 @@
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
 import * as FLAGS from 'country-flag-icons/string/3x2';
-import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, type Locale, type PageDef } from './pages.ts';
-import { STRINGS } from './i18n.ts';
-import { alternatesFor, appPathFor, authPathFor, ogImagePath, pathFor, renderingHost, urlFor } from './urls.ts';
+import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, siteLocaleOf, type PageDef, type PageLocale } from './pages.ts';
+import { chrome } from './i18n.ts';
+import { alternatesFor, appPathFor, authPathFor, ogImagePath, pagePathFor, pathFor, renderingHost, urlFor } from './urls.ts';
 
 export function escapeHtml(v: string): string {
   return v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -12,18 +12,18 @@ export function escapeHtml(v: string): string {
 
 /** A row of links to related pages of the same language, each "name →": the site's internal links
  *  in the text, beside the menu and the footer. `slug` may carry a `#fragment`. */
-export function seeAlso(links: readonly (readonly [string, string])[], locale: Locale): string {
+export function seeAlso(links: readonly (readonly [string, string])[], locale: PageLocale): string {
   if (!links.length) return '';
   const href = (slug: string) => {
     const [path, hash] = slug.split('#');
-    return `${pathFor(path!, locale)}${hash ? `#${hash}` : ''}`;
+    return `${pagePathFor(path!, locale)}${hash ? `#${hash}` : ''}`;
   };
   return `<p class="see-also">${links.map(([name, slug]) => `<a href="${href(slug)}">${escapeHtml(name)} →</a>`).join('')}</p>`;
 }
 
 export interface LayoutInput {
   page: PageDef;
-  locale: Locale;
+  locale: PageLocale;
   title: string;
   description?: string;
   /** Markup inside <main>. */
@@ -42,7 +42,7 @@ export interface LayoutInput {
 const RU_CSP = "default-src 'self'; script-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'";
 
 /** Open Graph and the Twitter card of an indexed page; its image is drawn by scripts/build-og.mjs. */
-function social(page: PageDef, locale: Locale, title: string, description: string | undefined): string[] {
+function social(page: PageDef, locale: PageLocale, title: string, description: string | undefined): string[] {
   const others = page.locales.filter((l) => l !== locale);
   return [
     '<meta property="og:type" content="website" />',
@@ -70,34 +70,34 @@ const jsonLdBlock = (nodes: Record<string, unknown>[]): string =>
 const icon = (name: string, cls = 'icon') => `<svg class="${cls}" aria-hidden="true"><use href="/icons.svg#i-mono-${name}"></use></svg>`;
 
 /** A language's flag (country-flag-icons, 3x2, as on spintax.net): English by the British one. */
-const FLAG: Record<Locale, string> = { en: 'GB', ru: 'RU' };
-const flag = (l: Locale) => `<span class="lang-dd__flag" aria-hidden="true">${(FLAGS as Record<string, string>)[FLAG[l]]}</span>`;
+const FLAG: Record<PageLocale, string> = { en: 'GB', ru: 'RU', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
+const flag = (l: PageLocale) => `<span class="lang-dd__flag" aria-hidden="true">${(FLAGS as Record<string, string>)[FLAG[l]]}</span>`;
 
 /** The language switch, after spintax.net's: the current language's flag and code, a menu of every
  *  language. A page of the site links its own languages (the list of its `<link rel="alternate">`);
  *  the app (`page` null) links its address in each, and ui/main.ts keeps the page and, signed in,
  *  saves the account's language (ADR 0021). A `<details>`: it opens without scripts; /theme.js
  *  closes it on a click elsewhere. */
-function langSwitch(page: PageDef | null, locale: Locale): string {
-  const links: [Locale, string][] = page
+function langSwitch(page: PageDef | null, locale: PageLocale): string {
+  const links: [PageLocale, string][] = page
     ? page.indexed && page.locales.length > 1
       ? page.locales.map((l) => [l, pathFor(page.slug, l)])
       : []
     : ALL_LOCALES.map((l) => [l, appPathFor(l)]);
   if (!links.length) return '';
-  const code = (l: Locale) => LOCALES[l].htmlLang.toUpperCase();
+  const code = (l: PageLocale) => LOCALES[l].htmlLang.toUpperCase();
   const items = links.map(
     ([l, href]) =>
       `<a class="lang-dd__item" href="${href}" hreflang="${LOCALES[l].htmlLang}" lang="${LOCALES[l].htmlLang}" data-locale="${l}"${l === locale ? ' aria-current="true"' : ''}>${flag(l)}${escapeHtml(LOCALES[l].label)}</a>`,
   );
-  return `<details class="lang-dd" id="lang-dd"><summary class="lang-dd__btn" aria-label="${escapeHtml(STRINGS[locale].language)}: ${escapeHtml(LOCALES[locale].label)}">${flag(locale)}${code(locale)}</summary><div class="lang-dd__menu">${items.join('')}</div></details>`;
+  return `<details class="lang-dd" id="lang-dd"><summary class="lang-dd__btn" aria-label="${escapeHtml(chrome(locale).language)}: ${escapeHtml(LOCALES[locale].label)}">${flag(locale)}${code(locale)}</summary><div class="lang-dd__menu">${items.join('')}</div></details>`;
 }
 
 /** The menu: the table's `nav` pages, printed in the page, beside the brand. On a phone it folds behind
  *  the menu button — last in the header, where it shows — only once /theme.js has marked the page `js`
  *  (that file also opens it and moves focus into it); without scripts it stays a row of links. */
-function nav(page: PageDef | null, locale: Locale): { menu: string; button: string } {
-  const s = STRINGS[locale];
+function nav(page: PageDef | null, locale: PageLocale): { menu: string; button: string } {
+  const s = chrome(locale);
   const items = navPages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}"${p.slug === page?.slug ? ' aria-current="page"' : ''}>${escapeHtml(s.nav[p.nav!])}</a>`);
   if (!items.length) return { menu: '', button: '' };
   return {
@@ -110,15 +110,17 @@ function nav(page: PageDef | null, locale: Locale): { menu: string; button: stri
  *  language switch leads to the app in each language, and there is no link to the app; ui/main.ts
  *  draws the app's sections in a row under it. On the site the header has "Sign in" (the home page's card, ADR 0026), or "Dashboard" (the app) once
  *  the app has marked this browser signed in (/theme.js shows one of the two before the first paint). */
-export function header(page: PageDef | null, locale: Locale): string {
-  const s = STRINGS[locale];
+export function header(page: PageDef | null, locale: PageLocale): string {
+  const s = chrome(locale);
   const { menu, button } = nav(page, locale);
+  // The sign-in, the app and the home page are in the site's languages: a QR-only page leads to English.
+  const site = siteLocaleOf(locale);
   const app = page
-    ? `<a class="btn btn--ghost btn--sm when-signed-out" href="${authPathFor(locale, 'login')}">${escapeHtml(s.signIn)}</a><a class="btn btn--ghost btn--sm when-signed-in" href="${appPathFor(locale)}">${escapeHtml(s.dashboard)}</a>`
+    ? `<a class="btn btn--ghost btn--sm when-signed-out" href="${authPathFor(site, 'login')}">${escapeHtml(s.signIn)}</a><a class="btn btn--ghost btn--sm when-signed-in" href="${appPathFor(site)}">${escapeHtml(s.dashboard)}</a>`
     : '';
   return `<header class="topbar">
   <div class="topbar__inner">
-    <p class="brand"><a href="${pathFor('/', locale)}">${icon('clx', 'icon brand__mark')}<span>clx</span></a></p>
+    <p class="brand"><a href="${pathFor('/', site)}">${icon('clx', 'icon brand__mark')}<span>clx</span></a></p>
     ${menu}
     ${langSwitch(page, locale)}
     <button type="button" class="btn-close" id="theme" aria-label="${escapeHtml(s.theme)}" title="${escapeHtml(s.theme)}">${icon('theme-light-dark')}</button>
@@ -128,17 +130,17 @@ export function header(page: PageDef | null, locale: Locale): string {
 </header>`;
 }
 
-export function footer(locale: Locale): string {
-  const s = STRINGS[locale];
-  const links = footPages(locale).map((p) =>
-    p.locales.includes(locale)
-      ? `<a href="${pathFor(p.slug, locale)}">${escapeHtml(s.foot[p.foot!])}</a>`
-      : `<a href="${pathFor(p.slug, p.locales[0]!)}" hreflang="${LOCALES[p.locales[0]!].htmlLang}">${escapeHtml(s.foot[p.foot!])}</a>`,
-  );
+export function footer(locale: PageLocale): string {
+  const s = chrome(locale);
+  const links = footPages(locale).map((p) => {
+    if (p.locales.includes(locale)) return `<a href="${pathFor(p.slug, locale)}">${escapeHtml(s.foot[p.foot!])}</a>`;
+    const other = p.locales.includes('en') ? 'en' : p.locales[0]!;
+    return `<a href="${pathFor(p.slug, other)}" hreflang="${LOCALES[other].htmlLang}">${escapeHtml(s.foot[p.foot!])}</a>`;
+  });
   links.push(`<a href="${REPO}" rel="noopener">${escapeHtml(s.foot.source)}</a>`);
   // clx has no contact page of its own: questions go through 301.st's form, clx's parent service.
   links.push(`<a href="${COMPANY_URL[locale]}/contact" rel="noopener">${escapeHtml(s.foot.contact)}</a>`);
-  const compare = comparePages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(p.compare![locale]!)}</a>`);
+  const compare = comparePages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}">${escapeHtml(p.compare![siteLocaleOf(locale)]!)}</a>`);
   // The 301.st glyph leads to 301.st, as on catchall.in; its name is in aria-label and title.
   const company = `<a class="site-foot__brand" href="${COMPANY_URL[locale]}" rel="noopener" aria-label="${escapeHtml(s.foot.company)}" title="${escapeHtml(s.foot.company)}"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-301"></use></svg></a>`;
   // The glyph opens the first line, the comparisons are the second.

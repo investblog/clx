@@ -4,7 +4,8 @@
 // language of the page, 2–7 words, noun phrases rather than queries. Picked from Ahrefs search volumes
 // (US and RU, 11.10.2026) and rewritten from queries into phrases that sit inside a sentence.
 // Legal pages and the 404 are not link targets: they have no entry.
-import type { Locale } from './pages.ts';
+import type { PageLocale } from './pages.ts';
+import { QR_TEXT } from './qr-i18n/index.ts';
 
 export interface PageKeywords {
   /** The best single anchor. */
@@ -15,7 +16,7 @@ export interface PageKeywords {
   tags: string[];
 }
 
-export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
+export const KEYWORDS: Record<string, Partial<Record<PageLocale, PageKeywords>>> = {
   '/': {
     en: { primary: 'clx visit counter', keywords: ['clx on your Cloudflare account', 'clx analytics and link shortener', 'open source counter and shortener'], tags: ['analytics', 'short links'] },
     ru: { primary: 'счетчик посещений clx', keywords: ['clx в вашем аккаунте Cloudflare', 'сервис clx', 'счетчик и короткие ссылки clx'], tags: ['аналитика', 'короткие ссылки'] },
@@ -68,6 +69,8 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
   '/qr-code-generator': {
     en: { primary: 'free SVG QR code generator', keywords: ['QR code generator online', 'SVG QR codes in the browser', 'QR code maker without sign-up', 'vector QR code generator', 'QR code for sending links to phones'], tags: ['QR codes', 'tools'] },
     ru: { primary: 'генератор QR-кодов в SVG', keywords: ['бесплатный генератор QR-кодов', 'QR-код онлайн без регистрации', 'векторный QR-код', 'создание QR-кода в браузере', 'QR-код для передачи ссылки на телефон'], tags: ['QR-коды', 'инструменты'] },
+    // The extension's other languages (ADR 0046): site/qr-i18n/<lang>.ts, unmeasured by search volume.
+    ...Object.fromEntries(Object.entries(QR_TEXT).map(([l, t]) => [l, t.keywords.generator])),
   },
   '/qr-code-api': {
     en: { primary: 'free QR code API', keywords: ['QR code generator API', 'SVG QR code REST API', 'QR codes over HTTP', 'QR image API without a key'], tags: ['QR codes', 'developers', 'API'] },
@@ -75,6 +78,7 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
   '/qr-code-extension': {
     en: { primary: 'QR code generator extension', keywords: ['QR code browser extension', 'Chrome QR code extension', 'side panel QR code maker', 'sending the current page to your phone'], tags: ['QR codes', 'browser extension'] },
     ru: { primary: 'расширение-генератор QR-кодов', keywords: ['расширение для браузера с QR-кодами', 'QR-код в боковой панели', 'расширение для создания QR-кодов', 'открытая страница на телефоне по QR-коду'], tags: ['QR-коды', 'расширение для браузера'] },
+    ...Object.fromEntries(Object.entries(QR_TEXT).map(([l, t]) => [l, t.keywords.extension])),
   },
   '/agents': {
     en: { primary: 'MCP server for short links', keywords: ['link shortener for AI agents', 'analytics MCP server', 'agent-ready URL shortener'], tags: ['AI agents', 'developers'] },

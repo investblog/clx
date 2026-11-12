@@ -9,11 +9,20 @@ export const REPO = 'https://github.com/investblog/clx';
 /** The Telegram bot (docs/spec.md §17): the way in where clx.cx does not open. */
 export const BOT_URL = 'https://t.me/clxcxbot';
 /** The footer's glyph links here (site/layout.ts): 301.st, the parent service; its Russian site is 301.ru. */
-export const COMPANY_URL: Record<Locale, string> = { en: 'https://301.st', ru: 'https://301.ru' };
+export const COMPANY_URL: Record<PageLocale, string> = { en: 'https://301.st', ru: 'https://301.ru', de: 'https://301.st', es: 'https://301.st', fr: 'https://301.st', 'pt-br': 'https://301.st', tr: 'https://301.st' };
 /** The app (sign-in and the pages of docs/spec.md §10): a hash-routed page, never indexed. */
 export const APP_PATH = '/app';
 
+/** The site's own languages: every page of clx, the app, the mail and the bot speak them. */
 export type Locale = 'en' | 'ru';
+/** The languages of the free QR code tools' pages alone (ADR 0046) — the extension's: on clx.cx under
+ *  their prefix (`/de/qr-code-generator`); their header, footer and links lead to the English site. */
+export type QrOnlyLocale = 'de' | 'es' | 'fr' | 'pt-br' | 'tr';
+/** A language a page can be in. */
+export type PageLocale = Locale | QrOnlyLocale;
+export const isSiteLocale = (l: PageLocale): l is Locale => l === 'en' || l === 'ru';
+/** The site's language a page in `l` falls back to for what `l` lacks: English for the QR-only ones. */
+export const siteLocaleOf = (l: PageLocale): Locale => (isSiteLocale(l) ? l : 'en');
 
 export interface LocaleMeta {
   /** `<html lang>` and hreflang. */
@@ -24,16 +33,23 @@ export interface LocaleMeta {
   label: string;
 }
 
-export const LOCALES: Record<Locale, LocaleMeta> = {
+export const LOCALES: Record<PageLocale, LocaleMeta> = {
   en: { htmlLang: 'en', ogLocale: 'en_US', label: 'English' },
   ru: { htmlLang: 'ru', ogLocale: 'ru_RU', label: 'Русский' },
+  de: { htmlLang: 'de', ogLocale: 'de_DE', label: 'Deutsch' },
+  es: { htmlLang: 'es', ogLocale: 'es_ES', label: 'Español' },
+  fr: { htmlLang: 'fr', ogLocale: 'fr_FR', label: 'Français' },
+  'pt-br': { htmlLang: 'pt-BR', ogLocale: 'pt_BR', label: 'Português (Brasil)' },
+  tr: { htmlLang: 'tr', ogLocale: 'tr_TR', label: 'Türkçe' },
 };
 export const ALL_LOCALES: readonly Locale[] = ['en', 'ru'];
+/** The QR code tools' pages: the site's languages and the extension's others. */
+export const QR_LOCALES: readonly PageLocale[] = ['en', 'ru', 'de', 'es', 'fr', 'pt-br', 'tr'];
 
 export interface PageDef {
   /** The path without the language prefix and without a trailing slash: "/" or "/privacy". */
   slug: string;
-  locales: readonly Locale[];
+  locales: readonly PageLocale[];
   /** Key in `Strings.foot`: the page is linked from the footer. */
   foot?: 'how' | 'openSource' | 'qr' | 'agents' | 'api' | 'privacy' | 'terms';
   /** Key in `Strings.nav`: the page is in the header's menu, in the table's order. */
@@ -69,14 +85,14 @@ export const SITE_PAGES: readonly PageDef[] = [
   // How it runs and the code, from the footer (site/products.ts).
   { slug: '/how-it-works', locales: ALL_LOCALES, foot: 'how', indexed: true, priority: 0.7, changefreq: 'monthly' },
   { slug: '/open-source', locales: ALL_LOCALES, foot: 'openSource', indexed: true, priority: 0.6, changefreq: 'monthly' },
-  // The free QR code generator and its API on qr.clx.cx (site/qr-pages.ts, ADRs 0044, 0045): the
-  // generator and the browser extension in both languages (the extension speaks both), the generator in
-  // every footer; the API in English, like /api; their privacy policy a legal page of its own, the
-  // address the extension's stores show.
-  { slug: '/qr-code-generator', locales: ALL_LOCALES, foot: 'qr', indexed: true, priority: 0.8, changefreq: 'monthly' },
+  // The free QR code generator and its API on qr.clx.cx (site/qr-pages.ts, ADRs 0044–0046): the
+  // generator and the browser extension in the extension's seven languages, the generator in every
+  // footer; the API in English, like /api; their privacy policy a legal page of its own, the address
+  // the extension's stores show.
+  { slug: '/qr-code-generator', locales: QR_LOCALES, foot: 'qr', indexed: true, priority: 0.8, changefreq: 'monthly' },
   { slug: '/qr-code-api', locales: ['en'], indexed: true, priority: 0.6, changefreq: 'monthly' },
-  { slug: '/qr-code-extension', locales: ALL_LOCALES, indexed: true, priority: 0.6, changefreq: 'monthly' },
-  { slug: '/qr-code-privacy', locales: ALL_LOCALES, legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
+  { slug: '/qr-code-extension', locales: QR_LOCALES, indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/qr-code-privacy', locales: QR_LOCALES, legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   // For agents and integrators; English only — the reader is a program (site/agents.ts, site/api.ts).
   { slug: '/agents', locales: ['en'], foot: 'agents', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
   { slug: '/api', locales: ['en'], foot: 'api', indexed: true, priority: 0.8, changefreq: 'monthly', markdown: true },
@@ -90,14 +106,15 @@ export const SITE_PAGES: readonly PageDef[] = [
 /** Hand-written files in public/ every build needs (the rest is generated). */
 export const STATIC_FILES: readonly string[] = ['_headers', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png', 'icons.svg', 'sitemap.xsl', 'theme.js', 'fonts/onest-latin.woff2', 'fonts/onest-latin-ext.woff2', 'fonts/onest-cyrillic.woff2', 'fonts/OFL.txt'];
 
-/** The footer of a language: its own pages, and the English-only ones (the agent docs) in English. */
-export const footPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.foot && (p.locales.includes(locale) || p.locales.length === 1));
+/** The footer of a language: its own pages, and the English-only ones (the agent docs) in English; a
+ *  QR-only language has every footer page, those it lacks in English. */
+export const footPages = (locale: PageLocale): PageDef[] => SITE_PAGES.filter((p) => p.foot && (p.locales.includes(locale) || p.locales.length === 1 || !isSiteLocale(locale)));
 
-/** The comparison pages of a language, for its footer. */
-export const comparePages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.compare?.[locale] && p.locales.includes(locale));
+/** The comparison pages of a language, for its footer: none in a QR-only one. */
+export const comparePages = (locale: PageLocale): PageDef[] => (isSiteLocale(locale) ? SITE_PAGES.filter((p) => p.compare?.[locale] && p.locales.includes(locale)) : []);
 
-/** The header's menu of a language. */
-export const navPages = (locale: Locale): PageDef[] => SITE_PAGES.filter((p) => p.nav && p.locales.includes(locale));
+/** The header's menu of a language: none in a QR-only one, which has no product page. */
+export const navPages = (locale: PageLocale): PageDef[] => SITE_PAGES.filter((p) => p.nav && p.locales.includes(locale));
 
 /** The markdown file of a page: `index.md`, `agents.md`. */
 export const markdownFile = (slug: string): string => (slug === '/' ? 'index.md' : `${slug.slice(1)}.md`);

@@ -28,6 +28,10 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       from `clx.cx/ru/…`, the generator in a browser on both hosts (no request while typing, the
       download equal to the API's image), `scripts/probe-qr.mjs` 22/22. The extension is "SVG QR
       Code Generator" (ADR 0045); no Opera listing — its store takes no new extensions.
+- [x] The generator, the extension's page and their policy in the extension's seven languages
+      (ADR 0046, 12.11): de, es, fr, pt-br, tr on clx.cx under their prefix.
+- [ ] Optional: a native speaker's read of the five translations (written by an AI translator against
+      the English text and the extension's labels), the policy first.
 - [ ] The extension's release with the new name and links to these pages, then the old site's
       domain forwarded to `/qr-code-generator`.
 - [x] A way to ask for the `api` plan: `/support` in the bot (§17, ADR 0031), named on /agents, /api,

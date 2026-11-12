@@ -1,0 +1,68 @@
+<h1 class="h3">Privacidad de las herramientas de códigos QR</h1>
+<p class="muted text-sm">Versión del 12 de noviembre de 2026.</p>
+<p class="muted text-sm">Esta es una traducción; prevalece la versión en inglés. <a href="https://clx.cx/qr-code-privacy" hreflang="en">Versión en inglés</a>.</p>
+<p>
+  Esta política cubre las herramientas gratuitas de códigos QR de clx: el <a href="/qr-code-generator">generador de códigos QR</a>
+  de este sitio, la API de códigos QR en <code>qr.clx.cx</code> y la extensión para el navegador
+  (<a href="/qr-code-extension">su página</a>). Ninguna de ellas necesita cuenta, instala cookies, muestra anuncios ni usa analítica.
+  La política de las cuentas de clx está en <a href="/privacy">otra página (en inglés)</a>.
+</p>
+
+<h2 class="h4">El generador de este sitio</h2>
+<p>
+  El código QR se dibuja en tu navegador. Lo que escribes no se envía a ningún sitio: la página no hace
+  ninguna petición con ello. El enlace a la imagen y el HTML que muestra también se construyen en el
+  navegador; solo llegan a la API cuando alguien los abre. El generador no guarda nada de lo que escribes
+  ni instala cookies; lo que guarda el propio sitio (el tema, el código de un socio que llega en un enlace)
+  se describe en la <a href="/privacy">página de privacidad de clx (en inglés)</a>.
+</p>
+
+<h2 class="h4">La API en qr.clx.cx</h2>
+<p>
+  La API recibe una petición cuando se abre un enlace a ella: lo abres tú o el navegador de cualquiera
+  que vea una página o un correo electrónico que muestre esa imagen. La petición lleva el texto que se
+  codifica, el tamaño, la corrección de errores y el margen y, como cualquier petición en la web, la
+  dirección IP de quien la ve, su navegador (User-Agent) y a menudo la página de la que viene (Referer). La API:
+</p>
+<ul>
+  <li>usa el texto solo para dibujar la imagen y comprobar el hash del enlace;</li>
+  <li>no guarda registros de las peticiones ni almacena ninguna imagen; solo las respuestas de <code>/qr.inline</code> permanecen 24 horas en la caché de Cloudflare, indexadas por su dirección completa, y después caducan;</li>
+  <li>no cuenta, no perfila ni sigue a nadie.</li>
+</ul>
+<p>
+  Un código QR no es un secreto: cualquiera que tenga su enlace o lo escanee puede leer su texto. No
+  codifiques contraseñas ni otros secretos.
+</p>
+
+<h2 class="h4">La extensión para el navegador</h2>
+<p>
+  Desde la versión 1.1.0, la extensión no hace ninguna petición de red: los códigos y los enlaces para
+  compartir se crean en el navegador. Las versiones anteriores a la 1.1.0 enviaban el texto de cada
+  código que creaban a la API en su antigua dirección, qr.qrcgen.com. Los permisos de la extensión:
+</p>
+<ul>
+  <li>panel lateral: para mostrar su ventana (Chrome, Edge; Firefox muestra una barra lateral sin necesidad de permiso);</li>
+  <li>almacenamiento: para guardar tus ajustes (tema, tamaño y corrección de errores predeterminados, límite del historial, generación al abrir) y el historial de los códigos cuyo enlace copiaste, solo en tu navegador;</li>
+  <li>pestañas: para leer la dirección de la página actual y generar su código.</li>
+</ul>
+<p>Nada de lo que guarda la extensión sale de tu navegador ni se sincroniza; al desinstalarla, se elimina.</p>
+
+<h2 class="h4">Quién trata los datos</h2>
+<p>
+  La API y las páginas de este sitio funcionan en Cloudflare (Workers), salvo las páginas en ruso
+  (ru.clx.cx), que están en GitHub Pages; cada uno trata las peticiones que sirve como su proveedor de alojamiento,
+  según su propia política. No añadimos analítica de Cloudflare ni de nadie más; solo vemos el número de
+  peticiones y de errores que Cloudflare muestra a cualquier cuenta, sin su contenido. Ningún dato se vende
+  ni se comparte con nadie más.
+</p>
+
+<h2 class="h4">Menores</h2>
+<p>Las herramientas de códigos QR no recogen intencionadamente información personal de nadie, menores incluidos, y no guardan nada más allá de la caché de 24 horas de <code>/qr.inline</code> descrita arriba; lo que una petición lleva por sí misma también se describe allí.</p>
+
+<h2 class="h4">Cambios y preguntas</h2>
+<p>
+  Si esta política cambia, cambia la fecha de arriba. Preguntas: mediante el formulario de contacto
+  enlazado al pie de cada página, o como una incidencia (issue) en el repositorio de la API,
+  <a href="https://github.com/investblog/qr-generator">github.com/investblog/qr-generator</a>.
+  Uso indebido de un código QR: <a href="/abuse">cómo denunciarlo (en inglés)</a>.
+</p>

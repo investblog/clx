@@ -1,7 +1,9 @@
 // The site's words, one object per language with the same shape: a key missing in one language
 // fails `tsc`, never falls back to English silently. The app's words live in ui/ (part 3 of the
 // product plan moves them into dictionaries too).
-import type { Locale } from './pages.ts';
+import { isSiteLocale, type Locale, type PageLocale } from './pages.ts';
+import { QR_TEXT } from './qr-i18n/index.ts';
+import type { Chrome } from './qr-text.ts';
 
 export interface Strings {
   /** `<title>` suffix and the brand's accessible name. */
@@ -254,3 +256,6 @@ const ru: Strings = {
 };
 
 export const STRINGS: Record<Locale, Strings> = { en, ru };
+
+/** The header's and the footer's words of a page's language: a QR-only one (ADR 0046) has these alone. */
+export const chrome = (l: PageLocale): Chrome => (isSiteLocale(l) ? STRINGS[l] : QR_TEXT[l].chrome);

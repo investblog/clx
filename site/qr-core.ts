@@ -7,6 +7,8 @@ import QR from '@spintax/qr-svg';
 
 export const API = 'https://qr.clx.cx';
 export const MAX_DATA = 2048;
+/** The browser extension's name in the stores (its _locales), chosen 12.11 (ADR 0045). */
+export const EXTENSION_NAME = 'SVG QR Code Generator';
 export const PRESETS: Record<string, number> = { sq125: 125, sq200: 200, sq250: 250, sq300: 300 };
 
 /** encodeURIComponent, and !'()* too: a link pasted into Markdown or a shell stays whole. */

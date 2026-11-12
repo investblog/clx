@@ -13,7 +13,7 @@ import { nextRoute, signInPath } from '../ui/next.ts';
 // which a build falls back to; the last block builds with the Russian host on. The address modules
 // read the switch when they load, so they are loaded after it is set.
 process.env.CLX_RU_ORIGIN = 'off';
-const { SITE_PAGES, STATIC_FILES } = await import('../site/pages.ts');
+const { LOCALES, QR_LOCALES, SITE_PAGES, STATIC_FILES } = await import('../site/pages.ts');
 const { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } = await import('../site/urls.ts');
 
 describe('addresses', () => {
@@ -66,7 +66,7 @@ describe('generated pages', () => {
     expect(map.pages.map((e) => e.url).sort()).toEqual([...targets].sort());
     const word = /[\p{L}\p{N}]+(?:['-][\p{L}\p{N}]+)*/u.source;
     const plain = new RegExp(`^${word}(?: ${word})*$`, 'u');
-    for (const l of ['en', 'ru']) {
+    for (const l of QR_LOCALES) {
       const all = map.pages.filter((e) => e.locale === l).flatMap((e) => [e.primary, ...e.keywords]);
       expect(new Set(all.map((a) => a.toLowerCase())).size, `${l}: an anchor of two targets`).toBe(all.length);
     }
@@ -86,9 +86,9 @@ describe('generated pages', () => {
         // hyphenated word counted on their own.
         const roots = words.flatMap((w) => w.split('-')).map((w) => (w.length > 5 ? w.slice(0, 5) : w));
         expect(new Set(roots).size, a).toBe(roots.length);
-        // The page's language: English in Latin letters; Russian in Cyrillic, Latin only for names
-        // (clx, Cloudflare, LiveInternet, QR, AGPL, API).
-        if (e.locale === 'en') expect(a, a).toMatch(/^[\p{Script=Latin}\p{N} '-]+$/u);
+        // The page's language: English and the QR-only languages (ADR 0046) in Latin letters; Russian
+        // in Cyrillic, Latin only for names (clx, Cloudflare, LiveInternet, QR, AGPL, API).
+        if (e.locale !== 'ru') expect(a, a).toMatch(/^[\p{Script=Latin}\p{N} '-]+$/u);
         else {
           expect(a, a).toMatch(/^[\p{Script=Cyrillic}\p{Script=Latin}\p{N} '-]+$/u);
           expect(a.split(' ').filter((w) => /\p{Script=Cyrillic}/u.test(w)).length, a).toBeGreaterThanOrEqual(1);
@@ -102,7 +102,7 @@ describe('generated pages', () => {
     for (const p of SITE_PAGES)
       for (const l of p.locales) {
         const html = read(fileFor(p.slug, l));
-        expect(html).toContain(`<html lang="${l}"`);
+        expect(html).toContain(`<html lang="${LOCALES[l].htmlLang}"`);
         if (p.indexed) {
           expect(html).toContain(`<link rel="canonical" href="${urlFor(p.slug, l)}" />`);
           // x-default is the English page; a page without one (a Russian comparison) has none.
@@ -184,10 +184,12 @@ describe('generated pages', () => {
     // language (the English-only agent docs aside), and a /faq#fragment to one of its groups.
     const groups = new Set([...read('faq.html').matchAll(/<section class="home-section faq-group" id="([^"]+)"/gu)].map((m) => m[1]));
     for (const [path, main] of mains) {
-      const lang = path === '/ru' || path.startsWith('/ru/') ? 'ru' : 'en';
+      const lang = QR_LOCALES.find((l) => l !== 'en' && (path === `/${l}` || path.startsWith(`/${l}/`))) ?? 'en';
+      // A QR-only language (ADR 0046) links the rest of the site in English.
+      const langs = lang === 'en' || lang === 'ru' ? [lang] : [lang, 'en' as const];
       for (const [, href, hash] of main.matchAll(/<a [^>]*?href="(\/[^"#?]*)(?:#([^"]*))?"/gu)) {
         if (/^\/(agents|api|qr-code-api)$|\.(yaml|json|md)$|\/app$/u.test(href!)) continue;
-        const page = SITE_PAGES.find((p) => p.locales.includes(lang) && pathFor(p.slug, lang) === href);
+        const page = SITE_PAGES.find((p) => langs.some((x) => p.locales.includes(x) && pathFor(p.slug, x) === href));
         expect(page, `${path} → ${href}`).toBeDefined();
         // A fragment: a group of /faq, or a form of the home page's sign-in card.
         if (hash) expect((groups.has(hash) && page!.slug === '/faq') || (['login', 'register', 'recover'].includes(hash) && page!.slug === '/'), `${path} → ${href}#${hash}`).toBe(true);
@@ -269,7 +271,7 @@ describe('generated pages', () => {
         expect(slot).toContain(`<span class="promo__mark" aria-hidden="true">${mark}</span>`);
         expect(slot).toMatch(/<h2 class="promo__title">[^<]+<\/h2>/u);
         expect([...slot.matchAll(/<a /gu)]).toHaveLength(1);
-        expect(slot).toContain(`<a class="promo__cta" href="${authPathFor(l, 'register')}">`);
+        expect(slot).toContain(`<a class="promo__cta" href="${authPathFor(l as 'en' | 'ru', 'register')}">`);
         expect(slot).not.toMatch(/data-promo|style=|<script/u);
       }
   });
@@ -278,7 +280,7 @@ describe('generated pages', () => {
     const pages = SITE_PAGES.filter((p) => p.compare && p.locales.length === 1);
     expect(pages.map((p) => `${p.locales.join()}${p.slug}`)).toEqual(['en/bitly-alternative', 'en/plausible-alternative', 'ru/clck-alternative', 'ru/liveinternet-alternative']);
     for (const p of pages) {
-      const l = p.locales[0]!;
+      const l = p.locales[0] as 'en' | 'ru';
       const other = l === 'en' ? 'ru' : 'en';
       expect(read(fileFor('/', l))).toContain(`<a href="${pathFor(p.slug, l)}">${p.compare![l]}</a>`);
       expect(read(fileFor('/', other))).not.toContain(p.slug);
@@ -613,9 +615,9 @@ describe('generated pages', () => {
   });
 
   it('the QR code tools (ADR 0045): the generator in every footer, its script on its page alone, lengths, nothing inline', () => {
-    for (const l of ['en', 'ru'] as const) {
-      expect(read(fileFor('/', l)).match(/<footer[\s\S]*<\/footer>/u)![0]).toContain(`<a href="${pathFor('/qr-code-generator', l)}">`);
+    for (const l of QR_LOCALES) {
       const html = read(fileFor('/qr-code-generator', l));
+      expect(read(fileFor(l === 'en' || l === 'ru' ? '/' : '/qr-code-generator', l)).match(/<footer[\s\S]*<\/footer>/u)![0]).toContain(`<a href="${pathFor('/qr-code-generator', l)}">`);
       expect(html).toContain('<script src="/qr.js" defer></script>');
       expect(html).toContain('"@type":"WebApplication"');
       // The page shows a code before its script runs: the one the API draws for the sample.
@@ -626,10 +628,14 @@ describe('generated pages', () => {
       const stores = html.match(/<div class="qr-hero__stores">[\s\S]*?<\/div>/u)![0];
       expect(stores).toContain(`<a href="${pathFor('/qr-code-extension', l)}">`);
       expect([...stores.matchAll(/#i-brand-(\w+)/gu)].map((m) => m[1])).toEqual(['chrome', 'firefox', 'edge']);
-      expect(html).toMatch(/"@type":"Question","name":"(Is there a browser extension\?|Есть расширение для браузера\?)"/u);
+      if (l === 'en' || l === 'ru') expect(html).toMatch(/"@type":"Question","name":"(Is there a browser extension\?|Есть расширение для браузера\?)"/u);
+      // Every language asks the same seven questions, in its words (ADR 0046).
+      expect(html.match(/"@type":"Question"/gu)?.length, l).toBe(7);
     }
     const sprite = read('icons.svg');
     for (const b of ['chrome', 'firefox', 'edge']) expect(sprite).toContain(`<symbol id="i-brand-${b}"`);
+    // A symbol's paint server is in the sprite: a `url(#…)` with no element of that id paints nothing.
+    for (const [, id] of sprite.matchAll(/url\(#([^)]+)\)/gu)) expect(sprite, id).toContain(`id="${id}"`);
     for (const p of SITE_PAGES)
       for (const l of p.locales) {
         const html = read(fileFor(p.slug, l));
@@ -645,6 +651,52 @@ describe('generated pages', () => {
     // The legal pages name the API's host; qr.js carries the library's licence.
     for (const f of ['privacy.html', 'abuse.html', 'qr-code-privacy.html', 'ru/privacy.html', 'ru/abuse.html', 'ru/qr-code-privacy.html']) expect(read(f), f).toContain('qr.clx.cx');
     expect(read('qr.js')).toMatch(/\/\*! @spintax\/qr-svg\nMIT License/u);
+  });
+
+  it('the QR pages in the extension’s other languages (ADR 0046): on clx.cx under their prefix, every link to the rest of the site in English', () => {
+    const qrOnly = QR_LOCALES.filter((l) => l !== 'en' && l !== 'ru');
+    expect(qrOnly).toEqual(['de', 'es', 'fr', 'pt-br', 'tr']);
+    const qrSlugs = ['/qr-code-generator', '/qr-code-extension', '/qr-code-privacy'];
+    // Only the three pages: no other page of the table is in these languages.
+    for (const p of SITE_PAGES) expect(qrOnly.some((l) => p.locales.includes(l)), p.slug).toBe(qrSlugs.includes(p.slug));
+    for (const l of qrOnly)
+      for (const slug of qrSlugs) {
+        expect(fileFor(slug, l)).toBe(`${l}${slug}.html`);
+        const html = read(fileFor(slug, l));
+        const lang = l === 'pt-br' ? 'pt-BR' : l;
+        expect(html).toContain(`<html lang="${lang}"`);
+        // hreflang: x-default and the seven languages, each at its own address, the same list as the
+        // switch; og:locale this one, the six others its alternates.
+        const alternates = [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)" \/>/gu)].map((m) => `${m[1]} ${m[2]}`);
+        expect(alternates, `${l}${slug}`).toEqual([`x-default ${urlFor(slug, 'en')}`, ...QR_LOCALES.map((x) => `${LOCALES[x].htmlLang} ${urlFor(slug, x)}`)]);
+        expect(urlFor(slug, l)).toBe(`https://clx.cx/${l}${slug}`);
+        expect([...html.matchAll(/class="lang-dd__item" href="([^"]+)" hreflang="([^"]+)"/gu)].map((m) => `${m[2]} ${m[1]}`)).toEqual(QR_LOCALES.map((x) => `${LOCALES[x].htmlLang} ${pathFor(slug, x)}`));
+        expect(html).toContain(`<meta property="og:locale" content="${LOCALES[l].ogLocale}" />`);
+        expect([...html.matchAll(/og:locale:alternate" content="([^"]+)"/gu)].map((m) => m[1])).toEqual(QR_LOCALES.filter((x) => x !== l).map((x) => LOCALES[x].ogLocale));
+        // The three pages link one another in this language, not in English.
+        const main = html.match(/<main[\s\S]*?<\/main>/u)![0];
+        for (const other of qrSlugs.filter((s) => s !== slug)) expect(main, `${l}${slug} → ${other}`).toContain(`href="/${l}${other}"`);
+        // No menu: the language has no product page. The brand, the sign-in and the footer's other
+        // pages lead to English, marked as such.
+        expect(html).not.toContain('class="site-nav"');
+        expect(html).toContain('<p class="brand"><a href="/">');
+        expect(html).toContain('href="/#login"');
+        const foot = html.match(/<footer[\s\S]*<\/footer>/u)![0];
+        expect(foot).toContain(`<a href="/${l}/qr-code-generator">`);
+        for (const page of ['/privacy', '/terms', '/how-it-works', '/open-source']) expect(foot, `${l} ${page}`).toContain(`<a href="${page}" hreflang="en">`);
+        // No link inside the page to an address of this language that does not exist.
+        for (const [, href] of html.matchAll(/href="(\/[^"#]*)/gu)) {
+          if (!href.startsWith(`/${l}/`)) continue;
+          expect(qrSlugs.map((s) => `/${l}${s}`), `${l}${slug} → ${href}`).toContain(href);
+        }
+      }
+    // The policy's links to /privacy and /abuse reach the English pages; it says the English prevails.
+    for (const l of qrOnly) {
+      const policy = read(fileFor('/qr-code-privacy', l));
+      expect(policy).toContain('href="/privacy"');
+      expect(policy).toContain('href="/abuse"');
+      expect(policy).toContain('href="https://clx.cx/qr-code-privacy" hreflang="en"');
+    }
   });
 
   it('qr.js draws the code and builds the API link in the browser, sends nothing, and never shows a stale link', async () => {
@@ -810,6 +862,24 @@ describe('the Russian host (ADR 0030)', () => {
   });
   afterAll(() => {
     for (const d of [main, ru]) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it('the QR pages across the two hosts (ADR 0046): Russian on ru.clx.cx, the other six on clx.cx, each switch and hreflang reaching all seven', () => {
+    const ruGen = read(ru, 'qr-code-generator.html');
+    const deGen = read(main, 'de/qr-code-generator.html');
+    for (const html of [ruGen, deGen]) {
+      expect(html).toContain('<link rel="alternate" hreflang="ru" href="https://ru.clx.cx/qr-code-generator" />');
+      expect(html).toContain('<link rel="alternate" hreflang="de" href="https://clx.cx/de/qr-code-generator" />');
+      expect(html).toContain('<link rel="alternate" hreflang="pt-BR" href="https://clx.cx/pt-br/qr-code-generator" />');
+    }
+    // A switch's link to the other host is a whole URL, to its own host a path.
+    expect(ruGen).toContain('class="lang-dd__item" href="https://clx.cx/de/qr-code-generator" hreflang="de"');
+    expect(deGen).toContain('class="lang-dd__item" href="https://ru.clx.cx/qr-code-generator" hreflang="ru"');
+    expect(deGen).toContain('class="lang-dd__item" href="/fr/qr-code-generator" hreflang="fr"');
+    // The new languages are clx.cx's pages: in its sitemap, not the Russian host's.
+    expect(read(main, 'sitemap.xml')).toContain('<loc>https://clx.cx/tr/qr-code-privacy</loc>');
+    expect(read(ru, 'sitemap.xml')).not.toContain('<loc>https://clx.cx/tr/');
+    expect(fs.existsSync(`${ru}/de`)).toBe(false);
   });
 
   it('Russian pages live on their host without /ru; links there are paths, to clx.cx whole URLs', () => {

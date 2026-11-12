@@ -1,0 +1,67 @@
+<h1 class="h3">QR kod araçlarının gizliliği</h1>
+<p class="muted text-sm">Sürüm tarihi: 12 Kasım 2026.</p>
+<p class="muted text-sm">Bu metin bir çeviridir; İngilizce sürüm esastır. <a href="https://clx.cx/qr-code-privacy" hreflang="en">İngilizce sürüm</a>.</p>
+<p>
+  Bu politika, clx'in ücretsiz QR kod araçlarını kapsar: bu sitedeki <a href="/qr-code-generator">QR kod oluşturucu</a>,
+  <code>qr.clx.cx</code> adresindeki QR kod API'si ve tarayıcı uzantısı
+  (<a href="/qr-code-extension">sayfası</a>). Hiçbiri hesap gerektirmez, çerez bırakmaz, reklam göstermez ya da analiz yapmaz.
+  clx hesaplarının politikası <a href="/privacy">ayrı bir sayfadadır (İngilizce)</a>.
+</p>
+
+<h2 class="h4">Bu sitedeki oluşturucu</h2>
+<p>
+  QR kod tarayıcınızda çizilir. Yazdığınız metin hiçbir yere gönderilmez: sayfa onunla hiçbir istek
+  yapmaz. Görsel bağlantısı ve gösterilen HTML de tarayıcıda oluşturulur; API'ye yalnızca biri onları
+  açtığında ulaşırlar. Oluşturucu yazdıklarınızdan hiçbir şey saklamaz ve çerez bırakmaz; sitenin
+  kendisinin sakladıkları — tema, bir bağlantıdan gelen iş ortağı kodu — <a href="/privacy">clx'in gizlilik sayfasında (İngilizce)</a> anlatılır.
+</p>
+
+<h2 class="h4">qr.clx.cx adresindeki API</h2>
+<p>
+  API, kendisine giden bir bağlantı açıldığında bir istek alır — bu bağlantıyı siz açabilirsiniz ya da
+  böyle bir görsel içeren bir sayfayı veya e-postayı görüntüleyen herkesin tarayıcısı. İstek, kodlanacak
+  metni, boyutu, hata düzeltme düzeyini ve kenar boşluğunu taşır; ayrıca internetteki her istek gibi
+  görüntüleyenin IP adresini, tarayıcısını (User-Agent) ve çoğu zaman geldiği sayfayı (Referer). API:
+</p>
+<ul>
+  <li>metni yalnızca görseli çizmek ve bağlantının hash değerini doğrulamak için kullanır;</li>
+  <li>isteklerin kaydını tutmaz ve hiçbir görsel saklamaz; yalnızca <code>/qr.inline</code> yanıtları, tam adreslerine göre Cloudflare önbelleğinde 24 saat kalır ve ardından süresi dolar;</li>
+  <li>kimseyi saymaz, profillemez ya da izlemez.</li>
+</ul>
+<p>
+  QR kod gizli değildir: bağlantısına sahip olan ya da onu tarayan herkes metnini okur. Parolaları ve
+  başka gizli bilgileri kodlamayın.
+</p>
+
+<h2 class="h4">Tarayıcı uzantısı</h2>
+<p>
+  1.1.0 sürümünden itibaren uzantı hiçbir ağ isteği yapmaz: kodlar ve paylaşım bağlantıları tarayıcıda
+  oluşturulur. 1.1.0 öncesi sürümler, oluşturdukları her kodun metnini API'ye, onun eski adresi olan
+  qr.qrcgen.com'a gönderiyordu. Uzantının izinleri:
+</p>
+<ul>
+  <li>yan panel — penceresini göstermek için (Chrome, Edge; Firefox izin gerektirmeden kenar çubuğu gösterir);</li>
+  <li>depolama — ayarlarınızı (tema, varsayılan boyut ve hata düzeltme, geçmiş sınırı, açılışta oluşturma) ve bağlantısını kopyaladığınız kodların geçmişini yalnızca tarayıcınızda saklamak için;</li>
+  <li>sekmeler — geçerli sayfanın adresini okuyup kodunu oluşturmak için.</li>
+</ul>
+<p>Uzantının sakladığı hiçbir şey tarayıcınızdan çıkmaz ya da eşitlenmez; uzantıyı kaldırmak bunları da siler.</p>
+
+<h2 class="h4">Verileri kim işler</h2>
+<p>
+  API ve bu sitenin sayfaları Cloudflare (Workers) üzerinde çalışır; yalnızca Rusça sayfalar (ru.clx.cx)
+  GitHub Pages üzerindedir; her biri, sunduğu istekleri barındırıcı olarak kendi politikasına göre
+  işler. Cloudflare'ın ya da başka birinin analiz araçlarını eklemiyoruz; yalnızca Cloudflare'ın her
+  hesaba gösterdiği istek ve hata sayılarını, içerikleri olmadan görüyoruz. Hiçbir veri satılmaz ya da
+  başka kimseyle paylaşılmaz.
+</p>
+
+<h2 class="h4">Çocuklar</h2>
+<p>QR kod araçları, çocuklar dahil hiç kimseden bilerek kişisel bilgi toplamaz ve yukarıda anlatılan 24 saatlik <code>/qr.inline</code> önbelleği dışında hiçbir şey saklamaz; bir isteğin kendiliğinden taşıdıkları da orada anlatılmıştır.</p>
+
+<h2 class="h4">Değişiklikler ve sorular</h2>
+<p>
+  Bu politikadaki bir değişiklik, yukarıdaki tarihini değiştirir. Sorular: her sayfanın alt kısmında
+  bağlantısı bulunan iletişim formu aracılığıyla ya da API'nin deposunda bir sorun kaydı olarak,
+  <a href="https://github.com/investblog/qr-generator">github.com/investblog/qr-generator</a>.
+  Bir QR kodun kötüye kullanımı: <a href="/abuse">nasıl bildirilir (İngilizce)</a>.
+</p>
