@@ -22,8 +22,11 @@ in English and Russian: a German page about clx would promise what clx does not 
   `/pt-br/qr-code-extension` (hreflang `pt-BR`); Russian stays on `ru.clx.cx`. Each page lists all
   seven in its hreflang and its language switch; `x-default` is English.
 - **A QR-only page carries the site's header and footer in its language** (`chrome` in
-  `site/qr-text.ts`): no menu (it has no product page), "Sign in" and the brand lead to the English
-  site, the footer's pages to their English versions with `hreflang="en"`. Any link to a page of the
+  `site/qr-text.ts`): the English menu in its words, each link leading to the English page with
+  `hreflang="en"` and an EN mark (its tooltip "In English" in the language), as spintax.net marks the
+  guides a language lacks; "Sign in" and the brand lead to the English site, the footer's pages to
+  their English versions with `hreflang="en"`. (At first the menu was left out; the owner asked for
+  spintax.net's marked menu on 12.11.) Any link to a page of the
   table the language lacks goes to its English page (`pagePathFor`, `site/urls.ts`) — in the legal
   text, "see also" and the footer alike.
 - **The words** of each QR-only language live in `site/qr-i18n/<lang>.ts`, typed by `QrLanguage`: a

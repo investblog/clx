@@ -7,6 +7,7 @@ const text: QrLanguage = {
     dashboard: 'Panel',
     theme: 'Temayı değiştir',
     language: 'Dil',
+    inEnglish: 'İngilizce',
     nav: { analytics: 'Analitik', links: 'Kısa bağlantılar', generators: 'Site oluşturucular için', pricing: 'Fiyatlar', faq: 'Sorular', menu: 'Menü' },
     foot: { how: 'Nasıl çalışır', openSource: 'Açık kaynak', qr: 'QR kod oluşturucu', company: '301.st', agents: 'Yapay zekâ ajanları için', api: 'API', privacy: 'Gizlilik', terms: 'Kullanım koşulları', source: 'Kaynak kod', contact: 'İletişim' },
   },

@@ -1155,9 +1155,10 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   link to `/short-links`. The generator, the extension's page and the policy are in the extension's
   seven languages ([ADR 0046](./decisions/0046-qr-pages-in-the-extensions-languages.md)): English,
   Russian, and German, Spanish, French, Brazilian Portuguese and Turkish on clx.cx under their prefix
-  (`/de/qr-code-generator`, `/pt-br/…`). Those five have no other page: their header has no menu;
-  the three pages link one another and the language switch in their language, and every other link
-  (the brand, sign-in, the footer's other pages, `/short-links`, `/privacy`) leads to the English page.
+  (`/de/qr-code-generator`, `/pt-br/…`). Those five have no other page: their header's menu is the
+  English one in their words, each link marked EN; the three pages link one another and the language
+  switch in their language, and every other link (the menu, the brand, sign-in, the footer's other
+  pages, `/short-links`, `/privacy`) leads to the English page.
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
   canonical and hreflang (with `x-default` on English), the sitemap, robots.txt, the header's menu
   and the footer all derive from it. The language comes from the address only. On a phone the menu
@@ -1201,7 +1202,8 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   page, changed by the header's language switch with `PATCH /v1/me {locale}`,
   [ADR 0021](./decisions/0021-language-switch-in-the-header.md)); the e-mails speak the account's
   and link to its app. The switch is one for the site and the app: the current language's flag and
-  code, a menu of the languages (after spintax.net; flags from `country-flag-icons`), a `<details>`
+  code, a menu of the languages (after spintax.net; flags from `country-flag-icons`, one symbol per
+  language in `/icons.svg`, which pages link rather than carry), a `<details>`
   that works without scripts. The words are dictionaries of one shape (`ui/i18n/`, `src/mail-text.ts`).
   Legal texts exist in both, English is the original.
 - **For agents** ([ADR 0013](./decisions/0013-docs-for-agents.md)), English only: `/agents` — the

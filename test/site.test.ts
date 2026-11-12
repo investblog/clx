@@ -15,6 +15,8 @@ import { nextRoute, signInPath } from '../ui/next.ts';
 process.env.CLX_RU_ORIGIN = 'off';
 const { LOCALES, QR_LOCALES, SITE_PAGES, STATIC_FILES } = await import('../site/pages.ts');
 const { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } = await import('../site/urls.ts');
+const { FLAG } = await import('../site/layout.ts');
+const FLAGS = await import('country-flag-icons/string/3x2');
 
 describe('addresses', () => {
   it('English at the root, Russian under /ru, no trailing slash on a home page', () => {
@@ -355,6 +357,44 @@ describe('generated pages', () => {
     }
   });
 
+  it('the flags are country-flag-icons’ own, one symbol per language in the sprite', () => {
+    // Written out here, not taken from the code it checks: English by the British flag, pt-BR by Brazil's.
+    const expected = { en: 'GB', ru: 'RU', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
+    expect(FLAG).toEqual(expected);
+    const sprite = read('icons.svg');
+    expect(sprite).toContain('Copyright (c) 2020 @catamphetamine');
+    for (const code of Object.values(expected)) {
+      const [, viewBox, body] = (FLAGS as Record<string, string>)[code]!.match(/viewBox="([^"]+)">([\s\S]*)<\/svg>$/u)!;
+      expect(sprite, code).toContain(`<symbol id="i-flag-${code.toLowerCase()}" viewBox="${viewBox}">${body}</symbol>`);
+    }
+    // Every switch item links its language's flag; pages link them, not carry them.
+    for (const l of QR_LOCALES) {
+      const header = read(fileFor('/qr-code-generator', l)).match(/<header[\s\S]*?<\/header>/u)![0];
+      expect(header, l).not.toContain('<svg xmlns');
+      expect([...header.matchAll(/data-locale="([\w-]+)"[^>]*><span class="lang-dd__flag" aria-hidden="true"><svg><use href="\/icons.svg#i-flag-(\w+)">/gu)].map((m) => `${m[1]} ${m[2]}`), l).toEqual(
+        QR_LOCALES.map((x) => `${x} ${expected[x].toLowerCase()}`),
+      );
+    }
+  });
+
+  it('a QR-only language has the menu in its words, each link to the English page marked EN (ADR 0046)', () => {
+    const navOf = (f: string) => read(f).match(/<nav class="site-nav"[\s\S]*?<\/nav>/u)?.[0] ?? '';
+    const de = navOf('de/qr-code-generator.html');
+    // EN to the eye, the language's words in the link's name.
+    expect([...de.matchAll(/<a href="([^"]+)" hreflang="en">([^<]+)<span class="nav-badge" aria-hidden="true" title="Auf Englisch">EN<\/span><span class="visually-hidden"> \(Auf Englisch\)<\/span><\/a>/gu)].map((m) => [m[1], m[2]])).toEqual([
+      ['/analytics', 'Webanalyse'],
+      ['/short-links', 'Kurzlinks'],
+      ['/for-site-generators', 'Für Website-Generatoren'],
+      ['/pricing', 'Preise'],
+      ['/faq', 'Fragen'],
+    ]);
+    // A language that has the pages links its own, unmarked.
+    for (const f of ['analytics.html', 'ru/analytics.html', 'qr-code-generator.html']) {
+      expect(navOf(f), f).toContain('<a href=');
+      expect(navOf(f), f).not.toMatch(/nav-badge|hreflang=/u);
+    }
+  });
+
   it('the menu: beside the brand, its button last in the header; only a page marked js folds it on a phone', () => {
     const html = read('analytics.html');
     const header = html.match(/<header[\s\S]*?<\/header>/u)![0];
@@ -591,7 +631,7 @@ describe('generated pages', () => {
   it('the language switch: a flag and the code, a menu of the page’s languages; none on a page of one language', () => {
     const header = (f: string) => read(f).match(/<header[\s\S]*?<\/header>/u)![0];
     const ru = header('ru/analytics.html');
-    expect(ru).toMatch(/<details class="lang-dd" id="lang-dd"><summary class="lang-dd__btn" aria-label="Язык: Русский"><span class="lang-dd__flag" aria-hidden="true"><svg [^>]*>[\s\S]*?<\/svg><\/span>RU<\/summary>/u);
+    expect(ru).toMatch(/<details class="lang-dd" id="lang-dd"><summary class="lang-dd__btn" aria-label="Язык: Русский"><span class="lang-dd__flag" aria-hidden="true"><svg><use href="\/icons.svg#i-flag-ru"><\/use><\/svg><\/span>RU<\/summary>/u);
     expect([...ru.matchAll(/<a class="lang-dd__item" href="([^"]+)"[^>]*data-locale="(\w+)"([^>]*)>/gu)].map((m) => [m[1], m[2], m[3]!.includes('aria-current')])).toEqual([
       ['/analytics', 'en', false],
       ['/ru/analytics', 'ru', true],
@@ -676,9 +716,9 @@ describe('generated pages', () => {
         // The three pages link one another in this language, not in English.
         const main = html.match(/<main[\s\S]*?<\/main>/u)![0];
         for (const other of qrSlugs.filter((s) => s !== slug)) expect(main, `${l}${slug} → ${other}`).toContain(`href="/${l}${other}"`);
-        // No menu: the language has no product page. The brand, the sign-in and the footer's other
-        // pages lead to English, marked as such.
-        expect(html).not.toContain('class="site-nav"');
+        // The language has no product page: the menu's links (each marked EN), the brand, the sign-in
+        // and the footer's other pages lead to English, marked as such.
+        expect(html.match(/<nav class="site-nav"[\s\S]*?<\/nav>/u)![0].match(/class="nav-badge"/gu)?.length).toBe(5);
         expect(html).toContain('<p class="brand"><a href="/">');
         expect(html).toContain('href="/#login"');
         const foot = html.match(/<footer[\s\S]*<\/footer>/u)![0];

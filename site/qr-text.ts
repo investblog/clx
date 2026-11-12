@@ -6,7 +6,7 @@ import type { PageKeywords } from './keywords.ts';
 
 /** The header's and the footer's words: a QR-only language has no product page, but its pages carry
  *  the site's header and footer, whose links lead to the English site. */
-export type Chrome = Pick<Strings, 'signIn' | 'dashboard' | 'theme' | 'language' | 'nav' | 'foot'>;
+export type Chrome = Pick<Strings, 'signIn' | 'dashboard' | 'theme' | 'language' | 'inEnglish' | 'nav' | 'foot'>;
 
 /** /qr-code-generator. */
 export interface GeneratorText {

@@ -9,6 +9,7 @@ const text: QrLanguage = {
     dashboard: 'Panel',
     theme: 'Cambiar tema',
     language: 'Idioma',
+    inEnglish: 'En inglés',
     nav: { analytics: 'Analítica', links: 'Enlaces cortos', generators: 'Para generadores de sitios', pricing: 'Precios', faq: 'Preguntas', menu: 'Menú' },
     foot: { how: 'Cómo funciona', openSource: 'Código abierto', qr: 'Generador de códigos QR', company: '301.st', agents: 'Para agentes de IA', api: 'API', privacy: 'Privacidad', terms: 'Condiciones', source: 'Código fuente', contact: 'Contacto' },
   },

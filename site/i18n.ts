@@ -14,6 +14,8 @@ export interface Strings {
   theme: string;
   /** The language switch's name, before the current language. */
   language: string;
+  /** The tooltip of the EN mark on a menu link that leads to a page this language lacks. */
+  inEnglish: string;
   home: {
     title: string;
     description: string;
@@ -61,6 +63,7 @@ const en: Strings = {
   dashboard: 'Dashboard',
   theme: 'Switch theme',
   language: 'Language',
+  inEnglish: 'In English',
   home: {
     title: 'clx — cookieless analytics and short links on Cloudflare',
     description: 'A visit counter without cookies and short links with QR codes that run in your own Cloudflare account. Free, open source, with an API for site generators.',
@@ -161,6 +164,7 @@ const ru: Strings = {
   dashboard: 'Кабинет',
   theme: 'Сменить тему',
   language: 'Язык',
+  inEnglish: 'На английском',
   home: {
     title: 'clx — счётчик посещений и короткие ссылки на Cloudflare',
     description: 'Счётчик посещений без cookie и короткие ссылки с QR-кодами, которые работают в вашем аккаунте Cloudflare. Бесплатно, открытый код, API для генераторов сайтов.',

@@ -19,7 +19,8 @@ projects — a flag, as spintax.net has it.
 **Decision.**
 - One switch for the site and the app, in the header (`site/layout.ts`): the current language's flag
   and code in a pill, a menu of the languages with their flags (spintax.net's `lang-dd`; flags from
-  `country-flag-icons`, 3x2, English by the British one). A `<details>`, so it opens without
+  `country-flag-icons`, 3x2, English by the British one; since 12.11 symbols `i-flag-<country>` in
+  `/icons.svg`, not printed into each page). A `<details>`, so it opens without
   scripts; `/theme.js` closes it on a click elsewhere and on Escape.
 - On a page of the site it links the page in its languages; a page of one language has none. In
   the app it links `/app` and `/ru/app`; `ui/main.ts` keeps the page (the hash) and, signed in,

@@ -1,10 +1,9 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import * as FLAGS from 'country-flag-icons/string/3x2';
 import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, siteLocaleOf, type PageDef, type PageLocale } from './pages.ts';
 import { chrome } from './i18n.ts';
-import { alternatesFor, appPathFor, authPathFor, ogImagePath, pagePathFor, pathFor, renderingHost, urlFor } from './urls.ts';
+import { alternatesFor, appPathFor, authPathFor, linkLocale, ogImagePath, pagePathFor, pathFor, renderingHost, urlFor } from './urls.ts';
 
 export function escapeHtml(v: string): string {
   return v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -69,9 +68,10 @@ const jsonLdBlock = (nodes: Record<string, unknown>[]): string =>
 
 const icon = (name: string, cls = 'icon') => `<svg class="${cls}" aria-hidden="true"><use href="/icons.svg#i-mono-${name}"></use></svg>`;
 
-/** A language's flag (country-flag-icons, 3x2, as on spintax.net): English by the British one. */
-const FLAG: Record<PageLocale, string> = { en: 'GB', ru: 'RU', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
-const flag = (l: PageLocale) => `<span class="lang-dd__flag" aria-hidden="true">${(FLAGS as Record<string, string>)[FLAG[l]]}</span>`;
+/** A language's flag, as on spintax.net: country-flag-icons (3x2) in /icons.svg as `i-flag-<country>`,
+ *  English by the British one. */
+export const FLAG: Record<PageLocale, string> = { en: 'GB', ru: 'RU', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
+const flag = (l: PageLocale) => `<span class="lang-dd__flag" aria-hidden="true"><svg><use href="/icons.svg#i-flag-${FLAG[l].toLowerCase()}"></use></svg></span>`;
 
 /** The language switch, after spintax.net's: the current language's flag and code, a menu of every
  *  language. A page of the site links its own languages (the list of its `<link rel="alternate">`);
@@ -95,10 +95,19 @@ function langSwitch(page: PageDef | null, locale: PageLocale): string {
 
 /** The menu: the table's `nav` pages, printed in the page, beside the brand. On a phone it folds behind
  *  the menu button — last in the header, where it shows — only once /theme.js has marked the page `js`
- *  (that file also opens it and moves focus into it); without scripts it stays a row of links. */
+ *  (that file also opens it and moves focus into it); without scripts it stays a row of links.
+ *  A QR-only language (ADR 0046) has the English menu in its own words: each link leads to the English
+ *  page and carries an EN mark, as spintax.net's menu marks the guides a language lacks. */
 function nav(page: PageDef | null, locale: PageLocale): { menu: string; button: string } {
   const s = chrome(locale);
-  const items = navPages(locale).map((p) => `<a href="${pathFor(p.slug, locale)}"${p.slug === page?.slug ? ' aria-current="page"' : ''}>${escapeHtml(s.nav[p.nav!])}</a>`);
+  const items = navPages(siteLocaleOf(locale)).map((p) => {
+    const to = linkLocale(p.slug, locale);
+    const other = to !== locale;
+    // The mark shows EN with the language's words in its tooltip; a screen reader and a phone, which
+    // get no tooltip, have the words in the link's name.
+    const mark = other ? `<span class="nav-badge" aria-hidden="true" title="${escapeHtml(s.inEnglish)}">EN</span><span class="visually-hidden"> (${escapeHtml(s.inEnglish)})</span>` : '';
+    return `<a href="${pathFor(p.slug, to)}"${other ? ` hreflang="${LOCALES[to].htmlLang}"` : ''}${p.slug === page?.slug ? ' aria-current="page"' : ''}>${escapeHtml(s.nav[p.nav!])}${mark}</a>`;
+  });
   if (!items.length) return { menu: '', button: '' };
   return {
     menu: `<nav class="site-nav" id="site-nav" aria-label="${escapeHtml(s.nav.menu)}">${items.join('')}</nav>`,

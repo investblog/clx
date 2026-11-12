@@ -113,7 +113,8 @@ export const footPages = (locale: PageLocale): PageDef[] => SITE_PAGES.filter((p
 /** The comparison pages of a language, for its footer: none in a QR-only one. */
 export const comparePages = (locale: PageLocale): PageDef[] => (isSiteLocale(locale) ? SITE_PAGES.filter((p) => p.compare?.[locale] && p.locales.includes(locale)) : []);
 
-/** The header's menu of a language: none in a QR-only one, which has no product page. */
+/** The menu's pages a language has: none in a QR-only one, which has no product page, so the header
+ *  shows it the English ones, marked EN (site/layout.ts). */
 export const navPages = (locale: PageLocale): PageDef[] => SITE_PAGES.filter((p) => p.nav && p.locales.includes(locale));
 
 /** The markdown file of a page: `index.md`, `agents.md`. */

@@ -176,6 +176,9 @@ code.secret{align-self:stretch;display:block;padding:var(--space-2);border-radiu
 .site-nav a{padding:var(--space-1) var(--space-3);border-radius:var(--radius);color:var(--text-muted);font-size:var(--fs-sm);text-decoration:none;white-space:nowrap}
 .site-nav a:hover{color:var(--text-main)}
 .site-nav a[aria-current]{color:var(--text-main);background:var(--bg-soft)}
+/* The EN mark of a link to a page the language lacks (ADR 0046), as spintax.net's menu marks it. */
+.nav-badge{margin-inline-start:.4em;padding:.05em .4em;border:1px solid var(--border-subtle);border-radius:4px;background:var(--bg-soft);color:var(--text-muted);font-size:.7rem;font-weight:600;letter-spacing:.04em;vertical-align:.1em}
+.visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .site-nav__toggle{display:none}
 @media (max-width:1080px){
   .topbar__inner{flex-wrap:wrap}
@@ -343,7 +346,7 @@ a.promo:hover .promo__cta,.promo__cta:hover{background:var(--promo-cta-bg-hover)
 .lang-dd__menu{position:absolute;inset-inline-end:0;top:calc(100% + .35rem);min-width:8rem;background:var(--panel);border:1px solid var(--border-subtle);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,.3);padding:.25rem;z-index:20}
 .lang-dd__flag{display:inline-block;width:1.2em;height:.8em;border-radius:2px;overflow:hidden;flex-shrink:0}
 .lang-dd__flag svg{display:block;width:100%;height:100%}
-.lang-dd__item{display:flex;align-items:center;gap:.4em;padding:.35em .6em;font-size:var(--fs-sm);color:var(--text-main);border-radius:calc(var(--radius) / 2);text-decoration:none;transition:background var(--transition-fast)}
+.lang-dd__item{display:flex;align-items:center;gap:.4em;white-space:nowrap;padding:.35em .6em;font-size:var(--fs-sm);color:var(--text-main);border-radius:calc(var(--radius) / 2);text-decoration:none;transition:background var(--transition-fast)}
 .lang-dd__item:hover{background:var(--bg-soft)}
 .lang-dd__item[aria-current]{color:var(--primary-hover);font-weight:var(--fw-semibold)}
 .site-foot{max-width:1200px;margin:0 auto;padding:var(--space-5) var(--gutter);border-top:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-muted)}
