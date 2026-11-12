@@ -365,8 +365,19 @@ a.promo:hover .promo__cta,.promo__cta:hover{background:var(--promo-cta-bg-hover)
 .qr-tool__options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
 .qr-tool__options .input{width:100%;-webkit-appearance:auto;appearance:auto}
 .qr-tool__out{min-width:0}
-.qr-tool__preview{display:flex;justify-content:center;align-items:center;min-height:320px;padding:var(--space-3);border-radius:var(--radius-lg);background:#fff}
-.qr-tool__preview svg{max-width:100%;height:auto}
+/* The code on the extension's hatching (its sidepanel.css), so the image's edge — its margin included —
+   shows; corner marks just outside it follow the size and the margin as they change. */
+.qr-tool__stage{--qr-mark:#4DA3FF;display:flex;justify-content:center;align-items:center;min-height:320px;padding:var(--space-4);border-radius:var(--radius-lg);background:var(--bg-soft) url("data:image/svg+xml,%3Csvg width='6' height='6' viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%234DA3FF' fill-opacity='0.15' fill-rule='evenodd'%3E%3Cpath d='M5 0h1L0 6V5zM6 5v1H5z'/%3E%3C/g%3E%3C/svg%3E")}
+:root[data-theme="light"] .qr-tool__stage{--qr-mark:#0055DC;background:#fff url("data:image/svg+xml,%3Csvg width='6' height='6' viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%230055DC' fill-opacity='0.4' fill-rule='evenodd'%3E%3Cpath d='M5 0h1L0 6V5zM6 5v1H5z'/%3E%3C/g%3E%3C/svg%3E")}
+.qr-tool__preview{--len:14px;--w:2px;max-width:100%;padding:5px;line-height:0;background:
+  linear-gradient(var(--qr-mark),var(--qr-mark)) left top/var(--len) var(--w),linear-gradient(var(--qr-mark),var(--qr-mark)) left top/var(--w) var(--len),
+  linear-gradient(var(--qr-mark),var(--qr-mark)) right top/var(--len) var(--w),linear-gradient(var(--qr-mark),var(--qr-mark)) right top/var(--w) var(--len),
+  linear-gradient(var(--qr-mark),var(--qr-mark)) left bottom/var(--len) var(--w),linear-gradient(var(--qr-mark),var(--qr-mark)) left bottom/var(--w) var(--len),
+  linear-gradient(var(--qr-mark),var(--qr-mark)) right bottom/var(--len) var(--w),linear-gradient(var(--qr-mark),var(--qr-mark)) right bottom/var(--w) var(--len);background-repeat:no-repeat}
+.qr-tool__preview:empty{display:none}
+.qr-tool__stage:has(.qr-tool__preview:empty){background:var(--bg-soft)}
+:root[data-theme="light"] .qr-tool__stage:has(.qr-tool__preview:empty){background:#fff}
+.qr-tool__preview svg{display:block;max-width:100%;height:auto}
 .qr-tool__status{margin:var(--space-2) 0;font-size:var(--fs-sm);color:var(--text-muted)}
 .qr-tool__code{min-height:2.6em;margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);border-radius:var(--radius-xs);background:var(--bg-soft);font:12px/1.5 var(--font-mono);word-break:break-all}
 .doc .table-wrap{overflow-x:auto}

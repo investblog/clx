@@ -109,7 +109,7 @@ export function generatorPage(locale: Locale): Page {
     </div>
   </form>
   <div class="qr-tool__out">
-    <div id="qr-preview" class="qr-tool__preview">${first}</div>
+    <div class="qr-tool__stage"><div id="qr-preview" class="qr-tool__preview">${first}</div></div>
     <p id="qr-status" class="qr-tool__status" role="status" aria-live="polite">${escapeHtml(g.t.ready.replace('{bytes}', String(bytes)))}</p>
     <p class="actions"><button type="button" class="btn btn--primary" id="qr-download" disabled>${escapeHtml(g.out.download)}</button><button type="button" class="btn btn--ghost" id="qr-copy-svg" disabled>${escapeHtml(g.out.svg)}</button></p>
     <p class="field-label">${escapeHtml(g.out.link)}</p>
