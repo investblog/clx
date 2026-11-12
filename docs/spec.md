@@ -19,7 +19,10 @@ clx is a free, open service for site owners on Cloudflare:
 - **short links** on the user's own domain, with a QR code for every link and rules by country,
   device and bot category;
 - **reports** on clx.cx: views, visitors, clicks, pages, sources, countries, devices, browsers, OS,
-  bots.
+  bots;
+- a free **QR code API** at `qr.clx.cx`: SVG images drawn from the address alone, with no account,
+  no storage and no logs — the API of the owner's QR generator, served by a worker of its own
+  ([ADR 0044](./decisions/0044-qr-api-on-qr-clx-cx.md), §16).
 
 In scope: signing up on clx.cx, connecting one's own Cloudflare account, deploying a worker into that
 account, summary totals on clx.cx, details read from the user's database on demand. On Pro, also
@@ -27,8 +30,8 @@ account, summary totals on clx.cx, details read from the user's database on dema
 zone (§5, [ADR 0037](./decisions/0037-external-sites.md)), so all of one's sites share one dashboard.
 
 Out of scope:
-- a Cloudflare account with no zone, and links without one's own domain (clx.cx carries no user
-  traffic);
+- a Cloudflare account with no zone, and links without one's own domain (clx.cx carries no user's
+  links; the only other people's traffic it serves is the QR API's images on `qr.clx.cx`);
 - events, goals, funnels, raw visit logs, per-visitor exports;
 - subscriptions renewed by a processor, cards, taxes: the paid plan is paid from a prepaid balance
   topped up by crypto or Telegram Stars (§18, [ADR 0034](./decisions/0034-pro-for-a-balance.md)).
@@ -531,7 +534,7 @@ Why:
   - config has a size budget per Cloudflare account — 50 MB of `data`, counted by clx.cx before it
     syncs; over it the change is refused (`storage_limit`, §15);
   - a link and site cache in isolate memory — 60 s, for speed only.
-- **Abuse** is the domain owner's responsibility; on clx.cx: an `/abuse` page (not in the footer since 11.10.2026: clx.cx carries no one's traffic; linked from the terms) and disabling a clx
+- **Abuse** is the domain owner's responsibility; on clx.cx: an `/abuse` page (not in the footer since 11.10.2026: clx.cx carries no one's links; linked from the terms) and disabling a clx
   account by an admin command (a sync that deletes every key).
 
 ## 7. Totals on clx.cx
@@ -650,7 +653,11 @@ $0.35 per 1,000 e-mails), so the budget is capped by D1 writes, not by items per
 - the Cloudflare API call log (§13 item 1) records only mutating calls; breakdown reads are not
   logged;
 - requests: ≤ 24 pushes a day per connected Cloudflare account (more parts only for very large
-  accounts) — negligible.
+  accounts) — negligible;
+- the **QR API** (`qr.clx.cx`, ADR 0044) is one request per view of an embedded image the browser
+  has not cached (`/qr.inline` is also cached at the edge for 24 hours), with no D1 or KV: about
+  8,000 a month when it moved (November 2026). It shares the 10M; if it ever
+  weighs, its Custom Domain is removed or `clx-qr` deleted — the product does not depend on it.
 
 **The user's account, Workers Free.** 100,000 worker requests/day, 10 ms CPU per request, 5 crons
 per account; D1 — 100,000 writes/day, 5M reads, 10 databases, 500 MB per database, 50 D1 queries
@@ -873,6 +880,10 @@ Pages:
 
 - **clx:** a public repository with a clean history, AGPL-3.0, a README, `wrangler.example.jsonc`.
   The repository holds the product only.
+- **The QR API** (`qr.clx.cx`) — the worker of `investblog/qr-generator`, MIT, in its own public
+  repository; clx's repository holds only `scripts/deploy-qr.mjs`, which deploys a pinned commit of it, and
+  `scripts/probe-qr.mjs`, its live check
+  ([ADR 0044](./decisions/0044-qr-api-on-qr-clx-cx.md)).
 - **`@spintax/qr-svg`** — a separate open library on npm, MIT, in its own public repository
   (`investblog/qr-svg`), published 22.10.2026 with provenance. API: `generateMatrix(text, opts)`,
   `renderSvg(matrix, opts)`, `buildPathData`. One ES5 file, zero dependencies (the uqr encoder is
@@ -1130,6 +1141,13 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   "The Russian host" below. The app at `/app` (and
   `/ru/app`, ADRs 0015, 0017) — the pages of §10, hash-routed (`/app#/accounts/…`), `noindex`. The API, sign-in and the workers' reports stay
   where they were (`/v1`, `/auth`, `/hook`, `/admin`).
+- **The QR API** ([ADR 0044](./decisions/0044-qr-api-on-qr-clx-cx.md)) answers on `qr.clx.cx`, a
+  Workers Custom Domain of its own worker `clx-qr` (qr-generator at a pinned commit,
+  `scripts/deploy-qr.mjs`): `/qr/<preset>/<sha256>.svg?data=&ecc=&q=`, `/qr.svg` (302 to it),
+  `/qr.inline`. Not the product's worker, no bindings, no logs; the link QR `/v1/links/{id}/qr.svg`
+  is separate (§6). Images embedded on other sites bring their viewers' requests to it, so the privacy
+  and abuse pages cover it before the extension links there; the generator's pages and the API's
+  documentation are pages of this site (the next step of the move).
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
   canonical and hreflang (with `x-default` on English), the sitemap, robots.txt, the header's menu
   and the footer all derive from it. The language comes from the address only. On a phone the menu

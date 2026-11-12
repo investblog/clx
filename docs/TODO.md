@@ -1,6 +1,6 @@
 ---
 title: clx — backlog
-updated: 2026-11-09
+updated: 2026-11-12
 ---
 
 # Backlog
@@ -21,6 +21,11 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       sign-in with the new password, the account deleted with nothing of it left in D1. Mail passed
       DKIM, SPF and DMARC.
 - [ ] Read /privacy, /terms, /abuse (drafts; legal review is out of the spec's scope).
+- [ ] The QR API on `qr.clx.cx` (ADR 0044, live since 12.11): before the extension links there —
+      /privacy and /abuse cover it (other sites' viewers reach it; nothing kept, `/qr.inline` edge
+      cache 24 h), the generator's pages and the API's documentation on the site (EN, RU; the Russian
+      ones say its images may not load from Russia without a VPN), the MIT notice of
+      `@spintax/qr-svg` in `site.js`.
 - [x] A way to ask for the `api` plan: `/support` in the bot (§17, ADR 0031), named on /agents, /api,
       auth.md, the pricing page and the keys page (19.10).
 - [x] The Telegram bot (§17, ADR 0030): @clxcxbot on `POST /hook/telegram`, live 16.10 (the
