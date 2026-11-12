@@ -25,8 +25,9 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       the generator, the API's documentation, the extension, their privacy policy; /privacy and
       /abuse name it; the MIT notice of `@spintax/qr-svg` at the end of `/qr.js`.
 - [ ] The owner: the QR pages' addresses and texts (the legal ones included), then `pnpm run deploy`
-      and `deploy-ru.mjs`; the extension's final name (`EXTENSION_NAME`, `site/qr-pages.ts`) and
-      whether its Opera listing exists (its old link answered 404 on 12.11).
+      and `deploy-ru.mjs`; whether the extension's Opera listing exists (its old link answered 404
+      on 12.11). Its name is chosen (ADR 0045). After the deploy: the extension's release with the
+      new name and links, then the old site's domain forwarded to `/qr-code-generator`.
 - [x] A way to ask for the `api` plan: `/support` in the bot (§17, ADR 0031), named on /agents, /api,
       auth.md, the pricing page and the keys page (19.10).
 - [x] The Telegram bot (§17, ADR 0030): @clxcxbot on `POST /hook/telegram`, live 16.10 (the

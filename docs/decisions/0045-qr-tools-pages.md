@@ -31,8 +31,13 @@ is secondary here: a person who wants a QR code needs no account, no Cloudflare 
   one card ("Track the scans") and a link to `/short-links`, which links back.
 - **Their own privacy policy** rather than a section of `/privacy`: a store's reviewer lands on the
   tools' policy, not on one about clx accounts. `/privacy` and `/abuse` name `qr.clx.cx`.
-- **The extension's name** lives in one constant (`EXTENSION_NAME`, `site/qr-pages.ts`) until its
-  rebrand is decided; its store links are by listing id.
+- **The extension is renamed "SVG QR Code Generator"** (decided 12.11; the stores had no extension
+  of that name): what is searched for, rather than a brand nobody looks for. The name lives in one
+  constant (`EXTENSION_NAME`, `site/qr-pages.ts`); its store links are by listing id, so the old
+  name in their slugs does no harm.
+- **The old site's domain forwards** to `/qr-code-generator` once the extension's release with the
+  new name, descriptions and links to these pages is out — not before: until then the extension
+  still links there.
 
 **Alternatives.**
 - The generator in `site.js` — every page would carry the QR library (13.7 KB), and `site.js` calls

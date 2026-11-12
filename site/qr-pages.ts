@@ -9,8 +9,8 @@ import type { Locale } from './pages.ts';
 import { API, MAX_DATA, PRESETS, svgFor } from './qr-core.ts';
 import { pathFor } from './urls.ts';
 
-/** The extension's name in the stores (its _locales). Its rebrand is the owner's to decide. */
-export const EXTENSION_NAME = 'QRCGen — QR Code Generator';
+/** The extension's name in the stores (its _locales), chosen 12.11 (ADR 0045). */
+export const EXTENSION_NAME = 'SVG QR Code Generator';
 /** Its listings, by store id (the slugs carry the old name and may stay). */
 const STORES: [string, string][] = [
   ['Chrome Web Store', 'https://chromewebstore.google.com/detail/qrcgen-qr-code-generator/jmajfmmdjbnmcjmkfffblmolhleklglg'],
