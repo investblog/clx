@@ -80,6 +80,6 @@ export const KEYWORDS: Record<string, Partial<Record<Locale, PageKeywords>>> = {
     en: { primary: 'MCP server for short links', keywords: ['link shortener for AI agents', 'analytics MCP server', 'agent-ready URL shortener'], tags: ['AI agents', 'developers'] },
   },
   '/api': {
-    en: { primary: 'URL shortener API', keywords: ['link shortener API', 'custom domain shortener API', 'visitor analytics API', 'QR code API'], tags: ['developers', 'API'] },
+    en: { primary: 'URL shortener API', keywords: ['link shortener API', 'custom domain shortener API', 'visitor analytics API'], tags: ['developers', 'API'] },
   },
 };

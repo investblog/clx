@@ -82,7 +82,8 @@ await check('unknown path → 404', '/', { status: 404 });
 // The generator page (site/qr.ts, ADR 0045) draws with @spintax/qr-svg and promises the API's image
 // byte for byte: every preset, every level, several margins.
 const W = { sq125: 125, sq200: 200, sq250: 250, sq300: 300 };
-const parity = [['https://example.com/a', 'sq125', 'L', 0], ['hello', 'sq200', 'M', 2], ['Привет, мир! € 😀', 'sq250', 'Q', 4], ['€'.repeat(400), 'sq300', 'H', 16]];
+// Digits and upper-case Latin too: an encoder may pick another mode for them.
+const parity = [['https://example.com/a', 'sq125', 'L', 0], ['hello', 'sq200', 'M', 2], ['Привет, мир! € 😀', 'sq250', 'Q', 4], ['€'.repeat(400), 'sq300', 'H', 16], ['0123456789'.repeat(30), 'sq250', 'M', 2], ['HTTPS://EXAMPLE.COM/ABC-123', 'sq200', 'Q', 1]];
 for (const [data, preset, ecc, q] of parity) {
   const name = `same SVG as @spintax/qr-svg (${preset}, ${ecc}, q=${q})`;
   try {
