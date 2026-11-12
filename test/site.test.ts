@@ -622,7 +622,14 @@ describe('generated pages', () => {
       expect(html.match(/<div id="qr-preview" class="qr-tool__preview">(<svg[\s\S]*?<\/svg>)/u)![1]).toBe(QR.renderSvg(QR.generateMatrix('https://example.com', { ecc: 'M' }), { quiet: 2, size: 250 }));
       // clx is a line at the end, not the page's call: no sign-up in it.
       expect(html.match(/<main[\s\S]*?<\/main>/u)![0]).not.toContain('#register');
+      // The extension under the lead: its page and the three stores, each with its icon in the sprite.
+      const stores = html.match(/<div class="qr-hero__stores">[\s\S]*?<\/div>/u)![0];
+      expect(stores).toContain(`<a href="${pathFor('/qr-code-extension', l)}">`);
+      expect([...stores.matchAll(/#i-brand-(\w+)/gu)].map((m) => m[1])).toEqual(['chrome', 'firefox', 'edge']);
+      expect(html).toMatch(/"@type":"Question","name":"(Is there a browser extension\?|Есть расширение для браузера\?)"/u);
     }
+    const sprite = read('icons.svg');
+    for (const b of ['chrome', 'firefox', 'edge']) expect(sprite).toContain(`<symbol id="i-brand-${b}"`);
     for (const p of SITE_PAGES)
       for (const l of p.locales) {
         const html = read(fileFor(p.slug, l));

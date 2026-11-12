@@ -356,6 +356,10 @@ a.promo:hover .promo__cta,.promo__cta:hover{background:var(--promo-cta-bg-hover)
 /* The QR code generator (site/qr-pages.ts, ADR 0045): the form beside the code, one column on a phone. */
 .qr-hero{max-width:1040px;margin-left:auto;margin-right:auto}
 .qr-hero .lead{max-width:820px}
+/* The extension's stores under the lead: small, so the tool stays near the top; a phone takes no
+   extensions of this kind, so there only the link to the extension's page is left. */
+.qr-hero__stores{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);margin-top:var(--space-4)}
+.qr-hero__buttons{display:flex;flex-wrap:wrap;gap:var(--space-2)}
 .qr-tool{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-5);max-width:1040px;margin:0 auto;padding:var(--space-5)}
 .qr-tool__form .textarea{width:100%;font-family:var(--font-mono)}
 .qr-tool__options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
@@ -366,4 +370,4 @@ a.promo:hover .promo__cta,.promo__cta:hover{background:var(--promo-cta-bg-hover)
 .qr-tool__status{margin:var(--space-2) 0;font-size:var(--fs-sm);color:var(--text-muted)}
 .qr-tool__code{min-height:2.6em;margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);border-radius:var(--radius-xs);background:var(--bg-soft);font:12px/1.5 var(--font-mono);word-break:break-all}
 .doc .table-wrap{overflow-x:auto}
-@media (max-width:720px){.qr-tool,.qr-tool__options{grid-template-columns:minmax(0,1fr)}.qr-tool{padding:var(--space-4)}}
+@media (max-width:720px){.qr-tool,.qr-tool__options{grid-template-columns:minmax(0,1fr)}.qr-tool{padding:var(--space-4)}.qr-hero__buttons{display:none}}

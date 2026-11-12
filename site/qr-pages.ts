@@ -11,12 +11,16 @@ import { pathFor } from './urls.ts';
 
 /** The extension's name in the stores (its _locales), chosen 12.11 (ADR 0045). */
 export const EXTENSION_NAME = 'SVG QR Code Generator';
-/** Its listings, by store id (the slugs carry the old name and may stay). */
-const STORES: [string, string][] = [
-  ['Chrome Web Store', 'https://chromewebstore.google.com/detail/qrcgen-qr-code-generator/jmajfmmdjbnmcjmkfffblmolhleklglg'],
-  ['Microsoft Edge Add-ons', 'https://microsoftedge.microsoft.com/addons/detail/qrcgen-qr-code-generator/hibgblidmmohfjfompehcajiefijcnjg'],
-  ['Firefox Add-ons', 'https://addons.mozilla.org/firefox/addon/qrcgen-qr-code-generator/'],
+/** Its listings, by store id (the slugs carry the old name and may stay): the browser, its icon in
+ *  /icons.svg, the store's name and the listing. No Opera: its store takes no new extensions. */
+const STORES: { browser: string; icon: string; store: string; url: string }[] = [
+  { browser: 'Chrome', icon: 'chrome', store: 'Chrome Web Store', url: 'https://chromewebstore.google.com/detail/qrcgen-qr-code-generator/jmajfmmdjbnmcjmkfffblmolhleklglg' },
+  { browser: 'Firefox', icon: 'firefox', store: 'Firefox Add-ons', url: 'https://addons.mozilla.org/firefox/addon/qrcgen-qr-code-generator/' },
+  { browser: 'Edge', icon: 'edge', store: 'Microsoft Edge Add-ons', url: 'https://microsoftedge.microsoft.com/addons/detail/qrcgen-qr-code-generator/hibgblidmmohfjfompehcajiefijcnjg' },
 ];
+/** A button per store, with the browser's icon; `label` names the button by its store or browser. */
+const storeButtons = (label: 'store' | 'browser', cls = 'btn btn--ghost') =>
+  STORES.map((s) => `<a class="${cls}" href="${s.url}" rel="noopener"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-brand-${s.icon}"></use></svg>${escapeHtml(label === 'store' ? s.store : s.browser)}</a>`).join('');
 const SOURCE = { worker: 'https://github.com/investblog/qr-generator', library: 'https://github.com/investblog/qr-svg' };
 
 type Page = { title: string; description: string; body: string; script?: string };
@@ -47,12 +51,14 @@ const GENERATOR = {
       h: 'Questions',
       items: [
         ['Is the generator free?', 'Yes, with no sign-up and no limit on how many codes you make: they are drawn in your browser. The API at qr.clx.cx needs no key either.'],
+        ['Is there a browser extension?', `Yes, a free one: ${EXTENSION_NAME}, for Chrome, Firefox and Edge. In a side panel it makes a QR code for the page you are on or for any text — an SVG, a link and snippets to embed, as here — and sends nothing anywhere.`],
         ['Do QR codes made here expire?', 'No. A QR code holds its text itself; it works as long as what it points to does. The image link works as long as the API does.'],
         ['Which error correction should I choose?', 'M for screens and most print; Q or H for print that may get scratched or a logo laid over it. Higher levels make the code denser.'],
         ['Can I change where a printed code leads?', 'Not with a plain QR code: its text is fixed. Encode a short link instead, and change the link’s target whenever you like.'],
         ['Is a QR code private?', 'No. Anyone who scans it, or opens its image link, reads its text. Do not encode passwords or other secrets.'],
       ] as [string, string][],
     },
+    ext: { link: 'Free browser extension →', group: `Install ${EXTENSION_NAME}` },
     more: [['The QR code API', '/qr-code-api'], ['The browser extension', '/qr-code-extension'], ['Privacy of the QR tools', '/qr-code-privacy'], ['Short links with QR codes', '/short-links']] as [string, string][],
   },
   ru: {
@@ -74,12 +80,14 @@ const GENERATOR = {
       h: 'Вопросы',
       items: [
         ['Генератор бесплатный?', 'Да, без регистрации и без ограничения числа кодов: они рисуются в вашем браузере. API qr.clx.cx тоже работает без ключа.'],
+        ['Есть расширение для браузера?', `Да, бесплатное: ${EXTENSION_NAME} для Chrome, Firefox и Edge. В боковой панели оно делает QR-код для открытой страницы или любого текста — SVG, ссылку и код для вставки, как здесь, — и ничего никуда не отправляет.`],
         ['QR-коды отсюда перестают работать?', 'Нет. QR-код хранит текст в себе и работает, пока работает то, куда он ведёт. Ссылка на картинку работает, пока работает API.'],
         ['Какую коррекцию ошибок выбрать?', 'M — для экранов и большинства печати; Q или H — для печати, которую могут поцарапать, или если поверх кладётся логотип. Чем выше уровень, тем плотнее код.'],
         ['Можно поменять, куда ведёт напечатанный код?', 'С обычным QR-кодом — нет: его текст неизменен. Закодируйте короткую ссылку и меняйте её цель когда угодно.'],
         ['QR-код — это тайна?', 'Нет. Любой, кто его отсканирует или откроет ссылку на картинку, прочтёт текст. Не кодируйте пароли и другие секреты.'],
       ] as [string, string][],
     },
+    ext: { link: 'Бесплатное расширение для браузера →', group: `Установить ${EXTENSION_NAME}` },
     more: [['Короткие ссылки с QR-кодами', '/short-links'], ['Расширение для браузера', '/qr-code-extension'], ['Конфиденциальность QR-инструментов', '/qr-code-privacy']] as [string, string][],
   },
 };
@@ -117,6 +125,7 @@ export function generatorPage(locale: Locale): Page {
   const body = `<section class="hero qr-hero">
   <h1>${escapeHtml(g.h1)}</h1>
   <p class="lead">${escapeHtml(g.lead)}</p>
+  <div class="qr-hero__stores"><a href="${pathFor('/qr-code-extension', locale)}">${escapeHtml(g.ext.link)}</a><span class="qr-hero__buttons" role="group" aria-label="${escapeHtml(g.ext.group)}">${storeButtons('browser', 'btn btn--ghost btn--sm')}</span></div>
 </section>
 ${tool}
 <section class="home-section">
@@ -242,7 +251,7 @@ const EXTENSION = {
 
 export function extensionPage(locale: Locale): Page {
   const x = EXTENSION[locale];
-  const stores = STORES.map(([name, url]) => `<a class="btn btn--ghost" href="${url}" rel="noopener">${escapeHtml(name)}</a>`).join('');
+  const stores = storeButtons('store');
   const body = `<article class="doc">
 <h1>${escapeHtml(EXTENSION_NAME)}</h1>
 <p class="lead">${escapeHtml(x.lead)}</p>

@@ -35,6 +35,9 @@ is secondary here: a person who wants a QR code needs no account, no Cloudflare 
   of that name): what is searched for, rather than a brand nobody looks for. The name lives in one
   constant (`EXTENSION_NAME`, `site/qr-pages.ts`); its store links are by listing id, so the old
   name in their slugs does no harm.
+- **The extension under the generator's lead** (12.11): a link to its page and small buttons to
+  its three stores, with the browsers' icons (`/icons.svg`), and a question in the FAQ. Small, so
+  the tool stays near the top; a phone shows the link alone, since these extensions do not run there.
 - **The old site's domain forwards** to `/qr-code-generator` once the extension's release with the
   new name, descriptions and links to these pages is out — not before: until then the extension
   still links there.
