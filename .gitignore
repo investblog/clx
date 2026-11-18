@@ -55,6 +55,8 @@ public/es/
 public/fr/
 public/pt-br/
 public/tr/
+# the pages about clx in Serbian (ADR 0047)
+public/sr/
 public/robots.txt
 public/sitemap.xml
 public/keywords.json

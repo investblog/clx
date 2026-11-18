@@ -32,8 +32,17 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       (ADR 0046, 12.11): de, es, fr, pt-br, tr on clx.cx under their prefix.
 - [ ] Optional: a native speaker's read of the five translations (written by an AI translator against
       the English text and the extension's labels), the policy first.
+- [ ] The site in Serbian (ADR 0047, 18.11): the pages about clx and the generator on `clx.cx/sr`,
+      Latin and ekavian, the guard `test/site-sr.test.ts`; the app, sign-up and the legal texts in
+      English. Built and checked locally; next: deploy, then `scripts/deploy-ru.mjs` (ru.clx.cx's
+      hreflang names Serbian), and a native speaker's read before it is promoted.
 - [ ] The extension's release with the new name and links to these pages, then the old site's
       domain forwarded to `/qr-code-generator`.
+- [ ] The extension's demo video (13.11): seven narrated videos (one per UI language, 1920x1080,
+      ~1 min, captions and narration from the extension's own welcome texts) with `.srt` and an upload
+      sheet each, and seven silent loops for the generator page — made outside the repository, kept on
+      the maintainer's machine; how, and what went wrong: [`demo-video.md`](./demo-video.md). Next: the owner listens (Russian first) and uploads to YouTube; then
+      the loop goes into the empty space under the generator's form, linking the language's video.
 - [x] A way to ask for the `api` plan: `/support` in the bot (§17, ADR 0031), named on /agents, /api,
       auth.md, the pricing page and the keys page (19.10).
 - [x] The Telegram bot (§17, ADR 0030): @clxcxbot on `POST /hook/telegram`, live 16.10 (the

@@ -6,12 +6,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml } from './layout.ts';
-import type { Locale } from './pages.ts';
+import { LANG_TEXT } from './lang/index.ts';
+import { isSiteLocale, siteLocaleOf, type ContentLocale, type Locale, type MarketingLocale } from './pages.ts';
 import { authPathFor } from './urls.ts';
 
 const logo = (file: string) => fs.readFileSync(path.join(import.meta.dirname, 'brand', 'promo', file), 'utf8').trim();
 
-interface PromoCopy {
+export interface PromoCopy {
   eyebrow?: string;
   title: string;
   text: string;
@@ -21,7 +22,7 @@ interface PromoCopy {
 interface Promo {
   id: string;
   logo: string;
-  url: Record<Locale, string>;
+  url: Record<Locale, string> & Partial<Record<MarketingLocale, string>>;
   copy: Record<Locale, PromoCopy>;
 }
 
@@ -50,7 +51,7 @@ const PROMOS: Promo[] = [
     // From wpps.ru's banner (the words of catchall.in's own pages).
     id: 'catchall',
     logo: logo('catchall.svg'),
-    url: { en: 'https://catchall.in/', ru: 'https://ru.catchall.in/' },
+    url: { en: 'https://catchall.in/', ru: 'https://ru.catchall.in/', sr: 'https://catchall.in/sr' },
     copy: {
       en: {
         eyebrow: 'From the same team',
@@ -96,10 +97,14 @@ const withUtm = (url: string): string => {
 
 
 /** The rotation: the banners of `ids` (all by default, 301.st first), the first shown. */
-export function promoBlock(locale: Locale, ids: readonly string[] = PROMOS.map((p) => p.id)): string {
+export function promoBlock(locale: ContentLocale, ids: readonly string[] = PROMOS.map((p) => p.id)): string {
   const banners = PROMOS.filter((p) => ids.includes(p.id)).map((p, i) => {
-    const c = p.copy[locale];
-    return `<a class="promo promo--${p.id}" href="${escapeHtml(withUtm(p.url[locale]))}" rel="noopener" data-promo${i ? ' hidden' : ''}>
+    // A marketing language (ADR 0047) has the words in its folder, and the service's site in its
+    // language where there is one, else the English one.
+    const c = isSiteLocale(locale) ? p.copy[locale] : LANG_TEXT[locale].promo[p.id];
+    if (!c) throw new Error(`site/lang/${locale}: no words for the banner ${p.id}`);
+    const url = isSiteLocale(locale) ? p.url[locale] : (p.url[locale] ?? p.url.en);
+    return `<a class="promo promo--${p.id}" href="${escapeHtml(withUtm(url))}" rel="noopener" data-promo${i ? ' hidden' : ''}>
     <span class="promo__glow" aria-hidden="true"></span>
     <span class="promo__mark" aria-hidden="true">${p.logo}</span>
     <span class="promo__body">${c.eyebrow ? `<span class="promo__eyebrow">${escapeHtml(c.eyebrow)}</span>` : ''}<span class="promo__title">${escapeHtml(c.title)}</span><span class="promo__text">${escapeHtml(c.text)}</span></span>
@@ -113,14 +118,14 @@ const CLX_MARK = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 
 
 /** The page's closing call to sign up, drawn as clx's own banner: the mark, the heading, the plan in a
  *  line, the button. Not one link like the banners above: the button is its only link. */
-export function finalBlock(locale: Locale, title: string, cta: string): string {
+export function finalBlock(locale: ContentLocale, title: string, cta: string): string {
   const s = STRINGS[locale].home;
   return `<section class="home-section final-slot">
   <div class="promo promo--clx">
     <span class="promo__glow" aria-hidden="true"></span>
     <span class="promo__mark" aria-hidden="true">${CLX_MARK}</span>
     <div class="promo__body"><h2 class="promo__title">${escapeHtml(title)}</h2><p class="promo__text">${escapeHtml(s.note)}</p></div>
-    <a class="promo__cta" href="${authPathFor(locale, 'register')}">${escapeHtml(cta)} <span aria-hidden="true">→</span></a>
+    <a class="promo__cta" href="${authPathFor(siteLocaleOf(locale), 'register')}">${escapeHtml(cta)} <span aria-hidden="true">→</span></a>
   </div>
 </section>`;
 }

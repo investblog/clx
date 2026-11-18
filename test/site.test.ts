@@ -13,7 +13,7 @@ import { nextRoute, signInPath } from '../ui/next.ts';
 // which a build falls back to; the last block builds with the Russian host on. The address modules
 // read the switch when they load, so they are loaded after it is set.
 process.env.CLX_RU_ORIGIN = 'off';
-const { LOCALES, QR_LOCALES, SITE_PAGES, STATIC_FILES } = await import('../site/pages.ts');
+const { GENERATOR_LOCALES, LOCALES, QR_LOCALES, SITE_PAGES, STATIC_FILES, siteLocaleOf } = await import('../site/pages.ts');
 const { alternatesFor, authPathFor, fileFor, ogImagePath, pathFor, urlFor } = await import('../site/urls.ts');
 const { FLAG } = await import('../site/layout.ts');
 const FLAGS = await import('country-flag-icons/string/3x2');
@@ -68,7 +68,7 @@ describe('generated pages', () => {
     expect(map.pages.map((e) => e.url).sort()).toEqual([...targets].sort());
     const word = /[\p{L}\p{N}]+(?:['-][\p{L}\p{N}]+)*/u.source;
     const plain = new RegExp(`^${word}(?: ${word})*$`, 'u');
-    for (const l of QR_LOCALES) {
+    for (const l of Object.keys(LOCALES)) {
       const all = map.pages.filter((e) => e.locale === l).flatMap((e) => [e.primary, ...e.keywords]);
       expect(new Set(all.map((a) => a.toLowerCase())).size, `${l}: an anchor of two targets`).toBe(all.length);
     }
@@ -186,8 +186,8 @@ describe('generated pages', () => {
     // language (the English-only agent docs aside), and a /faq#fragment to one of its groups.
     const groups = new Set([...read('faq.html').matchAll(/<section class="home-section faq-group" id="([^"]+)"/gu)].map((m) => m[1]));
     for (const [path, main] of mains) {
-      const lang = QR_LOCALES.find((l) => l !== 'en' && (path === `/${l}` || path.startsWith(`/${l}/`))) ?? 'en';
-      // A QR-only language (ADR 0046) links the rest of the site in English.
+      const lang = (Object.keys(LOCALES) as (keyof typeof LOCALES)[]).find((l) => l !== 'en' && (path === `/${l}` || path.startsWith(`/${l}/`))) ?? 'en';
+      // A QR-only language (ADR 0046) and a marketing one (ADR 0047) link the rest of the site in English.
       const langs = lang === 'en' || lang === 'ru' ? [lang] : [lang, 'en' as const];
       for (const [, href, hash] of main.matchAll(/<a [^>]*?href="(\/[^"#?]*)(?:#([^"]*))?"/gu)) {
         if (/^\/(agents|api|qr-code-api)$|\.(yaml|json|md)$|\/app$/u.test(href!)) continue;
@@ -273,7 +273,8 @@ describe('generated pages', () => {
         expect(slot).toContain(`<span class="promo__mark" aria-hidden="true">${mark}</span>`);
         expect(slot).toMatch(/<h2 class="promo__title">[^<]+<\/h2>/u);
         expect([...slot.matchAll(/<a /gu)]).toHaveLength(1);
-        expect(slot).toContain(`<a class="promo__cta" href="${authPathFor(l as 'en' | 'ru', 'register')}">`);
+        // A marketing language (ADR 0047) signs up in English.
+        expect(slot).toContain(`<a class="promo__cta" href="${authPathFor(siteLocaleOf(l), 'register')}">`);
         expect(slot).not.toMatch(/data-promo|style=|<script/u);
       }
   });
@@ -359,7 +360,7 @@ describe('generated pages', () => {
 
   it('the flags are country-flag-icons’ own, one symbol per language in the sprite', () => {
     // Written out here, not taken from the code it checks: English by the British flag, pt-BR by Brazil's.
-    const expected = { en: 'GB', ru: 'RU', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
+    const expected = { en: 'GB', ru: 'RU', sr: 'RS', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
     expect(FLAG).toEqual(expected);
     const sprite = read('icons.svg');
     expect(sprite).toContain('Copyright (c) 2020 @catamphetamine');
@@ -368,11 +369,11 @@ describe('generated pages', () => {
       expect(sprite, code).toContain(`<symbol id="i-flag-${code.toLowerCase()}" viewBox="${viewBox}">${body}</symbol>`);
     }
     // Every switch item links its language's flag; pages link them, not carry them.
-    for (const l of QR_LOCALES) {
+    for (const l of GENERATOR_LOCALES) {
       const header = read(fileFor('/qr-code-generator', l)).match(/<header[\s\S]*?<\/header>/u)![0];
       expect(header, l).not.toContain('<svg xmlns');
       expect([...header.matchAll(/data-locale="([\w-]+)"[^>]*><span class="lang-dd__flag" aria-hidden="true"><svg><use href="\/icons.svg#i-flag-(\w+)">/gu)].map((m) => `${m[1]} ${m[2]}`), l).toEqual(
-        QR_LOCALES.map((x) => `${x} ${expected[x].toLowerCase()}`),
+        GENERATOR_LOCALES.map((x) => `${x} ${expected[x].toLowerCase()}`),
       );
     }
   });
@@ -434,6 +435,9 @@ describe('generated pages', () => {
     expect(run('ru', '#login')).toEqual(['https://clx.cx/ru/signin?next=%2Fsites#login']);
     expect(run('ru', '#pricing')).toEqual([]);
     expect(run('en', '#register')).toEqual([]);
+    // A Serbian page (ADR 0047) has no card: the form opens on the English one.
+    expect(run('sr-Latn', '#register')).toEqual(['/?next=%2Fsites#register']);
+    expect(run('sr-Latn', '#pricing')).toEqual([]);
   });
 
   /** site.js on a stand-in of the home page's card (site/auth.ts): what it shows, sends and opens. */
@@ -472,7 +476,7 @@ describe('generated pages', () => {
     const landing = { classList: { toggle: (c: string, on: boolean) => (on ? classes.add(c) : classes.delete(c)) } };
     const state = { onHash: () => {}, posts: [] as [string, unknown][], assigned: [] as string[], resets: 0, human: (_t: string) => {} };
     const location = { pathname: '/', hash: opts.hash, search: opts.search ?? '', assign: (to: string) => state.assigned.push(to) };
-    const langs = ['/', '/ru'].map((href) => ({ href, dataset: {} as Record<string, string>, getAttribute: () => href }));
+    const langs = [['/', 'en'], ['/ru', 'ru'], ['/sr', 'sr']].map(([href, locale]) => ({ href, dataset: { locale } as Record<string, string>, getAttribute: () => href }));
     const document = { documentElement: { lang: 'ru' }, querySelector: (sel: string) => (sel === '[data-auth]' ? card : sel === '[data-landing]' ? landing : null), querySelectorAll: (sel: string) => (sel === '#lang-dd a[data-locale]' ? langs : []) };
     const turnstile = { render: (_el: unknown, o: { callback: (t: string) => void }) => ((state.human = o.callback), 'w1'), reset: () => state.resets++ };
     const window = { turnstile, addEventListener: (type: string, fn: () => void) => type === 'hashchange' && (state.onHash = fn) };
@@ -557,10 +561,11 @@ describe('generated pages', () => {
 
   it('site.js: the language switch opens the same form, with the way back, in the other language', async () => {
     const run = await cardStand({ hash: '#login', sitekey: 'key', search: '?next=%2Fsites' });
-    expect(run.langs.map((a) => a.href)).toEqual(['/?next=%2Fsites#login', '/ru?next=%2Fsites#login']);
+    // Serbian has no card (ADR 0047): its link stays the home page.
+    expect(run.langs.map((a) => a.href)).toEqual(['/?next=%2Fsites#login', '/ru?next=%2Fsites#login', '/sr']);
     run.location.hash = '';
     run.onHash();
-    expect(run.langs.map((a) => a.href)).toEqual(['/', '/ru']);
+    expect(run.langs.map((a) => a.href)).toEqual(['/', '/ru', '/sr']);
   });
 
   it('site.js: a failed /auth/config is not "closed" — the form stays usable and the next visit asks again', async () => {
@@ -635,7 +640,12 @@ describe('generated pages', () => {
     expect([...ru.matchAll(/<a class="lang-dd__item" href="([^"]+)"[^>]*data-locale="(\w+)"([^>]*)>/gu)].map((m) => [m[1], m[2], m[3]!.includes('aria-current')])).toEqual([
       ['/analytics', 'en', false],
       ['/ru/analytics', 'ru', true],
+      ['/sr/analytics', 'sr', false],
     ]);
+    // Serbian is `sr-Latn` in lang and hreflang, plain SR in the pill (ADR 0047).
+    const sr = header('sr/analytics.html');
+    expect(sr).toMatch(/aria-label="Jezik: Srpski"><span class="lang-dd__flag" aria-hidden="true"><svg><use href="\/icons.svg#i-flag-rs"><\/use><\/svg><\/span>SR<\/summary>/u);
+    expect(sr).toContain('href="/sr/analytics" hreflang="sr-Latn" lang="sr-Latn" data-locale="sr" aria-current="true"');
     expect(header('bitly-alternative.html')).not.toContain('lang-dd');
     expect(ru).not.toMatch(/style=|<script/u);
   });
@@ -703,16 +713,18 @@ describe('generated pages', () => {
       for (const slug of qrSlugs) {
         expect(fileFor(slug, l)).toBe(`${l}${slug}.html`);
         const html = read(fileFor(slug, l));
+        // The generator is in the marketing languages too (ADR 0047).
+        const langs = SITE_PAGES.find((p) => p.slug === slug)!.locales;
         const lang = l === 'pt-br' ? 'pt-BR' : l;
         expect(html).toContain(`<html lang="${lang}"`);
         // hreflang: x-default and the seven languages, each at its own address, the same list as the
         // switch; og:locale this one, the six others its alternates.
         const alternates = [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)" \/>/gu)].map((m) => `${m[1]} ${m[2]}`);
-        expect(alternates, `${l}${slug}`).toEqual([`x-default ${urlFor(slug, 'en')}`, ...QR_LOCALES.map((x) => `${LOCALES[x].htmlLang} ${urlFor(slug, x)}`)]);
+        expect(alternates, `${l}${slug}`).toEqual([`x-default ${urlFor(slug, 'en')}`, ...langs.map((x) => `${LOCALES[x].htmlLang} ${urlFor(slug, x)}`)]);
         expect(urlFor(slug, l)).toBe(`https://clx.cx/${l}${slug}`);
-        expect([...html.matchAll(/class="lang-dd__item" href="([^"]+)" hreflang="([^"]+)"/gu)].map((m) => `${m[2]} ${m[1]}`)).toEqual(QR_LOCALES.map((x) => `${LOCALES[x].htmlLang} ${pathFor(slug, x)}`));
+        expect([...html.matchAll(/class="lang-dd__item" href="([^"]+)" hreflang="([^"]+)"/gu)].map((m) => `${m[2]} ${m[1]}`)).toEqual(langs.map((x) => `${LOCALES[x].htmlLang} ${pathFor(slug, x)}`));
         expect(html).toContain(`<meta property="og:locale" content="${LOCALES[l].ogLocale}" />`);
-        expect([...html.matchAll(/og:locale:alternate" content="([^"]+)"/gu)].map((m) => m[1])).toEqual(QR_LOCALES.filter((x) => x !== l).map((x) => LOCALES[x].ogLocale));
+        expect([...html.matchAll(/og:locale:alternate" content="([^"]+)"/gu)].map((m) => m[1])).toEqual(langs.filter((x) => x !== l).map((x) => LOCALES[x].ogLocale));
         // The three pages link one another in this language, not in English.
         const main = html.match(/<main[\s\S]*?<\/main>/u)![0];
         for (const other of qrSlugs.filter((s) => s !== slug)) expect(main, `${l}${slug} → ${other}`).toContain(`href="/${l}${other}"`);

@@ -9,11 +9,12 @@ import { flowChart } from '../ui/flows.ts';
 import { chartOptions, demoReport, themed } from './demo.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml, seeAlso } from './layout.ts';
-import type { Locale } from './pages.ts';
+import { byLocale } from './lang/index.ts';
+import { siteLocaleOf, type ContentLocale, type Locale } from './pages.ts';
 import { finalBlock } from './promo.ts';
 import { authPathFor } from './urls.ts';
 
-interface ProductText {
+export interface ProductText {
   title: string;
   description: string;
   h1: string;
@@ -32,7 +33,7 @@ interface ProductText {
   final: string;
 }
 
-interface LinkCard {
+export interface LinkCard {
   short: string;
   target: string;
   qr: string;
@@ -266,7 +267,7 @@ function qrSvg(text: string): string {
 }
 
 /** The example link: its address, the QR code, its rules and clicks by country. */
-function linkCard(locale: Locale, c: LinkCard): string {
+function linkCard(locale: ContentLocale, c: LinkCard): string {
   const { num, o } = chartOptions(locale);
   const counts = [1840, 960, 410, 230];
   const total = counts.reduce((a, n) => a + n, 0);
@@ -294,7 +295,7 @@ const FLOWS = [
 ];
 
 /** Which rule took which clicks: the example link's sankey, in both themes. */
-function flowsBlock(locale: Locale, f: LinkCard['flows']): string {
+function flowsBlock(locale: ContentLocale, f: LinkCard['flows']): string {
   const { num, o } = chartOptions(locale);
   const total = FLOWS.flat().reduce((a, n) => a + n, 0);
   const rows = FLOWS.flatMap((row, s) => row.map((n, d) => ({ source: f.sources[s]!, to: f.to[d]!, n })));
@@ -409,7 +410,7 @@ const GENERATORS: Record<Locale, ProductText & { flow: [string, string][] }> = {
   },
 };
 
-interface PricingText extends ProductText {
+export interface PricingText extends ProductText {
   plans: { name: string; price: string; points: string[] }[];
   note: string;
 }
@@ -678,8 +679,9 @@ function stepFlow(steps: string[] | undefined): string {
   return `  <ol class="step-flow hero__steps">${items.join('<li class="step-separator" aria-hidden="true">→</li>')}</ol>\n`;
 }
 
-function page(locale: Locale, t: ProductText, illustration: string, after = ''): { title: string; description: string; body: string } {
-  const start = `<a class="btn btn--primary btn--lg" href="${authPathFor(locale, 'register')}">${escapeHtml(t.start)}</a>`;
+function page(locale: ContentLocale, t: ProductText, illustration: string, after = ''): { title: string; description: string; body: string } {
+  // Sign-up is in the site's languages: a marketing language's page leads to the English one.
+  const start = `<a class="btn btn--primary btn--lg" href="${authPathFor(siteLocaleOf(locale), 'register')}">${escapeHtml(t.start)}</a>`;
   const features = t.sections.length === 3 ? 'features features--3' : 'features';
   const setup = t.setup
     ? `<section class="home-section home-api">
@@ -713,17 +715,27 @@ ${after}${setup}${faq}${finalBlock(locale, t.final, t.start)}`;
   return { title: t.title, description: t.description, body };
 }
 
-export const analyticsPage = (locale: Locale) => page(locale, ANALYTICS[locale], demoReport(locale, 'pages'));
-export const linksPage = (locale: Locale) => page(locale, LINKS[locale], linkCard(locale, LINKS[locale].card), flowsBlock(locale, LINKS[locale].card.flows));
-export const generatorsPage = (locale: Locale) => page(locale, GENERATORS[locale], flow(GENERATORS[locale].flow));
-export const pricingPage = (locale: Locale) => page(locale, PRICING[locale], plansBlock(PRICING[locale]));
-export const howPage = (locale: Locale) => page(locale, HOW[locale], flow(HOW[locale].flow));
-export const openSourcePage = (locale: Locale) => page(locale, OPEN[locale], '');
+// The pages in every language: English and Russian above, a marketing language from its folder (ADR 0047).
+export const PRODUCTS = {
+  analytics: byLocale(ANALYTICS, (t) => t.products.analytics),
+  links: byLocale(LINKS, (t) => t.products.links),
+  generators: byLocale(GENERATORS, (t) => t.products.generators),
+  pricing: byLocale(PRICING, (t) => t.products.pricing),
+  how: byLocale(HOW, (t) => t.products.how),
+  open: byLocale(OPEN, (t) => t.products.open),
+};
+
+export const analyticsPage = (locale: ContentLocale) => page(locale, PRODUCTS.analytics[locale], demoReport(locale, 'pages'));
+export const linksPage = (locale: ContentLocale) => page(locale, PRODUCTS.links[locale], linkCard(locale, PRODUCTS.links[locale].card), flowsBlock(locale, PRODUCTS.links[locale].card.flows));
+export const generatorsPage = (locale: ContentLocale) => page(locale, PRODUCTS.generators[locale], flow(PRODUCTS.generators[locale].flow));
+export const pricingPage = (locale: ContentLocale) => page(locale, PRODUCTS.pricing[locale], plansBlock(PRODUCTS.pricing[locale]));
+export const howPage = (locale: ContentLocale) => page(locale, PRODUCTS.how[locale], flow(PRODUCTS.how[locale].flow));
+export const openSourcePage = (locale: ContentLocale) => page(locale, PRODUCTS.open[locale], '');
 
 /** The questions of each page, for /faq (site/faq.ts): one source, so a page and /faq cannot differ. */
-export const pageQuestions = (locale: Locale) => ({
-  analytics: ANALYTICS[locale].faq!.items,
-  links: LINKS[locale].faq!.items,
-  generators: GENERATORS[locale].faq!.items,
-  pricing: PRICING[locale].faq!.items,
+export const pageQuestions = (locale: ContentLocale) => ({
+  analytics: PRODUCTS.analytics[locale].faq!.items,
+  links: PRODUCTS.links[locale].faq!.items,
+  generators: PRODUCTS.generators[locale].faq!.items,
+  pricing: PRODUCTS.pricing[locale].faq!.items,
 });

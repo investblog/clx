@@ -36,7 +36,8 @@ if (card) {
   const lang = document.documentElement.lang === 'ru' ? 'ru' : 'en';
   const landing = document.querySelector<HTMLElement>('[data-landing]');
   const forms = Array.from(card.querySelectorAll<HTMLFormElement>('[data-auth-form]'));
-  const langs = Array.from(document.querySelectorAll<HTMLAnchorElement>('#lang-dd a[data-locale]'));
+  // Only the site's languages have the card (ADR 0047): a marketing language's link stays its home page.
+  const langs = Array.from(document.querySelectorAll<HTMLAnchorElement>('#lang-dd a[data-locale]')).filter((a) => a.dataset.locale === 'en' || a.dataset.locale === 'ru');
   for (const a of langs) a.dataset.home = a.getAttribute('href') ?? '/';
 
   const say = (form: HTMLFormElement, type: 'error' | 'success' | 'loading' | 'idle', text: string) => {

@@ -9,20 +9,31 @@ export const REPO = 'https://github.com/investblog/clx';
 /** The Telegram bot (docs/spec.md §17): the way in where clx.cx does not open. */
 export const BOT_URL = 'https://t.me/clxcxbot';
 /** The footer's glyph links here (site/layout.ts): 301.st, the parent service; its Russian site is 301.ru. */
-export const COMPANY_URL: Record<PageLocale, string> = { en: 'https://301.st', ru: 'https://301.ru', de: 'https://301.st', es: 'https://301.st', fr: 'https://301.st', 'pt-br': 'https://301.st', tr: 'https://301.st' };
+export const COMPANY_URL: Record<PageLocale, string> = { en: 'https://301.st', ru: 'https://301.ru', sr: 'https://301.st', de: 'https://301.st', es: 'https://301.st', fr: 'https://301.st', 'pt-br': 'https://301.st', tr: 'https://301.st' };
 /** The app (sign-in and the pages of docs/spec.md §10): a hash-routed page, never indexed. */
 export const APP_PATH = '/app';
 
 /** The site's own languages: every page of clx, the app, the mail and the bot speak them. */
 export type Locale = 'en' | 'ru';
+/** The languages of the pages about clx alone (ADR 0047): the home page, the product pages, the
+ *  questions, the QR code generator and the 404, on clx.cx under their prefix (`/sr/pricing`). The
+ *  app, the mail, the bot, the legal texts and the docs for agents stay in the site's languages: a
+ *  link to them leads to the English page, and sign-up and sign-in to the English app. */
+export type MarketingLocale = 'sr';
 /** The languages of the free QR code tools' pages alone (ADR 0046) — the extension's: on clx.cx under
  *  their prefix (`/de/qr-code-generator`); their header, footer and links lead to the English site. */
 export type QrOnlyLocale = 'de' | 'es' | 'fr' | 'pt-br' | 'tr';
+/** A language the pages about clx are written in: the site's own and the marketing ones. */
+export type ContentLocale = Locale | MarketingLocale;
 /** A language a page can be in. */
-export type PageLocale = Locale | QrOnlyLocale;
+export type PageLocale = ContentLocale | QrOnlyLocale;
 export const isSiteLocale = (l: PageLocale): l is Locale => l === 'en' || l === 'ru';
-/** The site's language a page in `l` falls back to for what `l` lacks: English for the QR-only ones. */
+export const isContentLocale = (l: PageLocale): l is ContentLocale => isSiteLocale(l) || (MARKETING_LOCALES as readonly PageLocale[]).includes(l);
+/** The site's language a page in `l` falls back to for what `l` lacks — the app, sign-in, the legal
+ *  texts: English for the marketing and QR-only ones. */
 export const siteLocaleOf = (l: PageLocale): Locale => (isSiteLocale(l) ? l : 'en');
+/** The language of the pages about clx a page in `l` links to: its own, English for a QR-only one. */
+export const contentLocaleOf = (l: PageLocale): ContentLocale => (isContentLocale(l) ? l : 'en');
 
 export interface LocaleMeta {
   /** `<html lang>` and hreflang. */
@@ -36,6 +47,9 @@ export interface LocaleMeta {
 export const LOCALES: Record<PageLocale, LocaleMeta> = {
   en: { htmlLang: 'en', ogLocale: 'en_US', label: 'English' },
   ru: { htmlLang: 'ru', ogLocale: 'ru_RU', label: 'Русский' },
+  // Latin script only (ADR 0047): `sr-Latn` in lang and hreflang, and for `Intl`, which writes bare
+  // `sr` in Cyrillic.
+  sr: { htmlLang: 'sr-Latn', ogLocale: 'sr_RS', label: 'Srpski' },
   de: { htmlLang: 'de', ogLocale: 'de_DE', label: 'Deutsch' },
   es: { htmlLang: 'es', ogLocale: 'es_ES', label: 'Español' },
   fr: { htmlLang: 'fr', ogLocale: 'fr_FR', label: 'Français' },
@@ -43,8 +57,13 @@ export const LOCALES: Record<PageLocale, LocaleMeta> = {
   tr: { htmlLang: 'tr', ogLocale: 'tr_TR', label: 'Türkçe' },
 };
 export const ALL_LOCALES: readonly Locale[] = ['en', 'ru'];
+export const MARKETING_LOCALES: readonly MarketingLocale[] = ['sr'];
+/** The pages about clx: the site's languages and the marketing ones. */
+export const CONTENT_LOCALES: readonly ContentLocale[] = [...ALL_LOCALES, ...MARKETING_LOCALES];
 /** The QR code tools' pages: the site's languages and the extension's others. */
 export const QR_LOCALES: readonly PageLocale[] = ['en', 'ru', 'de', 'es', 'fr', 'pt-br', 'tr'];
+/** The QR code generator: the QR tools' languages and the marketing ones, whose sites link to it. */
+export const GENERATOR_LOCALES: readonly PageLocale[] = ['en', 'ru', ...MARKETING_LOCALES, 'de', 'es', 'fr', 'pt-br', 'tr'];
 
 export interface PageDef {
   /** The path without the language prefix and without a trailing slash: "/" or "/privacy". */
@@ -68,13 +87,13 @@ export interface PageDef {
 }
 
 export const SITE_PAGES: readonly PageDef[] = [
-  { slug: '/', locales: ALL_LOCALES, indexed: true, priority: 1.0, changefreq: 'weekly', markdown: true },
+  { slug: '/', locales: CONTENT_LOCALES, indexed: true, priority: 1.0, changefreq: 'weekly', markdown: true },
   // The two tools, who they are for, what they cost, the questions (site/products.ts, site/faq.ts).
-  { slug: '/analytics', locales: ALL_LOCALES, nav: 'analytics', indexed: true, priority: 0.9, changefreq: 'monthly' },
-  { slug: '/short-links', locales: ALL_LOCALES, nav: 'links', indexed: true, priority: 0.9, changefreq: 'monthly' },
-  { slug: '/for-site-generators', locales: ALL_LOCALES, nav: 'generators', indexed: true, priority: 0.8, changefreq: 'monthly' },
-  { slug: '/pricing', locales: ALL_LOCALES, nav: 'pricing', indexed: true, priority: 0.8, changefreq: 'monthly' },
-  { slug: '/faq', locales: ALL_LOCALES, nav: 'faq', indexed: true, priority: 0.7, changefreq: 'monthly' },
+  { slug: '/analytics', locales: CONTENT_LOCALES, nav: 'analytics', indexed: true, priority: 0.9, changefreq: 'monthly' },
+  { slug: '/short-links', locales: CONTENT_LOCALES, nav: 'links', indexed: true, priority: 0.9, changefreq: 'monthly' },
+  { slug: '/for-site-generators', locales: CONTENT_LOCALES, nav: 'generators', indexed: true, priority: 0.8, changefreq: 'monthly' },
+  { slug: '/pricing', locales: CONTENT_LOCALES, nav: 'pricing', indexed: true, priority: 0.8, changefreq: 'monthly' },
+  { slug: '/faq', locales: CONTENT_LOCALES, nav: 'faq', indexed: true, priority: 0.7, changefreq: 'monthly' },
   // clx beside another service, by market; the facts and their sources: docs/comparisons.md.
   { slug: '/bitly-alternative', locales: ['en'], compare: { en: 'clx vs Bitly' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
   { slug: '/plausible-alternative', locales: ['en'], compare: { en: 'clx vs Plausible' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
@@ -83,13 +102,13 @@ export const SITE_PAGES: readonly PageDef[] = [
   // The parent service: not a rival, in both languages, its banner and links allowed (ADR 0018).
   { slug: '/vs-301', locales: ALL_LOCALES, compare: { en: 'clx and 301.st', ru: 'clx и 301.ru' }, indexed: true, priority: 0.6, changefreq: 'monthly' },
   // How it runs and the code, from the footer (site/products.ts).
-  { slug: '/how-it-works', locales: ALL_LOCALES, foot: 'how', indexed: true, priority: 0.7, changefreq: 'monthly' },
-  { slug: '/open-source', locales: ALL_LOCALES, foot: 'openSource', indexed: true, priority: 0.6, changefreq: 'monthly' },
+  { slug: '/how-it-works', locales: CONTENT_LOCALES, foot: 'how', indexed: true, priority: 0.7, changefreq: 'monthly' },
+  { slug: '/open-source', locales: CONTENT_LOCALES, foot: 'openSource', indexed: true, priority: 0.6, changefreq: 'monthly' },
   // The free QR code generator and its API on qr.clx.cx (site/qr-pages.ts, ADRs 0044–0046): the
   // generator and the browser extension in the extension's seven languages, the generator in every
   // footer; the API in English, like /api; their privacy policy a legal page of its own, the address
   // the extension's stores show.
-  { slug: '/qr-code-generator', locales: QR_LOCALES, foot: 'qr', indexed: true, priority: 0.8, changefreq: 'monthly' },
+  { slug: '/qr-code-generator', locales: GENERATOR_LOCALES, foot: 'qr', indexed: true, priority: 0.8, changefreq: 'monthly' },
   { slug: '/qr-code-api', locales: ['en'], indexed: true, priority: 0.6, changefreq: 'monthly' },
   { slug: '/qr-code-extension', locales: QR_LOCALES, indexed: true, priority: 0.6, changefreq: 'monthly' },
   { slug: '/qr-code-privacy', locales: QR_LOCALES, legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
@@ -100,7 +119,7 @@ export const SITE_PAGES: readonly PageDef[] = [
   { slug: '/terms', locales: ALL_LOCALES, foot: 'terms', legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   { slug: '/abuse', locales: ALL_LOCALES, legal: true, indexed: true, priority: 0.3, changefreq: 'yearly' },
   // Served by Workers Static Assets for any missing path of its language (not_found_handling = 404-page).
-  { slug: '/404', locales: ALL_LOCALES, indexed: false },
+  { slug: '/404', locales: CONTENT_LOCALES, indexed: false },
 ];
 
 /** Hand-written files in public/ every build needs (the rest is generated). */

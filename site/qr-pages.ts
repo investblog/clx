@@ -5,7 +5,8 @@
 // worker's (github.com/investblog/qr-generator at the commit scripts/deploy-qr.mjs pins) and was
 // measured on qr.clx.cx (scripts/probe-qr.mjs, docs/cloudflare-facts.md).
 import { escapeHtml, seeAlso } from './layout.ts';
-import type { PageLocale } from './pages.ts';
+import { LANG_TEXT } from './lang/index.ts';
+import type { MarketingLocale, PageLocale } from './pages.ts';
 import { API, EXTENSION_NAME, MAX_DATA, PRESETS, svgFor } from './qr-core.ts';
 import { QR_TEXT } from './qr-i18n/index.ts';
 import type { ExtensionText, GeneratorText } from './qr-text.ts';
@@ -30,7 +31,7 @@ const code = (s: string) => `<pre><code>${escapeHtml(s)}</code></pre>`;
 
 const SAMPLE = 'https://example.com';
 
-const GENERATOR: Record<PageLocale, GeneratorText> = {
+export const GENERATOR: Record<PageLocale, GeneratorText> = {
   en: {
     title: 'Free SVG QR code generator, no sign-up — clx',
     description: 'Make a QR code as a small SVG in your browser: pick the size and error correction, download it, or copy a link to the image for your page. Free, no sign-up.',
@@ -97,6 +98,8 @@ const GENERATOR: Record<PageLocale, GeneratorText> = {
   fr: QR_TEXT.fr.generator,
   'pt-br': QR_TEXT['pt-br'].generator,
   tr: QR_TEXT.tr.generator,
+  // The marketing languages (ADR 0047): the generator is one of their pages.
+  sr: LANG_TEXT.sr.generator,
 };
 
 const options = (items: [string, string][], selected: string) => items.map(([v, label]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
@@ -132,7 +135,7 @@ export function generatorPage(locale: PageLocale): Page {
   const body = `<section class="hero qr-hero">
   <h1>${escapeHtml(g.h1)}</h1>
   <p class="lead">${escapeHtml(g.lead)}</p>
-  <div class="qr-hero__stores"><a href="${pathFor('/qr-code-extension', locale)}">${escapeHtml(g.ext.link)}</a><span class="qr-hero__buttons" role="group" aria-label="${escapeHtml(g.ext.group)}">${storeButtons('browser', 'btn btn--ghost btn--sm')}</span></div>
+  <div class="qr-hero__stores"><a href="${pagePathFor('/qr-code-extension', locale)}">${escapeHtml(g.ext.link)}</a><span class="qr-hero__buttons" role="group" aria-label="${escapeHtml(g.ext.group)}">${storeButtons('browser', 'btn btn--ghost btn--sm')}</span></div>
 </section>
 ${tool}
 <section class="home-section">
@@ -221,7 +224,8 @@ ${code(`<!-- HTML -->
   return { title: 'QR code API: free SVG QR codes over HTTP — clx', description: 'A free API for QR codes as small SVG images: no key, no account, nothing stored. Endpoints, parameters, the canonical URL and its hash, limits, errors.', body };
 }
 
-const EXTENSION: Record<PageLocale, ExtensionText> = {
+/** Not in the marketing languages (ADR 0047): the extension does not speak them. */
+const EXTENSION: Record<Exclude<PageLocale, MarketingLocale>, ExtensionText> = {
   en: {
     title: 'QR code generator browser extension — clx',
     description: 'A free browser extension that makes SVG QR codes in a side panel for the page you are on or any text: download, copy, share a link or an embed snippet.',
@@ -264,7 +268,8 @@ const EXTENSION: Record<PageLocale, ExtensionText> = {
 };
 
 export function extensionPage(locale: PageLocale): Page {
-  const x = EXTENSION[locale];
+  const x = (EXTENSION as Partial<Record<PageLocale, ExtensionText>>)[locale];
+  if (!x) throw new Error(`/qr-code-extension has no text in ${locale}`);
   const stores = storeButtons('store');
   const body = `<article class="doc">
 <h1>${escapeHtml(EXTENSION_NAME)}</h1>

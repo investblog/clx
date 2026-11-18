@@ -8,6 +8,9 @@ if (location.pathname === '/' && location.hash.startsWith('#/')) location.replac
 // clx.cx, with the way back (?next=).
 else if (/^#(login|register|recover)$/u.test(location.hash) && document.documentElement.lang === 'ru' && !document.querySelector('[data-auth]'))
   location.replace(`https://clx.cx/ru/signin${location.search}${location.hash}`);
+// A marketing or QR-only language has no card either (ADR 0047): its form opens on the English one.
+else if (/^#(login|register|recover)$/u.test(location.hash) && !['en', 'ru'].includes(document.documentElement.lang) && !document.querySelector('[data-auth]'))
+  location.replace(`/${location.search}${location.hash}`);
 
 // A partner's `?ref=` (docs/spec.md §19) on the Russian host: GitHub Pages cannot set clx.cx's cookie,
 // so the code rides on this tab's links to the sign-in card on clx.cx, whose Worker sets it.

@@ -8,7 +8,7 @@ import path from 'node:path';
 import TurndownService from 'turndown';
 import { SKILL, agentsBody, apiCatalog, authMd, llmsTxt, mcpServerCard, skillMd } from './agents.ts';
 import { apiBody, apiJson, loadOpenapi } from './api.ts';
-import { ALL_LOCALES, LOCALES, ORIGIN, QR_LOCALES, REPO, SITE_PAGES, isSiteLocale, markdownFile, siteLocaleOf, type Locale, type PageDef, type PageLocale } from './pages.ts';
+import { ALL_LOCALES, LOCALES, ORIGIN, QR_LOCALES, REPO, SITE_PAGES, contentLocaleOf, isContentLocale, isSiteLocale, markdownFile, MARKETING_LOCALES, type ContentLocale, type Locale, type PageDef, type PageLocale } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { home } from './home.ts';
 import { faqGroups, faqPage } from './faq.ts';
@@ -36,12 +36,12 @@ function legal(page: PageDef, locale: PageLocale): { title: string; body: string
   return { title: `${h1} — clx`, body: `<article class="narrow legal">\n${html}</article>` };
 }
 
-function notFound(locale: Locale): { title: string; body: string } {
+function notFound(locale: ContentLocale): { title: string; body: string } {
   const s = STRINGS[locale].notFound;
   return { title: `${s.title} — clx`, body: `<section class="narrow">\n<h1 class="h3">${escapeHtml(s.title)}</h1>\n<p>${escapeHtml(s.text)}</p>\n<p><a href="${pathFor('/', locale)}">${escapeHtml(s.back)}</a></p>\n</section>` };
 }
 
-const PRODUCT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage, '/for-site-generators': generatorsPage, '/pricing': pricingPage, '/faq': faqPage, '/how-it-works': howPage, '/open-source': openSourcePage };
+const PRODUCT_PAGES: Record<string, (locale: ContentLocale) => { title: string; description: string; body: string }> = { '/analytics': analyticsPage, '/short-links': linksPage, '/for-site-generators': generatorsPage, '/pricing': pricingPage, '/faq': faqPage, '/how-it-works': howPage, '/open-source': openSourcePage };
 // The comparison pages have one language each (site/pages.ts).
 const COMPARE_PAGES: Record<string, () => { title: string; description: string; body: string }> = { '/bitly-alternative': bitlyPage, '/plausible-alternative': plausiblePage, '/clck-alternative': clckPage, '/liveinternet-alternative': liveinternetPage };
 const PARENT_PAGES: Record<string, (locale: Locale) => { title: string; description: string; body: string }> = { '/vs-301': parentPage };
@@ -59,7 +59,7 @@ const AGENT_PAGES: Record<string, () => { title: string; description: string; bo
  */
 function structuredData(page: PageDef, locale: PageLocale, content: { title: string; description?: string }): Record<string, unknown>[] {
   const lang = LOCALES[locale].htmlLang;
-  const home = urlFor('/', siteLocaleOf(locale));
+  const home = urlFor('/', contentLocaleOf(locale));
   if (page.slug === '/')
     return [
       { '@type': 'Organization', '@id': `${ORIGIN}/#org`, name: 'clx', url: ORIGIN, logo: `${ORIGIN}/apple-touch-icon.png`, sameAs: [REPO] },
@@ -76,7 +76,7 @@ function structuredData(page: PageDef, locale: PageLocale, content: { title: str
         publisher: { '@id': `${ORIGIN}/#org` },
       },
     ];
-  const name = page.nav ? STRINGS[siteLocaleOf(locale)].nav[page.nav] : content.title.split(' — ')[0]!;
+  const name = page.nav ? STRINGS[contentLocaleOf(locale)].nav[page.nav] : content.title.split(' — ')[0]!;
   const crumbs = { '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'clx', item: home }, { '@type': 'ListItem', position: 2, name, item: urlFor(page.slug, locale) }] };
   // The generator is a tool of its own: a free web application, with its questions.
   if (page.slug === '/qr-code-generator')
@@ -86,19 +86,24 @@ function structuredData(page: PageDef, locale: PageLocale, content: { title: str
       { '@type': 'FAQPage', inLanguage: lang, mainEntity: generatorQuestions(locale).map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
     ];
   if (page.slug !== '/faq') return [crumbs];
-  const questions = faqGroups(siteLocaleOf(locale)).flatMap((g) => g.items);
+  const questions = faqGroups(contentLocaleOf(locale)).flatMap((g) => g.items);
   return [crumbs, { '@type': 'FAQPage', inLanguage: lang, mainEntity: questions.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }];
 }
 
 function render(page: PageDef, locale: PageLocale, stub = false): { html: string; title: string; description?: string } {
-  // Only the QR code tools' pages and their policy are in the QR-only languages (ADR 0046).
+  // The QR-only languages have only the QR code tools' pages and their policy (ADR 0046); the marketing
+  // ones the pages about clx (ADR 0047); the rest is in the site's languages.
+  const about = (): ContentLocale => {
+    if (!isContentLocale(locale)) throw new Error(`${page.slug} has no template in ${locale}`);
+    return locale;
+  };
   const site = (): Locale => {
     if (!isSiteLocale(locale)) throw new Error(`${page.slug} has no template in ${locale}`);
     return locale;
   };
   const content: { title: string; description?: string; body: string; script?: string } | null =
     QR_PAGES[page.slug]?.(locale) ??
-    (page.slug === '/' ? home(site()) : page.slug === '/404' ? notFound(site()) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(site()) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(site()) ?? null));
+    (page.slug === '/' ? home(about()) : page.slug === '/404' ? notFound(about()) : page.legal ? legal(page, locale) : (PRODUCT_PAGES[page.slug]?.(about()) ?? AGENT_PAGES[page.slug]?.() ?? COMPARE_PAGES[page.slug]?.() ?? PARENT_PAGES[page.slug]?.(site()) ?? null));
   if (!content) throw new Error(`no template for ${page.slug}`);
   const html = layout({ page, locale, ...content, stub, jsonLd: page.indexed ? structuredData(page, locale, content) : undefined });
   return { html, title: content.title, description: content.description };
@@ -228,4 +233,4 @@ if (RU_ORIGIN) {
   write('_redirects', `/ru ${RU_ORIGIN}/ 301\n/ru/ ${RU_ORIGIN}/ 301\n${ruPages.map((p) => `/ru${p.slug} ${RU_ORIGIN}${p.slug} 301`).join('\n')}\n`);
 } else fs.rmSync(path.join(OUT, '_redirects'), { force: true });
 
-console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')} (the QR tools also in ${QR_LOCALES.filter((l) => !isSiteLocale(l)).join(', ')}), the app in ${ALL_LOCALES.join(', ')}, robots.txt, sitemap.xml${RU_ORIGIN ? `; Russian on ${RU_ORIGIN} (${RU_OUT}/)` : ''}`);
+console.log(`site built: ${SITE_PAGES.reduce((n, p) => n + p.locales.length, 0)} pages in ${ALL_LOCALES.join(', ')}, the pages about clx also in ${MARKETING_LOCALES.join(', ')} (the QR tools also in ${QR_LOCALES.filter((l) => !isSiteLocale(l)).join(', ')}), the app in ${ALL_LOCALES.join(', ')}, robots.txt, sitemap.xml${RU_ORIGIN ? `; Russian on ${RU_ORIGIN} (${RU_OUT}/)` : ''}`);

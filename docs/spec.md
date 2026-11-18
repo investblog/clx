@@ -1159,6 +1159,15 @@ clx.cx is a public site with the app inside it ([ADR 0012](./decisions/0012-site
   English one in their words, each link marked EN; the three pages link one another and the language
   switch in their language, and every other link (the menu, the brand, sign-in, the footer's other
   pages, `/short-links`, `/privacy`) leads to the English page.
+- **Marketing languages** ([ADR 0047](./decisions/0047-serbian-marketing-pages.md)): the pages about
+  clx — `/`, `/analytics`, `/short-links`, `/for-site-generators`, `/pricing`, `/faq`,
+  `/how-it-works`, `/open-source`, `/qr-code-generator` and the 404 — also in a language the app, the
+  mail and the bot do not speak, on clx.cx under its prefix. The first is Serbian, Latin script and
+  ekavian only (`/sr`, `/sr/pricing`; `lang` and hreflang `sr-Latn`, `og:locale` `sr_RS`). Its home
+  page has no sign-in card; sign-up, sign-in and the app lead to English, and so do the pages it lacks
+  (the legal texts, `/vs-301`, the comparisons, the extension's page and its policy, the docs for
+  agents), their links saying "na engleskom" where the reader would not expect English. Its words
+  live in `site/lang/sr/`.
 - **One table** (`site/pages.ts`) lists the pages and their languages; the generated pages, their
   canonical and hreflang (with `x-default` on English), the sitemap, robots.txt, the header's menu
   and the footer all derive from it. The language comes from the address only. On a phone the menu

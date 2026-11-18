@@ -3,12 +3,13 @@
 // differ; this file has only the page's frame and the group names.
 import { STRINGS } from './i18n.ts';
 import { escapeHtml } from './layout.ts';
-import type { Locale } from './pages.ts';
+import { byLocale } from './lang/index.ts';
+import type { ContentLocale, Locale } from './pages.ts';
 import { pageQuestions } from './products.ts';
 import { finalBlock } from './promo.ts';
 import { pathFor } from './urls.ts';
 
-interface FaqText {
+export interface FaqText {
   title: string;
   description: string;
   h1: string;
@@ -17,7 +18,7 @@ interface FaqText {
   start: string;
 }
 
-const TEXT: Record<Locale, FaqText> = {
+const OWN: Record<Locale, FaqText> = {
   en: {
     title: 'Questions about clx — analytics and short links',
     description: 'Answers about clx: what it creates in your Cloudflare account, how the cookieless counter and the short links work, the API for site generators and the plans.',
@@ -35,10 +36,11 @@ const TEXT: Record<Locale, FaqText> = {
     start: 'Начать бесплатно',
   },
 };
+export const FAQ_TEXT = byLocale(OWN, (t) => t.faq);
 
 /** The groups and their questions, in the order of the page. */
-export function faqGroups(locale: Locale): { key: string; name: string; page: string; items: [string, string][] }[] {
-  const t = TEXT[locale];
+export function faqGroups(locale: ContentLocale): { key: string; name: string; page: string; items: [string, string][] }[] {
+  const t = FAQ_TEXT[locale];
   const q = pageQuestions(locale);
   return [
     { key: 'general', name: t.groups.general, page: '/', items: STRINGS[locale].home.faq.items },
@@ -49,8 +51,8 @@ export function faqGroups(locale: Locale): { key: string; name: string; page: st
   ];
 }
 
-export function faqPage(locale: Locale): { title: string; description: string; body: string } {
-  const t = TEXT[locale];
+export function faqPage(locale: ContentLocale): { title: string; description: string; body: string } {
+  const t = FAQ_TEXT[locale];
   const groups = faqGroups(locale)
     .map(
       (g) => `<section class="home-section faq-group" id="${g.key}">

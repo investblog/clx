@@ -4,7 +4,8 @@
 // language of the page, 2–7 words, noun phrases rather than queries. Picked from Ahrefs search volumes
 // (US and RU, 11.10.2026) and rewritten from queries into phrases that sit inside a sentence.
 // Legal pages and the 404 are not link targets: they have no entry.
-import type { PageLocale } from './pages.ts';
+import { LANG_TEXT } from './lang/index.ts';
+import type { MarketingLocale, PageLocale } from './pages.ts';
 import { QR_TEXT } from './qr-i18n/index.ts';
 
 export interface PageKeywords {
@@ -87,3 +88,7 @@ export const KEYWORDS: Record<string, Partial<Record<PageLocale, PageKeywords>>>
     en: { primary: 'URL shortener API', keywords: ['link shortener API', 'custom domain shortener API', 'visitor analytics API'], tags: ['developers', 'API'] },
   },
 };
+
+// The marketing languages (ADR 0047): with their words in site/lang/<lang>/, unmeasured by search volume.
+for (const [l, t] of Object.entries(LANG_TEXT) as [MarketingLocale, (typeof LANG_TEXT)[MarketingLocale]][])
+  for (const [slug, kw] of Object.entries(t.keywords)) (KEYWORDS[slug] ??= {})[l] = kw;

@@ -1,7 +1,7 @@
 // The frame of a site page: <head> with canonical and hreflang, the header (brand, language,
 // theme, sign-in), the footer. No inline script or style (the CSP allows neither): the theme is set
 // by /theme.js before the first paint and switched by /site.js.
-import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, siteLocaleOf, type PageDef, type PageLocale } from './pages.ts';
+import { ALL_LOCALES, COMPANY_URL, LOCALES, ORIGIN, REPO, comparePages, footPages, navPages, contentLocaleOf, siteLocaleOf, type PageDef, type PageLocale } from './pages.ts';
 import { chrome } from './i18n.ts';
 import { alternatesFor, appPathFor, authPathFor, linkLocale, ogImagePath, pagePathFor, pathFor, renderingHost, urlFor } from './urls.ts';
 
@@ -70,7 +70,7 @@ const icon = (name: string, cls = 'icon') => `<svg class="${cls}" aria-hidden="t
 
 /** A language's flag, as on spintax.net: country-flag-icons (3x2) in /icons.svg as `i-flag-<country>`,
  *  English by the British one. */
-export const FLAG: Record<PageLocale, string> = { en: 'GB', ru: 'RU', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
+export const FLAG: Record<PageLocale, string> = { en: 'GB', ru: 'RU', sr: 'RS', de: 'DE', es: 'ES', fr: 'FR', 'pt-br': 'BR', tr: 'TR' };
 const flag = (l: PageLocale) => `<span class="lang-dd__flag" aria-hidden="true"><svg><use href="/icons.svg#i-flag-${FLAG[l].toLowerCase()}"></use></svg></span>`;
 
 /** The language switch, after spintax.net's: the current language's flag and code, a menu of every
@@ -85,7 +85,8 @@ function langSwitch(page: PageDef | null, locale: PageLocale): string {
       : []
     : ALL_LOCALES.map((l) => [l, appPathFor(l)]);
   if (!links.length) return '';
-  const code = (l: PageLocale) => LOCALES[l].htmlLang.toUpperCase();
+  // The code without a script subtag: SR, not SR-LATN; PT-BR keeps its region.
+  const code = (l: PageLocale) => LOCALES[l].htmlLang.replace(/-[A-Z][a-z]{3}$/u, '').toUpperCase();
   const items = links.map(
     ([l, href]) =>
       `<a class="lang-dd__item" href="${href}" hreflang="${LOCALES[l].htmlLang}" lang="${LOCALES[l].htmlLang}" data-locale="${l}"${l === locale ? ' aria-current="true"' : ''}>${flag(l)}${escapeHtml(LOCALES[l].label)}</a>`,
@@ -122,14 +123,15 @@ function nav(page: PageDef | null, locale: PageLocale): { menu: string; button: 
 export function header(page: PageDef | null, locale: PageLocale): string {
   const s = chrome(locale);
   const { menu, button } = nav(page, locale);
-  // The sign-in, the app and the home page are in the site's languages: a QR-only page leads to English.
+  // The sign-in and the app are in the site's languages: a marketing or QR-only page leads to English;
+  // the home page is in the marketing ones too.
   const site = siteLocaleOf(locale);
   const app = page
     ? `<a class="btn btn--ghost btn--sm when-signed-out" href="${authPathFor(site, 'login')}">${escapeHtml(s.signIn)}</a><a class="btn btn--ghost btn--sm when-signed-in" href="${appPathFor(site)}">${escapeHtml(s.dashboard)}</a>`
     : '';
   return `<header class="topbar">
   <div class="topbar__inner">
-    <p class="brand"><a href="${pathFor('/', site)}">${icon('clx', 'icon brand__mark')}<span>clx</span></a></p>
+    <p class="brand"><a href="${pathFor('/', contentLocaleOf(locale))}">${icon('clx', 'icon brand__mark')}<span>clx</span></a></p>
     ${menu}
     ${langSwitch(page, locale)}
     <button type="button" class="btn-close" id="theme" aria-label="${escapeHtml(s.theme)}" title="${escapeHtml(s.theme)}">${icon('theme-light-dark')}</button>

@@ -1,7 +1,8 @@
 // The site's words, one object per language with the same shape: a key missing in one language
 // fails `tsc`, never falls back to English silently. The app's words live in ui/ (part 3 of the
 // product plan moves them into dictionaries too).
-import { isSiteLocale, type Locale, type PageLocale } from './pages.ts';
+import { byLocale } from './lang/index.ts';
+import { isContentLocale, type ContentLocale, type PageLocale } from './pages.ts';
 import { QR_TEXT } from './qr-i18n/index.ts';
 import type { Chrome } from './qr-text.ts';
 
@@ -259,7 +260,8 @@ const ru: Strings = {
   foot: { how: 'Как это работает', openSource: 'Открытый код', qr: 'Генератор QR-кодов', company: '301.ru', agents: 'Для ИИ-агентов', api: 'API', privacy: 'Конфиденциальность', terms: 'Условия', source: 'Исходный код', contact: 'Связаться' },
 };
 
-export const STRINGS: Record<Locale, Strings> = { en, ru };
+/** The site's languages and the marketing ones (ADR 0047, site/lang/). */
+export const STRINGS: Record<ContentLocale, Strings> = byLocale({ en, ru }, (t) => t.strings);
 
 /** The header's and the footer's words of a page's language: a QR-only one (ADR 0046) has these alone. */
-export const chrome = (l: PageLocale): Chrome => (isSiteLocale(l) ? STRINGS[l] : QR_TEXT[l].chrome);
+export const chrome = (l: PageLocale): Chrome => (isContentLocale(l) ? STRINGS[l] : QR_TEXT[l].chrome);

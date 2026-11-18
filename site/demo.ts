@@ -6,7 +6,7 @@ import Rank from 'affiliate-charts/charts-rank.js';
 import Series from 'affiliate-charts/charts-series.js';
 import Share from 'affiliate-charts/charts-share.js';
 import Spark from 'affiliate-charts/charts-spark.js';
-import { LOCALES, type Locale } from './pages.ts';
+import { LOCALES, type ContentLocale } from './pages.ts';
 import { STRINGS } from './i18n.ts';
 import { escapeHtml } from './layout.ts';
 
@@ -21,7 +21,7 @@ const SIZES = [['wide', 6], ['narrow', 16]] as const;
 export const themed = (cls: string, draw: (theme: Theme) => string): string => THEMES.map((t) => `<div class="${cls} themed--${t}">${draw(t)}</div>`).join('');
 
 /** The library's options for a theme, with the language's numbers. */
-export function chartOptions(locale: Locale) {
+export function chartOptions(locale: ContentLocale) {
   const nf = new Intl.NumberFormat(LOCALES[locale].htmlLang);
   const num = (v: number) => nf.format(v);
   return { num, o: (theme: Theme) => ({ brand: BRAND, theme, classPrefix: 'cx', format: num }) };
@@ -50,7 +50,7 @@ function demoDays(): { views: number; visitors: number; bots: number }[] {
  * The example report of example.com: tiles, the series, and two panels under it — sources and
  * devices on the home page, pages and countries on the analytics page.
  */
-export function demoReport(locale: Locale, panels: 'sources' | 'pages'): string {
+export function demoReport(locale: ContentLocale, panels: 'sources' | 'pages'): string {
   const s = STRINGS[locale].demo;
   const { num, o } = chartOptions(locale);
   const days = demoDays();
