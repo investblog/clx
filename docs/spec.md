@@ -1500,8 +1500,10 @@ the code, the links, the referrals' count and the wallet.
   reach it) — answers `302` to the same page
   without it, never cached, and sets the cookie `clx_ref` for 30 days (last touch), only for a valid
   code and a document navigation (no `Sec-Fetch-Dest`, or `document`), the lookups limited per
-  address. The Russian host (GitHub Pages, ADR 0030) cannot set clx.cx's cookie: its pages keep a
-  `?ref=` for the tab (`sessionStorage`) and add it to their links to `/ru/signin`. `POST /auth/signup` takes
+  address. Every other page is a static file, on clx.cx (`/analytics`, `/sr…`, the QR pages) and on
+  the Russian host (GitHub Pages, ADR 0030, which cannot set clx.cx's cookie anyway): its script keeps a
+  `?ref=` for the tab (`sessionStorage`) and adds it to the page's links to those two pages (sign-up,
+  sign-in, the home page), so the click carries it to the Worker (ADR 0048). `POST /auth/signup` takes
   `code?` (a partner or promo code; one that is no code is refused, `invalid_code`); without one it
   reads the cookie, and a cookie whose code is gone is let go. The bot takes `start=ref_CODE`
   (other start parameters stay the source, §17) and keeps it in the dialog until the account is

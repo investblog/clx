@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash, webcrypto } from 'node:crypto';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { buildSync } from 'esbuild';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import QR from '@spintax/qr-svg';
 import { PASSWORD_MIN } from '../src/auth/signup';
@@ -47,13 +48,16 @@ describe('addresses', () => {
 describe('generated pages', () => {
   // Built with the host off into a folder of its own: public/ keeps the real build. What the
   // generator does not write (the scripts, the hand-written files) is read from public/; anything
-  // else must come from this build.
+  // else must come from this build. The pages' script, which these tests run, is built here from
+  // site/client.ts with the options of scripts/build-ui.mjs: a test run does not rebuild
+  // public/site.js, which may be stale or missing.
   const out = 'temp/site-test-off';
-  const notGenerated = new Set([...STATIC_FILES, 'site.js', 'qr.js', 'app.js', 'app.css']);
+  const notGenerated = new Set([...STATIC_FILES, 'qr.js', 'app.js', 'app.css']);
   const read = (f: string) => fs.readFileSync(`${notGenerated.has(f) ? 'public' : out}/${f}`, 'utf8');
   beforeAll(() => {
     fs.rmSync(out, { recursive: true, force: true });
     execFileSync(process.execPath, ['site/build.ts'], { stdio: 'pipe', env: { ...process.env, CLX_RU_ORIGIN: 'off', CLX_SITE_OUT: out, CLX_RU_OUT: `${out}-ru` } });
+    buildSync({ entryPoints: ['site/client.ts'], outfile: `${out}/site.js`, bundle: true, minify: true, format: 'iife', target: 'es2022', legalComments: 'none', logLevel: 'warning' });
   });
   afterAll(() => {
     for (const d of [out, `${out}-ru`]) fs.rmSync(d, { recursive: true, force: true });
@@ -245,7 +249,7 @@ describe('generated pages', () => {
       expect(banners.map((m) => m[0].includes(' hidden'))).toEqual([false, true, true]);
       expect(slot).not.toMatch(/style=|<style|<script/u);
     }
-    expect(fs.readFileSync('public/site.js', 'utf8')).toContain('[data-promo]');
+    expect(read('site.js')).toContain('[data-promo]');
   });
 
   it('/short-links shows which rule took which clicks: a sankey of the example link in both themes, its ids apart', () => {
@@ -438,6 +442,38 @@ describe('generated pages', () => {
     // A Serbian page (ADR 0047) has no card: the form opens on the English one.
     expect(run('sr-Latn', '#register')).toEqual(['/?next=%2Fsites#register']);
     expect(run('sr-Latn', '#pricing')).toEqual([]);
+  });
+
+  it('site.js carries a partner’s ?ref= from a static page to the Worker’s pages, / and /ru/signin (ADR 0048)', () => {
+    const run = (page: string, hrefs: string[], stored: string | null = null, storage = true) => {
+      const here = new URL(page);
+      const links = hrefs.map((h) => ({ href: new URL(h, here).href }));
+      const store = new Map(stored ? [['clx_ref', stored]] : []);
+      const sessionStorage = {
+        getItem: (k: string) => (storage ? (store.get(k) ?? null) : (() => { throw new Error('denied'); })()),
+        setItem: (k: string, v: string) => (storage ? store.set(k, v) : (() => { throw new Error('denied'); })()),
+      };
+      const document = { documentElement: { lang: 'en' }, querySelector: () => null, querySelectorAll: (sel: string) => (sel === 'a[href]' ? links : []), addEventListener: () => {} };
+      const location = { origin: here.origin, pathname: here.pathname, search: here.search, hash: '', replace: () => {} };
+      vm.runInNewContext(read('site.js'), { document, location, sessionStorage, URL, URLSearchParams, Math, window: { addEventListener: () => {} } });
+      return { links: links.map((a) => a.href), stored: store.get('clx_ref') ?? null };
+    };
+    // A Serbian page: sign-up, sign-in and the English home page carry it; its own pages and the app do not.
+    const sr = run('https://clx.cx/sr/pricing?ref=p1', ['/#register', '/?next=%2Fsites#login', '/', '/sr', '/sr/faq', '/app', 'https://catchall.in/sr']);
+    expect(sr.links).toEqual(['https://clx.cx/?ref=p1#register', 'https://clx.cx/?next=%2Fsites&ref=p1#login', 'https://clx.cx/?ref=p1', 'https://clx.cx/sr', 'https://clx.cx/sr/faq', 'https://clx.cx/app', 'https://catchall.in/sr']);
+    expect(sr.stored).toBe('p1');
+    // The next page of the tab, without it in the address; a newer code wins (last touch).
+    expect(run('https://clx.cx/analytics', ['/#register'], 'p1').links).toEqual(['https://clx.cx/?ref=p1#register']);
+    expect(run('https://clx.cx/analytics?ref=p2', ['/#register'], 'p1')).toEqual({ links: ['https://clx.cx/?ref=p2#register'], stored: 'p2' });
+    // No storage (a private window): this page's links still carry it.
+    expect(run('https://clx.cx/de/qr-code-generator?ref=p1', ['/'], null, false).links).toEqual(['https://clx.cx/?ref=p1']);
+    // The Russian host: the card on clx.cx, not its own home page.
+    expect(run('https://ru.clx.cx/pricing?ref=p1', ['https://clx.cx/ru/signin#register', '/']).links).toEqual(['https://clx.cx/ru/signin?ref=p1#register', 'https://ru.clx.cx/']);
+    // The Worker's own pages have seen the code already: the card's tabs stay in-page links.
+    expect(run('https://clx.cx/', ['/#register', '/#login'], 'p1').links).toEqual(['https://clx.cx/#register', 'https://clx.cx/#login']);
+    expect(run('https://clx.cx/ru/signin', ['/ru/signin#login'], 'p1').links).toEqual(['https://clx.cx/ru/signin#login']);
+    // Without a code nothing changes.
+    expect(run('https://clx.cx/sr', ['/#register']).links).toEqual(['https://clx.cx/#register']);
   });
 
   /** site.js on a stand-in of the home page's card (site/auth.ts): what it shows, sends and opens. */
