@@ -34,8 +34,8 @@ last, or sign-ups would make users whose confirmation e-mail never comes:
       the English text and the extension's labels), the policy first.
 - [ ] The site in Serbian (ADR 0047, 18.11): the pages about clx and the generator on `clx.cx/sr`,
       Latin and ekavian, the guard `test/site-sr.test.ts`; the app, sign-up and the legal texts in
-      English. Built and checked locally; next: deploy, then `scripts/deploy-ru.mjs` (ru.clx.cx's
-      hreflang names Serbian), and a native speaker's read before it is promoted.
+      English. Live on clx.cx/sr since 18.11, ru.clx.cx redeployed (its hreflang names `sr-Latn`);
+      left: a native speaker's read before it is promoted.
 - [ ] The extension's release with the new name and links to these pages, then the old site's
       domain forwarded to `/qr-code-generator`.
 - [ ] The extension's demo video (13.11): seven narrated videos (one per UI language, 1920x1080,
